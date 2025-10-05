@@ -1,0 +1,226 @@
+{
+  "database": "mongo_hack",
+  "collections": [
+    {
+      "name": "raw_videos",
+      "description": "Raw YouTube metadata and transcript, plus derived fields.",
+      "validation": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["video_id", "title", "channel_id", "published_at"],
+          "properties": {
+            "video_id": { "bsonType": "string" },
+            "title": { "bsonType": "string" },
+            "channel_id": { "bsonType": "string" },
+            "channel_title": { "bsonType": "string" },
+            "published_at": { "bsonType": ["date", "string"] },
+            "duration_seconds": { "bsonType": ["int", "long"] },
+            "keywords": {
+              "bsonType": "array",
+              "items": { "bsonType": "string" }
+            },
+            "engagement_score": { "bsonType": ["double", "int", "long"] },
+            "stats": {
+              "bsonType": "object",
+              "properties": {
+                "viewCount": { "bsonType": ["int", "long"] },
+                "likeCount": { "bsonType": ["int", "long"] },
+                "commentCount": { "bsonType": ["int", "long"] }
+              }
+            },
+            "transcript_raw": { "bsonType": "string" },
+            "thumbnail_url": { "bsonType": "string" }
+          }
+        }
+      },
+      "indexes": [
+        { "name": "video_id_unique", "key": { "video_id": 1 }, "unique": true },
+        { "name": "published_at", "key": { "published_at": -1 } }
+      ]
+    },
+    {
+      "name": "cleaned_transcripts",
+      "description": "LLM-cleaned transcript with paragraphs.",
+      "validation": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["video_id", "cleaned_text"],
+          "properties": {
+            "video_id": { "bsonType": "string" },
+            "language": { "bsonType": "string" },
+            "cleaned_text": { "bsonType": "string" },
+            "paragraphs": {
+              "bsonType": "array",
+              "items": {
+                "bsonType": "object",
+                "properties": {
+                  "start_ms": { "bsonType": ["int", "long"] },
+                  "end_ms": { "bsonType": ["int", "long"] },
+                  "text": { "bsonType": "string" }
+                }
+              }
+            },
+            "version": { "bsonType": ["int", "long"] },
+            "created_at": { "bsonType": ["date", "string"] }
+          }
+        }
+      },
+      "indexes": [{ "name": "video_id", "key": { "video_id": 1 } }]
+    },
+    {
+      "name": "enriched_transcripts",
+      "description": "Speaker diarization and role annotations.",
+      "validation": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["video_id"],
+          "properties": {
+            "video_id": { "bsonType": "string" },
+            "speakers": {
+              "bsonType": "array",
+              "items": {
+                "bsonType": "object",
+                "properties": {
+                  "speaker_id": { "bsonType": "string" },
+                  "role": { "bsonType": "string" }
+                }
+              }
+            },
+            "segments": {
+              "bsonType": "array",
+              "items": {
+                "bsonType": "object",
+                "properties": {
+                  "start_ms": { "bsonType": ["int", "long"] },
+                  "end_ms": { "bsonType": ["int", "long"] },
+                  "speaker_id": { "bsonType": "string" },
+                  "text_ref": { "bsonType": "string" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "indexes": [{ "name": "video_id", "key": { "video_id": 1 } }]
+    },
+    {
+      "name": "multimodal_segments",
+      "description": "Vision-derived snippets per time range.",
+      "validation": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["video_id"],
+          "properties": {
+            "video_id": { "bsonType": "string" },
+            "segments": {
+              "bsonType": "array",
+              "items": {
+                "bsonType": "object",
+                "properties": {
+                  "start_ms": { "bsonType": ["int", "long"] },
+                  "end_ms": { "bsonType": ["int", "long"] },
+                  "visual_context": { "bsonType": "string" },
+                  "frame_url": { "bsonType": "string" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "indexes": [{ "name": "video_id", "key": { "video_id": 1 } }]
+    },
+    {
+      "name": "video_chunks",
+      "description": "Semantic chunks enriched with metadata and vector embeddings.",
+      "validation": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["video_id", "chunk_id", "text", "embedding"],
+          "properties": {
+            "video_id": { "bsonType": "string" },
+            "chunk_id": { "bsonType": "string" },
+            "text": { "bsonType": "string" },
+            "metadata": {
+              "bsonType": "object",
+              "properties": {
+                "source": { "bsonType": "string" },
+                "start_ms": { "bsonType": ["int", "long"] },
+                "end_ms": { "bsonType": ["int", "long"] },
+                "speakers": {
+                  "bsonType": "array",
+                  "items": { "bsonType": "string" }
+                },
+                "visuals": {
+                  "bsonType": "array",
+                  "items": { "bsonType": "string" }
+                },
+                "keywords": {
+                  "bsonType": "array",
+                  "items": { "bsonType": "string" }
+                }
+              }
+            },
+            "embedding": {
+              "bsonType": "array",
+              "items": { "bsonType": ["double", "int"] }
+            },
+            "embedding_model": { "bsonType": "string" },
+            "embedding_dim": { "bsonType": ["int", "long"] }
+          }
+        }
+      },
+      "indexes": [
+        {
+          "name": "video_id_chunk_id",
+          "key": { "video_id": 1, "chunk_id": 1 },
+          "unique": true
+        },
+        { "name": "video_id", "key": { "video_id": 1 } }
+      ],
+      "vectorSearchIndexes": [
+        {
+          "name": "embedding_index",
+          "definition": {
+            "mappings": {
+              "dynamic": true,
+              "fields": {
+                "embedding": {
+                  "type": "knnVector",
+                  "dimensions": 1024,
+                  "similarity": "cosine"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "memory_logs",
+      "description": "Stores query, retrieved chunk references, and generated answer.",
+      "validation": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["query", "created_at"],
+          "properties": {
+            "query": { "bsonType": "string" },
+            "retrieved": {
+              "bsonType": "array",
+              "items": {
+                "bsonType": "object",
+                "properties": {
+                  "video_id": { "bsonType": "string" },
+                  "chunk_id": { "bsonType": "string" },
+                  "score": { "bsonType": ["double", "int", "long"] }
+                }
+              }
+            },
+            "answer": { "bsonType": "string" },
+            "created_at": { "bsonType": ["date", "string"] }
+          }
+        }
+      },
+      "indexes": [{ "name": "created_at", "key": { "created_at": -1 } }]
+    }
+  ]
+}
