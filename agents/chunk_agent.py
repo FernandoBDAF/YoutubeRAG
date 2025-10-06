@@ -2,7 +2,7 @@ from typing import Optional, List, Dict, Any
 import json
 import re
 
-from base_agent import BaseAgent, BaseAgentConfig
+from core.base_agent import BaseAgent, BaseAgentConfig
 
 
 class ChunkEmbedAgent(BaseAgent):
@@ -20,13 +20,15 @@ class ChunkEmbedAgent(BaseAgent):
             "TASKS:\n"
             "1. Merge segments into complete chunks (~400–500 tokens).\n"
             "2. Add small overlaps to preserve continuity.\n"
-            '3. Return JSON: {\"chunks\":[{\"text\": "..."}]}\n'
+            '3. Return JSON: {"chunks":[{"text": "..."}]}\n'
         )
         return system_prompt, user_prompt
 
     def make_chunks(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         try:
-            system_prompt, user_prompt = self.build_prompts(json.dumps({"segments": segments}))
+            system_prompt, user_prompt = self.build_prompts(
+                json.dumps({"segments": segments})
+            )
             out = self.call_model(system_prompt, user_prompt)
             if not out:
                 return self._heuristic_chunks(segments)
@@ -45,7 +47,9 @@ class ChunkEmbedAgent(BaseAgent):
         except Exception:
             return self._heuristic_chunks(segments)
 
-    def _heuristic_chunks(self, segments: List[Dict[str, Any]], target_tokens: int = 500) -> List[Dict[str, Any]]:
+    def _heuristic_chunks(
+        self, segments: List[Dict[str, Any]], target_tokens: int = 500
+    ) -> List[Dict[str, Any]]:
         chunks: List[Dict[str, Any]] = []
         current: List[str] = []
         count = 0

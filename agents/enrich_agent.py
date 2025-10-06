@@ -2,7 +2,7 @@ from typing import Optional, List, Dict, Any
 import json
 import re
 
-from base_agent import BaseAgent, BaseAgentConfig
+from core.base_agent import BaseAgent, BaseAgentConfig
 
 
 class EnrichmentAgent(BaseAgent):

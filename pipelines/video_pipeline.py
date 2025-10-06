@@ -1,6 +1,6 @@
 from typing import Any, Dict, Optional
 
-from base_pipeline import BasePipeline
+from core.base_pipeline import BasePipeline
 
 
 class VideoPipeline(BasePipeline):

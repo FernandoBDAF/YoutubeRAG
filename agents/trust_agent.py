@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any
 import json
 
-from base_agent import BaseAgent, BaseAgentConfig
+from core.base_agent import BaseAgent, BaseAgentConfig
 
 
 class TrustRankAgent(BaseAgent):

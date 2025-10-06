@@ -12,27 +12,27 @@ def run_stage(stage: str, **kwargs) -> None:
     py = sys.executable
     if stage == "ingest":
         args = kwargs.get("args") or []
-        os.system(f"{py} Mongo_Hack/ingest.py {' '.join(args)}")
+        os.system(f"{py} Mongo_Hack/app/stages/ingest.py {' '.join(args)}")
     elif stage == "clean":
         use_llm = kwargs.get("llm", False)
         flag = " --llm" if use_llm else ""
-        os.system(f"{py} Mongo_Hack/clean.py{flag}")
+        os.system(f"{py} Mongo_Hack/app/stages/clean.py{flag}")
     elif stage == "enrich":
         use_llm = kwargs.get("llm", False)
         flag = " --llm" if use_llm else ""
-        os.system(f"{py} Mongo_Hack/enrich.py{flag}")
+        os.system(f"{py} Mongo_Hack/app/stages/enrich.py{flag}")
     elif stage == "chunk":
         use_llm = kwargs.get("llm", False)
         flag = " --llm" if use_llm else ""
-        os.system(f"{py} Mongo_Hack/chunk_embed.py{flag}")
+        os.system(f"{py} Mongo_Hack/app/stages/chunk_embed.py{flag}")
     elif stage == "redundancy":
         use_llm = kwargs.get("llm", False)
         flag = " --llm" if use_llm else ""
-        os.system(f"{py} Mongo_Hack/redundancy.py{flag}")
+        os.system(f"{py} Mongo_Hack/app/stages/redundancy.py{flag}")
     elif stage == "trust":
         use_llm = kwargs.get("llm", False)
         flag = " --llm" if use_llm else ""
-        os.system(f"{py} Mongo_Hack/trust.py{flag}")
+        os.system(f"{py} Mongo_Hack/app/stages/trust.py{flag}")
     elif stage == "pipeline":
         # ingest -> clean -> enrich -> chunk -> redundancy -> trust
         args = kwargs.get("args") or []

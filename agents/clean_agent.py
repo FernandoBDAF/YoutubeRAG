@@ -1,6 +1,6 @@
 from typing import Optional
 
-from base_agent import BaseAgent, BaseAgentConfig
+from core.base_agent import BaseAgent, BaseAgentConfig
 
 
 class TranscriptCleanAgent(BaseAgent):

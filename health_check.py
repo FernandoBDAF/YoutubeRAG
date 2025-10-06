@@ -4,7 +4,7 @@ from typing import Tuple
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
-from utils import get_mongo_client
+from app.services.utils import get_mongo_client
 from config.paths import (
     DB_NAME,
     COLL_RAW_VIDEOS,
@@ -64,16 +64,43 @@ def check_embeddings() -> Tuple[bool, list[str]]:
     return (len(issues) == 0, issues)
 
 
+def check_vector_index() -> Tuple[bool, list[str]]:
+    issues: list[str] = []
+    try:
+        client: MongoClient = get_mongo_client()
+        db = client[DB_NAME]
+        # Probe an aggregate with $vectorSearch; if index missing, Atlas returns an error
+        probe = db[COLL_CHUNKS].aggregate(
+            [
+                {
+                    "$vectorSearch": {
+                        "index": "embedding_index",
+                        "path": "embedding",
+                        "queryVector": [0.0] * 1024,
+                        "numCandidates": 1,
+                        "limit": 1,
+                    }
+                },
+                {"$limit": 1},
+            ]
+        )
+        list(probe)
+    except Exception as e:
+        issues.append(f"Vector index check failed: {e}")
+    return (len(issues) == 0, issues)
+
+
 def main() -> None:
     load_dotenv()
     ok_env, env_issues = check_env()
     ok_db, db_issues = check_db()
     ok_col, col_issues = check_collections()
     ok_emb, emb_issues = check_embeddings()
-    all_ok = ok_env and ok_db and ok_col and ok_emb
+    ok_idx, idx_issues = check_vector_index()
+    all_ok = ok_env and ok_db and ok_col and ok_emb and ok_idx
     if not all_ok:
         print("Health check FAILED")
-        for s in [env_issues, db_issues, col_issues, emb_issues]:
+        for s in [env_issues, db_issues, col_issues, emb_issues, idx_issues]:
             for i in s:
                 print("-", i)
         raise SystemExit(1)

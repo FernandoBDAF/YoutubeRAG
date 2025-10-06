@@ -3,9 +3,9 @@ from typing import Any, Dict, List
 import streamlit as st
 from dotenv import load_dotenv
 
-from utils import get_mongo_client
+from app.services.utils import get_mongo_client
 from config.paths import DB_NAME
-from rag import rag_answer
+from app.services.rag import rag_answer
 
 
 def init_state() -> None:
@@ -110,6 +110,23 @@ def main() -> None:
             if st.button("Load preset", key="load_preset"):
                 query = preset_sel
                 st.experimental_rerun()
+        # Popular topics quick filter
+        st.markdown("---")
+        st.caption("Popular Topics")
+        popular = st.multiselect(
+            "Select topics (adds regex filter)",
+            [
+                "react",
+                "hooks",
+                "state",
+                "router",
+                "typescript",
+                "python",
+                "api",
+            ],
+            default=[],
+            key="qna_topics",
+        )
         st.markdown("---")
         st.caption("Retrieval weighting")
         colw1, colw2, colw3 = st.columns(3)
@@ -120,11 +137,17 @@ def main() -> None:
         with colw3:
             w_recency = st.slider("Recency", 0.0, 1.0, 0.15, 0.05)
 
+        exclude_red = st.checkbox(
+            "Exclude redundant chunks", value=True, key="qna_excl_red"
+        )
         if st.button("Search", key="qna_search"):
             with st.spinner("Retrieving..."):
                 filters = {}
-                if topic:
-                    filters = {"metadata.tags": {"$regex": topic, "$options": "i"}}
+                tag_regex = topic or ""
+                if popular:
+                    tag_regex = (tag_regex + "|" + "|".join(popular)).strip("|")
+                if tag_regex:
+                    filters = {"metadata.tags": {"$regex": tag_regex, "$options": "i"}}
                 if channel:
                     # Combine filters when both are present
                     if filters:
@@ -153,6 +176,9 @@ def main() -> None:
                     filters = (
                         {"$and": [filters, trust_filter]} if filters else trust_filter
                     )
+                if exclude_red:
+                    red_filter = {"is_redundant": {"$ne": True}}
+                    filters = {"$and": [filters, red_filter]} if filters else red_filter
                 result = rag_answer(
                     query,
                     k=k,
@@ -193,6 +219,21 @@ def main() -> None:
                     f"{h.get('video_id')}:{h.get('chunk_id')} (score={h.get('score'):.3f})"
                 ):
                     st.write(h.get("text", "")[:1500])
+            # Full retrieval context (for copy/download)
+            full_ctx = "\n\n".join(
+                [
+                    f"({h.get('video_id')}:{h.get('chunk_id')})\n{h.get('text','')[:2000]}"
+                    for h in result.get("hits", [])[:k]
+                ]
+            )
+            st.subheader("Full Retrieval Context")
+            st.text_area("Context", full_ctx, height=240)
+            st.download_button(
+                "Download context",
+                data=full_ctx,
+                file_name="retrieval_context.txt",
+                mime="text/plain",
+            )
 
     with tab_compare:
         st.subheader("Compare Channels (beta)")
@@ -204,10 +245,14 @@ def main() -> None:
             filt_a: Dict[str, Any] = {"metadata.channel_id": ch_a} if ch_a else {}
             filt_b: Dict[str, Any] = {"metadata.channel_id": ch_b} if ch_b else {}
             a_rows = list(
-                coll.find(filt_a, {"chunk_id": 1, "text": 1, "metadata": 1}).limit(10)
+                coll.find(
+                    filt_a, {"chunk_id": 1, "text": 1, "metadata": 1, "trust_score": 1}
+                ).limit(50)
             )
             b_rows = list(
-                coll.find(filt_b, {"chunk_id": 1, "text": 1, "metadata": 1}).limit(10)
+                coll.find(
+                    filt_b, {"chunk_id": 1, "text": 1, "metadata": 1, "trust_score": 1}
+                ).limit(50)
             )
             # basic tag consensus/unique metrics
             tags_a = set(
@@ -252,16 +297,66 @@ def main() -> None:
                 file_name="compare_metrics.md",
                 mime="text/markdown",
             )
-            st.write("Channel A chunks:")
-            for r in a_rows:
-                st.write(
-                    f"- {r.get('chunk_id')} | tags={r.get('metadata',{}).get('tags', [])}"
-                )
-            st.write("Channel B chunks:")
-            for r in b_rows:
-                st.write(
-                    f"- {r.get('chunk_id')} | tags={r.get('metadata',{}).get('tags', [])}"
-                )
+            import pandas as pd
+
+            st.write("Channel A chunks (top by trust):")
+            df_a = pd.DataFrame(
+                [
+                    {
+                        "chunk_id": r.get("chunk_id"),
+                        "trust": r.get("trust_score"),
+                        "tags": ", ".join(r.get("metadata", {}).get("tags", [])[:6]),
+                        "text": r.get("text", "")[:140],
+                    }
+                    for r in sorted(
+                        a_rows, key=lambda x: x.get("trust_score", 0.0), reverse=True
+                    )[:20]
+                ]
+            )
+            st.dataframe(df_a, use_container_width=True)
+            st.write("Channel B chunks (top by trust):")
+            df_b = pd.DataFrame(
+                [
+                    {
+                        "chunk_id": r.get("chunk_id"),
+                        "trust": r.get("trust_score"),
+                        "tags": ", ".join(r.get("metadata", {}).get("tags", [])[:6]),
+                        "text": r.get("text", "")[:140],
+                    }
+                    for r in sorted(
+                        b_rows, key=lambda x: x.get("trust_score", 0.0), reverse=True
+                    )[:20]
+                ]
+            )
+            st.dataframe(df_b, use_container_width=True)
+            # Top channels summary (by avg trust)
+            try:
+                import pandas as pd
+                import numpy as np
+
+                both = a_rows + b_rows
+                rows_ch = [
+                    {
+                        "channel": r.get("metadata", {}).get("channel_id"),
+                        "trust": r.get("trust_score", 0.0),
+                    }
+                    for r in both
+                    if r.get("metadata", {}).get("channel_id")
+                ]
+                if rows_ch:
+                    df_ch = pd.DataFrame(rows_ch)
+                    agg = (
+                        df_ch.groupby("channel")["trust"]
+                        .agg(["count", "mean", "max"])
+                        .reset_index()
+                    )
+                    agg = agg.sort_values(
+                        by=["mean", "count"], ascending=[False, False]
+                    ).head(10)
+                    st.subheader("Top Channels (by avg trust)")
+                    st.dataframe(agg, use_container_width=True)
+            except Exception as e:
+                st.caption(f"Top channels summary unavailable: {e}")
 
     with tab_unique:
         st.subheader("Unique Insights (beta)")
@@ -279,19 +374,88 @@ def main() -> None:
             rows = list(
                 coll.find(
                     query_filter,
-                    {"video_id": 1, "chunk_id": 1, "text": 1, "metadata": 1},
-                ).limit(20)
+                    {
+                        "video_id": 1,
+                        "chunk_id": 1,
+                        "text": 1,
+                        "metadata": 1,
+                        "trust_score": 1,
+                    },
+                ).limit(50)
             )
-            for r in rows:
-                with st.expander(f"{r.get('video_id')}:{r.get('chunk_id')}"):
-                    st.write(r.get("text", "")[:1200])
+            import pandas as pd
+
+            df_u = pd.DataFrame(
+                [
+                    {
+                        "video_id": r.get("video_id"),
+                        "chunk_id": r.get("chunk_id"),
+                        "trust": r.get("trust_score"),
+                        "tags": ", ".join(r.get("metadata", {}).get("tags", [])[:6]),
+                        "text": r.get("text", "")[:160],
+                    }
+                    for r in rows
+                ]
+            )
+            st.dataframe(df_u, use_container_width=True)
+            # Exports
+            csv_u = df_u.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "Download unique (CSV)",
+                csv_u,
+                file_name="unique_snippets.csv",
+                mime="text/csv",
+            )
+            md_u = "\n".join(
+                [
+                    "# Unique Insights",
+                    *[
+                        f"- {row.video_id}:{row.chunk_id} | trust={row.trust} | {row.tags} | {row.text}"
+                        for _, row in df_u.iterrows()
+                    ],
+                ]
+            )
+            st.download_button(
+                "Download unique (Markdown)",
+                md_u,
+                file_name="unique_snippets.md",
+                mime="text/markdown",
+            )
+            # Mini dashboards
+            try:
+                import pandas as pd
+                import plotly.express as px
+
+                # Top tags
+                tag_counts: Dict[str, int] = {}
+                for tags in df_u["tags"].fillna("").tolist():
+                    for t in [s.strip() for s in tags.split(",") if s.strip()]:
+                        tag_counts[t] = tag_counts.get(t, 0) + 1
+                if tag_counts:
+                    st.subheader("Top Tags (Unique)")
+                    df_tags = pd.DataFrame(
+                        sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[
+                            :15
+                        ],
+                        columns=["tag", "count"],
+                    )
+                    fig = px.bar(df_tags, x="tag", y="count", title="Top Tags")
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Trust histogram
+                st.subheader("Trust Score Distribution (Unique)")
+                df_hist = df_u[["trust"]].dropna()
+                fig2 = px.histogram(df_hist, x="trust", nbins=20)
+                st.plotly_chart(fig2, use_container_width=True)
+            except Exception as e:
+                st.caption(f"Mini-dash unavailable: {e}")
 
     with tab_summaries:
         st.subheader("Summaries (topic-based)")
         topic_sum = st.text_input("Topic regex", value=topic or "react|state")
         use_llm_sum = st.checkbox("Use LLM for summary", value=True, key="sum_llm")
         if st.button("Build context", key="sum_btn"):
-            from summarizer import summarize_topic
+            from app.stages.summarizer import summarize_topic
 
             out = summarize_topic(topic_sum)
             st.write(f"Chunks included: {out.get('count')}")
@@ -326,10 +490,47 @@ def main() -> None:
                 except Exception as e:
                     st.error(f"Summary generation failed: {e}")
             if st.button("Save summary", key="sum_save"):
-                from summarizer import save_summary
+                from app.stages.summarizer import save_summary
 
                 sid = save_summary(topic_sum, context_val)
                 st.success(f"Saved summary with id: {sid}")
+        st.markdown("---")
+        st.caption("Saved Summaries")
+        try:
+            client = get_mongo_client()
+            coll = client[DB_NAME]["summaries"]
+            saved_rows = list(
+                coll.find({}, {"topic_regex": 1, "context": 1})
+                .sort("_id", -1)
+                .limit(20)
+            )
+        except Exception:
+            saved_rows = []
+        if saved_rows:
+            names = [
+                f"{i+1}. {r.get('topic_regex','')[:40]}"
+                for i, r in enumerate(saved_rows)
+            ]
+            pick_idx = st.selectbox(
+                "Select saved summary",
+                list(range(len(names))),
+                format_func=lambda i: names[i],
+                key="sum_pick",
+            )
+            picked = saved_rows[pick_idx]
+            st.text_area("Saved context", picked.get("context", ""), height=240)
+            st.download_button(
+                "Download saved summary",
+                data=picked.get("context", ""),
+                file_name="saved_summary.md",
+                mime="text/markdown",
+            )
+            if st.button("Delete saved", key="sum_del"):
+                try:
+                    coll.delete_one({"_id": picked["_id"]})
+                    st.success("Deleted. Reload the page to refresh list.")
+                except Exception as e:
+                    st.error(f"Delete failed: {e}")
 
     with tab_memory:
         st.subheader("Recent Memory Logs")

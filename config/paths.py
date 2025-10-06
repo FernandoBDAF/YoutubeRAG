@@ -3,10 +3,11 @@ Centralized constants and lightweight helpers for the self-contained Mongo_Hack 
 This module must not import anything from outside Mongo_Hack/.
 """
 
+import os
 from typing import Final
 
 # Database and collection names
-DB_NAME: Final[str] = "mongo_hack"
+DB_NAME: Final[str] = os.getenv("MONGODB_DB", "mongo_hack")
 
 COLL_RAW_VIDEOS: Final[str] = "raw_videos"
 COLL_CLEANED: Final[str] = "cleaned_transcripts"

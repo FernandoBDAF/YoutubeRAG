@@ -54,9 +54,22 @@ flowchart TD
 ```
 Mongo_Hack/
   README.md
-  PROJECT.md
   mongodb_schema.json
+  docs/
+    PROJECT.md
+    USE-CASE.md
+    PROMPTS.md
+    EXECUTION.md
+    DEMO.md
+    ORCHESTRACTION-INTERFACE.md
   agents/
+  app/
+    stages/
+    services/
+  core/
+  pipelines/
+  config/
+  scripts/
   main.py
   streamlit_app.py
 ```
@@ -94,6 +107,13 @@ atlas clusters indexes create \
   }'
 ```
 
+Alternatively, with the helper script (reads mongodb_schema.json):
+
+```bash
+chmod +x Mongo_Hack/scripts/atlas_index_create.sh
+Mongo_Hack/scripts/atlas_index_create.sh <PROJECT_ID> <CLUSTER_NAME>
+```
+
 ### Quickstart
 
 1. Install prerequisites
@@ -119,6 +139,7 @@ export MONGODB_DB="mongo_hack"
 export VOYAGE_API_KEY="<voyage-key>"
 export OPENAI_API_KEY="<openai-key-optional>"
 export YOUTUBE_API_KEY="<youtube-key-optional>"
+export VOYAGE_RPM=5  # recommended for demos to avoid 429s
 ```
 
 3. Create collections and vector index
@@ -156,9 +177,18 @@ python Mongo_Hack/main.py ingest --playlist_id <ID> --max 5
 python Mongo_Hack/main.py clean --llm
 python Mongo_Hack/main.py enrich --llm      # or set ENRICH_WITH_LLM=1
 python Mongo_Hack/main.py chunk --llm       # or set CHUNK_WITH_LLM=1
+export VOYAGE_RPM=5                         # rate limit embeddings
 python Mongo_Hack/main.py redundancy --llm  # or set DEDUP_WITH_LLM=1
 python Mongo_Hack/main.py trust --llm       # or set TRUST_WITH_LLM=1
 python Mongo_Hack/main.py ui
 python Mongo_Hack/main.py health
 python Mongo_Hack/main.py pipeline --playlist_id <ID> --max 5 --llm
 ```
+
+### UI Features
+
+- Q&A with adjustable retrieval weights and Markdown export
+- Compare with consensus/unique metrics, trusted chunk tables, Top Channels summary
+- Unique insights table with CSV/Markdown export and mini-dashboards (Top Tags, Trust histogram)
+- Summaries with optional LLM Markdown and Saved Summaries viewer
+- Controller tab to trigger stages/full pipeline with IDs and LLM toggle
