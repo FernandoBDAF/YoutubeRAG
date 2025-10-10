@@ -12,15 +12,22 @@ class ChunkEmbedAgent(BaseAgent):
 
     def build_prompts(self, enriched_segments_json: str) -> tuple[str, str]:
         system_prompt = (
-            "You are ChunkEmbedAgent. Prepare transcript segments for embedding and retrieval. "
-            "Ensure each chunk is semantically complete and <= 500 tokens with ~50-token overlap."
+            "You are ChunkEmbedAgent. Prepare segments for embedding so each chunk is semantically complete, "
+            "focused, and sized for retrieval. Avoid splitting mid-sentence or mid-code."
         )
         user_prompt = (
-            "INPUT SEGMENTS (JSON):\n" + enriched_segments_json[:120000] + "\n\n"
-            "TASKS:\n"
-            "1. Merge segments into complete chunks (~400–500 tokens).\n"
-            "2. Add small overlaps to preserve continuity.\n"
-            '3. Return JSON: {"chunks":[{"text": "..."}]}\n'
+            "You will transform INPUT SEGMENTS into chunks and output strict JSON.\n\n"
+            "INSTRUCTIONS (think step-by-step):\n"
+            "1) Read segments and merge where needed into coherent chunks (~400–500 tokens).\n"
+            "2) Preserve continuity: add a small overlap (~50 tokens) between adjacent chunks.\n"
+            "3) Do NOT invent text; use only provided content. Keep code intact.\n"
+            '4) Output VALID JSON ONLY: {"chunks":[{"text": "..."}]} (no markdown fences, no comments).\n\n'
+            "GOOD EXAMPLE:\n"
+            '{"chunks":[{"text":"[merged segment text up to ~500 tokens]"}] }\n\n'
+            "BAD EXAMPLES:\n"
+            "- Returning markdown or prose instead of JSON.\n"
+            "- Adding summaries or invented text.\n\n"
+            "INPUT SEGMENTS (JSON):\n" + enriched_segments_json[:120000]
         )
         return system_prompt, user_prompt
 

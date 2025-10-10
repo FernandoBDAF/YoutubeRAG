@@ -19,15 +19,26 @@ if ! command -v atlas >/dev/null 2>&1; then
 fi
 
 echo "Creating vector index 'embedding_index' on video_chunks..."
-atlas clusters indexes create \
+atlas clusters search indexes create \
   --projectId "$PROJECT_ID" \
   --clusterName "$CLUSTER_NAME" \
   --db mongo_hack \
   --collection video_chunks \
+  --indexName embedding_index \
   --type vectorSearch \
-  --name embedding_index \
-  --file "$SCHEMA_JSON"
+  --definition '{
+    "mappings": {
+      "dynamic": true,
+      "fields": {
+        "embedding": {
+          "type": "knnVector",
+          "dimensions": 1024,
+          "similarity": "cosine"
+        }
+      }
+    }
+  }'
 
-echo "Done."
+echo "Done. Check status with: atlas clusters search indexes list --projectId $PROJECT_ID --clusterName $CLUSTER_NAME --db mongo_hack --collection video_chunks"
 
 

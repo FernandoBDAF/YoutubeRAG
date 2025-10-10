@@ -3,6 +3,7 @@ from typing import Any, Dict
 
 from dotenv import load_dotenv
 from pymongo import MongoClient
+import os
 
 try:
     from app.services.utils import get_mongo_client
@@ -48,13 +49,46 @@ def main() -> None:
         import os as _os
 
         use_llm = _os.getenv("TRUST_WITH_LLM") == "1" or "--llm" in _os.sys.argv
+        auto_llm = _os.getenv("TRUST_LLM_AUTO", "true").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        try:
+            band_low = float(_os.getenv("TRUST_LLM_BAND_LOW", "0.40"))
+        except Exception:
+            band_low = 0.40
+        try:
+            band_high = float(_os.getenv("TRUST_LLM_BAND_HIGH", "0.70"))
+        except Exception:
+            band_high = 0.70
+        try:
+            neigh = int(_os.getenv("TRUST_LLM_NEIGHBORS", "2"))
+        except Exception:
+            neigh = 2
     except Exception:
-        pass
+        auto_llm, band_low, band_high, neigh = True, 0.40, 0.70, 2
     client: MongoClient = get_mongo_client()
     db = client[DB_NAME]
     coll = db[COLL_CHUNKS]
+    skip_existing = str(os.getenv("TRUST_UPSERT_EXISTING", "false")).lower() not in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
     for c in coll.find(
-        {}, {"metadata": 1, "is_redundant": 1, "redundancy_score": 1, "text": 1}
+        {},
+        {
+            "video_id": 1,
+            "chunk_id": 1,
+            "metadata": 1,
+            "is_redundant": 1,
+            "redundancy_score": 1,
+            "text": 1,
+            "embedding": 1,
+        },
     ):
         if use_llm:
             try:
@@ -67,16 +101,78 @@ def main() -> None:
                     "published_at": None,
                     "code_valid": bool(c.get("metadata", {}).get("code_present")),
                 }
-                agent = TrustRankAgent()
-                out = agent.score(payload)
-                score = out.get("trust_score")
-                if score is None:
-                    score = compute_trust_score(c)
+                # Heuristic first
+                heuristic_score = compute_trust_score(c)
+                do_llm = True
+                if not (_os.getenv("TRUST_WITH_LLM") == "1" or "--llm" in _os.sys.argv):
+                    # decide by auto trigger
+                    do_llm = auto_llm and (
+                        band_low
+                        <= float(c.get("redundancy_score", 0.0) or 0.0)
+                        <= band_high
+                        or bool(c.get("metadata", {}).get("code_present"))
+                        or float(c.get("metadata", {}).get("age_days", 365) or 365) < 30
+                    )
+                score = heuristic_score
+                method = "heuristic"
+                if do_llm:
+                    # find top-N similar neighbors in same video by cosine
+                    try:
+                        from math import sqrt
+
+                        vid = c.get("video_id")
+                        base = c.get("embedding", [])
+                        neigh_docs = list(
+                            coll.find(
+                                {"video_id": vid},
+                                {"chunk_id": 1, "text": 1, "embedding": 1},
+                            ).limit(50)
+                        )
+                        sims = []
+
+                        def _cos(a, b):
+                            if not a or not b or len(a) != len(b):
+                                return 0.0
+                            s = sum(x * y for x, y in zip(a, b))
+                            da = sqrt(sum(x * x for x in a)) or 1.0
+                            db = sqrt(sum(y * y for y in b)) or 1.0
+                            return s / (da * db)
+
+                        for d in neigh_docs:
+                            if d.get("chunk_id") == c.get("chunk_id"):
+                                continue
+                            sims.append((d, _cos(base, d.get("embedding", []))))
+                        sims.sort(key=lambda x: x[1], reverse=True)
+                        topn = [
+                            {
+                                "chunk_id": d.get("chunk_id"),
+                                "text": (d.get("text", "")[:500]),
+                            }
+                            for d, _ in sims[: max(0, neigh)]
+                        ]
+                        payload["similar_chunks"] = topn
+                    except Exception:
+                        pass
+                    agent = TrustRankAgent()
+                    out = agent.score(payload)
+                    s = out.get("trust_score")
+                    if s is not None:
+                        score = s
+                        method = "llm"
             except Exception:
                 score = compute_trust_score(c)
+                method = "heuristic"
         else:
             score = compute_trust_score(c)
-        coll.update_one({"_id": c["_id"]}, {"$set": {"trust_score": float(score)}})
+            method = "heuristic"
+        if skip_existing:
+            existing = coll.find_one({"_id": c["_id"]}, {"trust_score": 1})
+            if existing and "trust_score" in existing:
+                continue
+        coll.update_one(
+            {"_id": c["_id"]},
+            {"$set": {"trust_score": float(score), "trust_method": method}},
+        )
     print(f"Trust scores updated. (llm={use_llm})")
 
 

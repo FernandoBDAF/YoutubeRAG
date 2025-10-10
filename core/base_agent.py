@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
-from typing import Optional, Dict
 import openai
 
 
@@ -15,7 +14,7 @@ class BaseAgentConfig(BaseModel):
     Strongly typed configuration object for Agents with validation.
     """
 
-    model_name: str = Field(default=None, description="Name of the LLM model")
+    model_name: Optional[str] = Field(default=None, description="Name of the LLM model")
     temperature: float = Field(
         default=0, ge=0, le=1, description="Sampling temperature"
     )
@@ -43,18 +42,19 @@ class BaseAgent(ABC):
         if config is None:
             self.config = BaseAgentConfig()
 
-        # Load model: explicit > env var
-        self.config.model_name = self.config.model_name or os.getenv(
-            "DEFAULT_MODEL", None
+        # Load model: explicit > env var > safe default
+        self.config.model_name = (
+            self.config.model_name or os.getenv("DEFAULT_MODEL") or "gpt-5-nano"
         )
-        if self.config.model_name is None:
-            raise RuntimeError(
-                f"No model defined for agent {self.name}. "
-                "Either pass `config` or set DEFAULT_MODEL env var."
-            )
 
+        # Initialize client (require key only when LLM path is used)
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "OPENAI_API_KEY is required for LLM agents. Set it or run without --llm."
+            )
         # Use a sane default timeout to avoid hanging calls
-        self.model = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=60)
+        self.model = openai.OpenAI(api_key=api_key, timeout=60)
 
         self.timestamp = datetime.utcnow().isoformat()
 
@@ -166,4 +166,4 @@ class BaseAgent(ABC):
         return last_result
 
 
-from ..base_agent import *  # re-export to keep imports stable
+# Note: do not re-export via relative imports; import BaseAgent directly from this module.

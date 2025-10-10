@@ -2,17 +2,17 @@ import os
 import re
 import sys
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
+import time
+import random
 from typing import Any, Dict, List, Optional, Tuple
+import requests
 
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from youtube_transcript_api import (
-    YouTubeTranscriptApi,
-    TranscriptsDisabled,
-    NoTranscriptFound,
-)
+
+# Transcript now handled via LangChain YoutubeLoader in services/transcripts
 
 try:
     from app.services.utils import get_mongo_client
@@ -27,6 +27,13 @@ from config.paths import (
     DB_NAME,
     COLL_RAW_VIDEOS,
 )
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    val = os.getenv(name)
+    if val is None:
+        return default
+    return str(val).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -147,55 +154,18 @@ def parse_iso8601_duration(duration: str) -> Optional[int]:
 
 
 def fetch_transcript_text(video_id: str) -> Tuple[Optional[str], Optional[str]]:
+    # New implementation delegates to services.transcripts (LangChain)
     try:
-        # Try English/manual first, then generated, then any available
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-        entries = None
-        lang: Optional[str] = None
+        from app.services.transcripts import get_transcript
 
-        # 1) Preferred explicit transcript (any provider) in English variants
-        try:
-            tr = transcript_list.find_transcript(["en", "en-US", "en-GB"])  # type: ignore
-            entries = tr.fetch()
-            lang = tr.language
-        except Exception:
-            pass
-
-        # 2) Manually created (human) transcript in English variants
-        if entries is None:
-            try:
-                tr = transcript_list.find_manually_created_transcript(["en", "en-US", "en-GB"])  # type: ignore
-                entries = tr.fetch()
-                lang = tr.language
-            except Exception:
-                pass
-
-        # 3) Auto-generated transcript in English variants
-        if entries is None:
-            try:
-                tr = transcript_list.find_generated_transcript(["en", "en-US", "en-GB"])  # type: ignore
-                entries = tr.fetch()
-                lang = tr.language
-            except Exception:
-                pass
-
-        # 4) Fallback: first available transcript of any kind/language
-        if entries is None:
-            try:
-                tr_any = next(iter(transcript_list), None)
-                if tr_any is not None:
-                    entries = tr_any.fetch()
-                    lang = tr_any.language
-            except Exception:
-                pass
-
-        if entries is None:
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        items = get_transcript(url)
+        if not items:
             return None, None
-
-        text = "\n".join(e.get("text", "") for e in entries)
-        return text, lang
-    except (TranscriptsDisabled, NoTranscriptFound):
-        return None, None
+        # Concatenate all text segments
+        text = "\n".join(seg.get("text", "") for seg in items if seg.get("text"))
+        # Language not exposed by loader; return None
+        return (text if text.strip() else None), None
     except Exception:
         return None, None
 
@@ -250,7 +220,8 @@ def to_raw_video_doc(
         "transcript_raw": transcript_text,
         "transcript_language": transcript_lang,
         "thumbnail_url": thumb_url,
-        "fetched_at": datetime.utcnow().isoformat(),
+        # timezone-aware datetime is stored as BSON date in Mongo
+        "fetched_at": datetime.now(timezone.utc),
     }
 
 
@@ -282,10 +253,16 @@ def main() -> None:
     db = client[DB_NAME]
 
     success = 0
+    allow_upsert_existing = _env_bool("INGEST_UPSERT_EXISTING", default=False)
     for vid in video_ids:
         item = details.get(vid)
         if not item:
             continue
+        # Skip existing unless env overrides
+        if not allow_upsert_existing:
+            if db[COLL_RAW_VIDEOS].find_one({"video_id": vid}):
+                print(f"Skip existing {vid}")
+                continue
         transcript_text, transcript_lang = fetch_transcript_text(vid)
         doc = to_raw_video_doc(item, transcript_text, transcript_lang)
         upsert_raw_video(db, doc)
