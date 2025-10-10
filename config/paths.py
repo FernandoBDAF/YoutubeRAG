@@ -15,6 +15,8 @@ COLL_ENRICHED: Final[str] = "enriched_transcripts"
 COLL_MULTIMODAL: Final[str] = "multimodal_segments"
 COLL_CHUNKS: Final[str] = "video_chunks"
 COLL_MEMORY_LOGS: Final[str] = "memory_logs"
+COLL_VIDEO_FEEDBACK: Final[str] = "video_feedback"
+COLL_CHUNK_FEEDBACK: Final[str] = "chunk_feedback"
 
 # Vector index constants
 VECTOR_INDEX_NAME: Final[str] = "embedding_index"

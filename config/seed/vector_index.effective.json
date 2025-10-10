@@ -1,0 +1,1 @@
+{"database": "mongo_hack", "collectionName": "video_chunks", "name": "embedding_index", "type": "vectorSearch", "fields": [{"path": "embedding", "numDimensions": 1024, "similarity": "cosine", "type": "vector"}]}

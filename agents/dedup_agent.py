@@ -11,14 +11,24 @@ class DeduplicateAgent(BaseAgent):
 
     def build_prompts(self, text_a: str, text_b: str) -> tuple[str, str]:
         system_prompt = (
-            "You are DeduplicateAgent. Compare educational content chunks to detect redundancy. "
-            "Two chunks are redundant if they teach the same concept using similar wording or identical code."
+            "You are DeduplicateAgent. Determine if two chunks are redundant for retrieval (same concept, "
+            "substantially overlapping explanation, or identical/near-identical code)."
         )
         user_prompt = (
+            "You will compare CHUNK A and CHUNK B and output strict JSON.\n\n"
+            "INSTRUCTIONS (think step-by-step):\n"
+            "1) Check concept overlap: do they teach the same idea?\n"
+            "2) Compare structure: similar sequence of steps/explanations?\n"
+            "3) Code: identical or minimal-diff code suggests redundancy.\n"
+            "4) If mainly complementary or distinct, mark not redundant.\n"
+            '5) Output VALID JSON ONLY: {"redundant": true|false, "reason": "short"}.\n\n'
+            "GOOD EXAMPLE:\n"
+            '{"redundant": true, "reason": "Same hashing concept and identical code example"}\n\n'
+            "BAD EXAMPLES:\n"
+            "- Returning prose instead of JSON.\n"
+            '- Saying "maybe" or "it depends" without a boolean.\n\n'
             "CHUNK A:\n" + text_a[:6000] + "\n\n"
-            "CHUNK B:\n" + text_b[:6000] + "\n\n"
-            'TASK: Determine if these chunks are redundant. Output JSON {"redundant": true|false, "reason": '
-            + '"<why>"}'
+            "CHUNK B:\n" + text_b[:6000]
         )
         return system_prompt, user_prompt
 
