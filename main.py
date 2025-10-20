@@ -59,9 +59,12 @@ def run_stage(stage: str, **kwargs) -> None:
         subprocess.run(cmd, check=True, env={**os.environ, "PYTHONPATH": os.getcwd()})
     elif stage == "chunk":
         use_llm = kwargs.get("llm", False)
+        chunk = kwargs.get("chunk", True)
         cmd = [py, "app/stages/chunk_embed.py"]
         if use_llm:
             cmd.append("--llm")
+        if not chunk:
+            cmd.append("--chunk")
         subprocess.run(cmd, check=True, env={**os.environ, "PYTHONPATH": os.getcwd()})
     elif stage == "redundancy":
         use_llm = kwargs.get("llm", False)
@@ -79,9 +82,9 @@ def run_stage(stage: str, **kwargs) -> None:
         # ingest -> clean -> enrich -> chunk -> redundancy -> trust
         args = kwargs.get("args") or []
         run_stage("ingest", args=args)
-        run_stage("clean", llm=kwargs.get("llm", False))
-        run_stage("enrich", llm=kwargs.get("llm", False))
-        run_stage("chunk", llm=kwargs.get("llm", False))
+        run_stage("clean", llm=kwargs.get("llm", True))
+        run_stage("enrich", llm=kwargs.get("llm", True))
+        run_stage("chunk", llm=kwargs.get("llm", True), chunk=kwargs.get("chunk", True))
         try:
             wait_for_index_ready("embedding_index")
         except Exception:
@@ -91,6 +94,12 @@ def run_stage(stage: str, **kwargs) -> None:
     elif stage == "ui":
         subprocess.run(
             ["streamlit", "run", "streamlit_app.py"],
+            check=True,
+            env={**os.environ, "PYTHONPATH": os.getcwd()},
+        )
+    elif stage == "scan_transcripts":
+        subprocess.run(
+            [py, "app/stages/scan_transcripts.py"],
             check=True,
             env={**os.environ, "PYTHONPATH": os.getcwd()},
         )
@@ -130,6 +139,7 @@ def main() -> None:
     s_enrich.add_argument("--llm", action="store_true")
     s_chunk = sub.add_parser("chunk", help="Chunk + embed")
     s_chunk.add_argument("--llm", action="store_true")
+    s_chunk.add_argument("--chunk", type=bool, required=False)
     s_red = sub.add_parser("redundancy", help="Compute redundancy flags")
     s_red.add_argument("--llm", action="store_true")
     s_trust = sub.add_parser("trust", help="Compute trust scores")
@@ -153,6 +163,9 @@ def main() -> None:
     )
     s_btf.add_argument("--video_id", required=False)
     sub.add_parser("ui", help="Launch Streamlit UI")
+    sub.add_parser(
+        "scan_transcripts", help="Fetch transcripts for videos missing transcript_raw"
+    )
     sub.add_parser("wait_index", help="Wait until vector index is READY")
     sub.add_parser("health", help="Run health checks")
 

@@ -14,10 +14,10 @@ flowchart TD
   ST --> ET[(enriched_transcripts)]
   I --> VA[VisualAnnotator]
   VA --> MS[(multimodal_segments)]
-  TC --> CE[Chunker + Embedder]
-  VA --> CE
-  ET --> CE
-  CE --> VC[(video_chunks + embeddings)]
+  TC --> C[Chunk]
+  C --> E1[Enrich (per-chunk)]
+  E1 --> EB[Embed]
+  EB --> VC[(video_chunks + embeddings)]
 
   Q[User Query] --> RET[Retriever + Generator]
   RET <--> VS[(Atlas Vector Search)]
@@ -33,7 +33,7 @@ flowchart TD
 - cleaned_transcripts: LLM-cleaned transcript text + paragraphs.
 - enriched_transcripts: diarization and speaker role inference.
 - multimodal_segments: vision-derived context for key frames.
-- video_chunks: semantic chunks with embeddings for retrieval.
+- video_chunks: per-chunk schema (chunk_text, summary, annotations, embedding).
 - memory_logs: query, retrieved context, and generated answer.
 
 ### Getting Started
@@ -111,6 +111,46 @@ Mongo_Hack/
 - Env updates: new `DEDUP_*` and `TRUST_*` flags in `env.example`.
 - Concepts guide: `documentation/TECHNICAL-CONCEPTS.md` explains embeddings, hybrid retrieval, chunking, concurrency, and recommended presets.
 - Deep dive: `documentation/HYBRID-RETRIEVAL.md` covers Hybrid Search, hashing fallback, bulk upserts, and `wait_index` for Atlas readiness.
+
+### Pipeline runner (typed configs)
+
+The new pipeline supports sequential execution of stages with explicit, typed configuration objects. Each stage has a Config dataclass with defaults. The runner orchestrates them and supports per-stage IO overrides (separate read/write DBs and collections) and a simple policy to stop or continue on errors.
+
+Example (clean → chunk → enrich) with cross‑DB IO:
+
+```python
+from app.pipelines.base_pipeline import StageSpec, PipelineRunner
+from app.stages.clean import CleanConfig
+from app.stages.chunk import ChunkConfig
+from app.stages.enrich import EnrichConfig
+
+specs = [
+    StageSpec(stage="clean", config=CleanConfig(
+        concurrency=8,
+        read_db_name="source_db", read_coll="raw_videos",
+        write_db_name="work_db", write_coll="cleaned_transcripts",
+    )),
+    StageSpec(stage="chunk", config=ChunkConfig(
+        chunk_strategy="recursive", token_size=800, overlap_pct=0.15,
+        read_db_name="work_db", read_coll="cleaned_transcripts",
+        write_db_name="work_db", write_coll="video_chunks",
+    )),
+    StageSpec(stage="enrich", config=EnrichConfig(
+        concurrency=8,
+        read_db_name="work_db", read_coll="video_chunks",
+        write_db_name="work_db", write_coll="video_chunks",
+    )),
+]
+
+PipelineRunner(specs, stop_on_error=True).run()
+```
+
+CLI example: `python Mongo_Hack/app/pipelines/examples/yt_clean_enrich.py`.
+
+Notes:
+
+- Stages still run standalone with CLI/args for backward compatibility.
+- Config dataclasses are the source of truth (env/args optional).
 
 ### Atlas Vector Index (CLI or auto-seed)
 
@@ -197,17 +237,66 @@ python Mongo_Hack/health_check.py
 8. Orchestrator (one entrypoint)
 
 ```
-python Mongo_Hack/main.py ingest --playlist_id <ID> --max 5
-python Mongo_Hack/main.py clean --llm
-python Mongo_Hack/main.py enrich --llm      # or set ENRICH_WITH_LLM=1
-python Mongo_Hack/main.py chunk --llm       # or set CHUNK_WITH_LLM=1
+python Mongo_Hack/main.py ingest --playlist_id <ID> --max 5 --db_name mongo_hack
+python Mongo_Hack/main.py clean --llm --db_name mongo_hack
+python Mongo_Hack/main.py enrich --llm --db_name mongo_hack      # or set ENRICH_WITH_LLM=1
+python Mongo_Hack/app/stages/chunk.py --db_name mongo_hack
+python Mongo_Hack/app/stages/enrich.py --db_name mongo_hack
+python Mongo_Hack/app/stages/embed.py --db_name mongo_hack --embed_source chunk
 export VOYAGE_RPM=5                         # rate limit embeddings
-python Mongo_Hack/main.py redundancy --llm  # or set DEDUP_WITH_LLM=1
-python Mongo_Hack/main.py trust --llm       # or set TRUST_WITH_LLM=1
+python Mongo_Hack/main.py redundancy --llm --db_name mongo_hack  # or set REDUNDANCY_WITH_LLM=1
+python Mongo_Hack/main.py trust --llm --db_name mongo_hack       # or set TRUST_WITH_LLM=1
 python Mongo_Hack/main.py ui
 python Mongo_Hack/main.py health
 python Mongo_Hack/main.py pipeline --playlist_id <ID> --max 5 --llm
 ```
+
+### Pipeline runner (typed configs)
+
+See `app/pipelines/examples/yt_clean_enrich.py` for a full example (clean → compress → chunk → enrich → embed) with explicit read/write DBs and typed config objects per stage.
+
+Notes:
+
+- Stages still run standalone with CLI/args for backward compatibility.
+- Config dataclasses are the source of truth (env/args optional).
+
+New options overview:
+
+- Clean: filler removal, paragraphization; LLM flags `--llm_retries`, `--llm_backoff_s`, `--llm_qps`, `--model_name`.
+- Chunk: `metadata.chunk_index` and `metadata.chunk_count` for ordering.
+- Enrich: conceptual relations prompt, confidence levels, `quality_score`, always sets `embedding_text`.
+- Embed: hybrid `embedding_text` by default, `vector_norm`, optional multi-vector outputs; flags `--use_hybrid_embedding_text/--no_use_hybrid_embedding_text`, `--unit_normalize_embeddings/--no_unit_normalize_embeddings`, `--emit_multi_vectors`.
+
+Utilities:
+
+```
+# Indexes
+python Mongo_Hack/scripts/create_indexes.py "$MONGODB_URI"
+
+# Schema validator
+python Mongo_Hack/scripts/validate_chunks.py "$MONGODB_URI" mongo_hack video_chunks
+```
+
+### Chunking strategies
+
+The chunk stage supports three strategies selectable via `--chunk_strategy` (default: `fixed`).
+
+- Fixed token size with overlap:
+
+  - Uses TokenTextSplitter (tiktoken).
+  - Example: `python Mongo_Hack/app/stages/chunk_embed.py --chunk_strategy fixed --token_size 500 --overlap_pct 0.15 --db_name mongo_hack`
+
+- Recursive with overlap:
+
+  - Uses RecursiveCharacterTextSplitter and packs to tokens.
+  - Example: `python Mongo_Hack/app/stages/chunk_embed.py --chunk_strategy recursive --token_size 400 --overlap_pct 0.1 --split_chars ".,;"`
+
+- Semantic:
+  - Uses SemanticChunker to merge semantically similar sentence groups.
+  - Requires embeddings provider (defaults to OpenAI embeddings); set `OPENAI_API_KEY` and optionally `--semantic_model`.
+  - Example: `python Mongo_Hack/app/stages/chunk_embed.py --chunk_strategy semantic --token_size 500 --overlap_pct 0.15 --split_chars "." --semantic_model text-embedding-3-small`
+
+Note: All chunk configuration used is stored per chunk under `metadata.chunking` for auditability.
 
 ### UI Features
 

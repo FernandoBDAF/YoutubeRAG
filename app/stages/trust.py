@@ -1,4 +1,5 @@
 import math
+from dataclasses import dataclass
 from typing import Any, Dict
 
 from dotenv import load_dotenv
@@ -7,6 +8,8 @@ import os
 
 try:
     from app.services.utils import get_mongo_client
+    from core.base_stage import BaseStage
+    from core.stage_config import BaseStageConfig
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
@@ -14,6 +17,8 @@ except ModuleNotFoundError:
         _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", ".."))
     )
     from app.services.utils import get_mongo_client
+    from core.base_stage import BaseStage
+    from core.stage_config import BaseStageConfig
 from config.paths import DB_NAME, COLL_CHUNKS
 
 
@@ -42,55 +47,86 @@ def compute_trust_score(chunk: Dict[str, Any]) -> float:
     return max(0.0, min(1.0, score))
 
 
-def main() -> None:
-    load_dotenv()
-    use_llm = False
-    try:
-        import os as _os
+@dataclass
+class TrustConfig(BaseStageConfig):
+    use_llm: bool = False
+    auto_llm: bool = True
+    band_low: float = 0.40
+    band_high: float = 0.70
+    neighbors: int = 2
 
-        use_llm = _os.getenv("TRUST_WITH_LLM") == "1" or "--llm" in _os.sys.argv
-        auto_llm = _os.getenv("TRUST_LLM_AUTO", "true").lower() in {
+    @classmethod
+    def from_args_env(cls, args, env, default_db):
+        base = BaseStageConfig.from_args_env(args, env, default_db)
+        use_llm = bool(
+            getattr(args, "llm", False) or (env.get("TRUST_WITH_LLM") == "1")
+        )
+        auto_llm = (env.get("TRUST_LLM_AUTO", "true") or "true").lower() in {
             "1",
             "true",
             "yes",
             "on",
         }
-        try:
-            band_low = float(_os.getenv("TRUST_LLM_BAND_LOW", "0.40"))
-        except Exception:
-            band_low = 0.40
-        try:
-            band_high = float(_os.getenv("TRUST_LLM_BAND_HIGH", "0.70"))
-        except Exception:
-            band_high = 0.70
-        try:
-            neigh = int(_os.getenv("TRUST_LLM_NEIGHBORS", "2"))
-        except Exception:
-            neigh = 2
-    except Exception:
-        auto_llm, band_low, band_high, neigh = True, 0.40, 0.70, 2
-    client: MongoClient = get_mongo_client()
-    db = client[DB_NAME]
-    coll = db[COLL_CHUNKS]
-    skip_existing = str(os.getenv("TRUST_UPSERT_EXISTING", "false")).lower() not in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-    for c in coll.find(
-        {},
-        {
-            "video_id": 1,
-            "chunk_id": 1,
-            "metadata": 1,
-            "is_redundant": 1,
-            "redundancy_score": 1,
-            "text": 1,
-            "embedding": 1,
-        },
-    ):
-        if use_llm:
+
+        def _getf(key: str, default: float) -> float:
+            try:
+                return float(env.get(key, str(default)))
+            except Exception:
+                return default
+
+        band_low = _getf("TRUST_LLM_BAND_LOW", 0.40)
+        band_high = _getf("TRUST_LLM_BAND_HIGH", 0.70)
+
+        def _geti(key: str, default: int) -> int:
+            try:
+                return int(env.get(key, str(default)))
+            except Exception:
+                return default
+
+        neighbors = _geti("TRUST_LLM_NEIGHBORS", 2)
+        return cls(
+            **vars(base),
+            use_llm=use_llm,
+            auto_llm=auto_llm,
+            band_low=band_low,
+            band_high=band_high,
+            neighbors=neighbors
+        )
+
+
+class TrustStage(BaseStage):
+    name = "trust"
+    description = (
+        "Compute trust scores with heuristic base and optional LLM for borderline cases"
+    )
+    ConfigCls = TrustConfig
+
+    def iter_docs(self):
+        src_db = self.config.read_db_name or self.config.db_name
+        coll = self.get_collection(
+            self.config.read_coll or COLL_CHUNKS, io="read", db_name=src_db
+        )
+        return list(
+            coll.find(
+                {},
+                {
+                    "video_id": 1,
+                    "chunk_id": 1,
+                    "metadata": 1,
+                    "is_redundant": 1,
+                    "redundancy_score": 1,
+                    "text": 1,
+                    "embedding": 1,
+                },
+            )
+        )
+
+    def handle_doc(self, c):
+        dst_db = self.config.write_db_name or self.config.db_name
+        coll = self.get_collection(
+            self.config.write_coll or COLL_CHUNKS, io="write", db_name=dst_db
+        )
+        if self.config.use_llm:
             try:
                 from agents.trust_agent import TrustRankAgent
 
@@ -101,22 +137,17 @@ def main() -> None:
                     "published_at": None,
                     "code_valid": bool(c.get("metadata", {}).get("code_present")),
                 }
-                # Heuristic first
                 heuristic_score = compute_trust_score(c)
-                do_llm = True
-                if not (_os.getenv("TRUST_WITH_LLM") == "1" or "--llm" in _os.sys.argv):
-                    # decide by auto trigger
-                    do_llm = auto_llm and (
-                        band_low
-                        <= float(c.get("redundancy_score", 0.0) or 0.0)
-                        <= band_high
-                        or bool(c.get("metadata", {}).get("code_present"))
-                        or float(c.get("metadata", {}).get("age_days", 365) or 365) < 30
-                    )
+                do_llm = self.config.auto_llm and (
+                    self.config.band_low
+                    <= float(c.get("redundancy_score", 0.0) or 0.0)
+                    <= self.config.band_high
+                    or bool(c.get("metadata", {}).get("code_present"))
+                    or float(c.get("metadata", {}).get("age_days", 365) or 365) < 30
+                )
                 score = heuristic_score
                 method = "heuristic"
                 if do_llm:
-                    # find top-N similar neighbors in same video by cosine
                     try:
                         from math import sqrt
 
@@ -143,13 +174,14 @@ def main() -> None:
                                 continue
                             sims.append((d, _cos(base, d.get("embedding", []))))
                         sims.sort(key=lambda x: x[1], reverse=True)
-                        topn = [
-                            {
-                                "chunk_id": d.get("chunk_id"),
-                                "text": (d.get("text", "")[:500]),
-                            }
-                            for d, _ in sims[: max(0, neigh)]
-                        ]
+                        topn = []
+                        for d, _ in sims[: max(0, self.config.neighbors)]:
+                            topn.append(
+                                {
+                                    "chunk_id": d.get("chunk_id"),
+                                    "text": (d.get("text", "")[:500]),
+                                }
+                            )
                         payload["similar_chunks"] = topn
                     except Exception:
                         pass
@@ -165,16 +197,16 @@ def main() -> None:
         else:
             score = compute_trust_score(c)
             method = "heuristic"
-        if skip_existing:
+        if not self.config.upsert_existing:
             existing = coll.find_one({"_id": c["_id"]}, {"trust_score": 1})
             if existing and "trust_score" in existing:
-                continue
+                return
         coll.update_one(
             {"_id": c["_id"]},
             {"$set": {"trust_score": float(score), "trust_method": method}},
         )
-    print(f"Trust scores updated. (llm={use_llm})")
 
 
 if __name__ == "__main__":
-    main()
+    stage = TrustStage()
+    raise SystemExit(stage.run())

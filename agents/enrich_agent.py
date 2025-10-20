@@ -10,286 +10,93 @@ class EnrichmentAgent(BaseAgent):
         cfg = BaseAgentConfig(model_name=model_name)
         super().__init__(name="EnrichmentAgent", config=cfg)
 
-    def build_prompts(self, text_block: str) -> tuple[str, str]:
+    def build_chunk_structured_prompts(self, chunk_text: str) -> tuple[str, str]:
         system_prompt = (
-            "You are EnrichmentAgent, an expert educational annotator. "
-            "Your job is to segment cleaned lecture text and extract precise, useful metadata "
-            "for downstream retrieval and analytics. Be meticulous and avoid generic fluff."
+            "You are EnrichAgent — an expert information extractor and semantic enrichment model "
+            "that structures knowledge from YouTube video transcripts into machine-readable annotations.\n\n"
+            "Your goal is to analyze one transcript chunk and produce a precise, compact JSON object "
+            "following the Enriched Chunk Schema v2.\n\n"
+            "Guiding principles:\n"
+            "• Grounding: Extract only what is explicitly stated or logically implied.\n"
+            "• Compactness: Keep text factual and concise (no filler, no restatement).\n"
+            "• Schema adherence: Keys, types, and nesting must match exactly.\n"
+            "• Reliability: When unsure, omit or assign low confidence.\n"
+            "• Traceability: Provide short source_fragment snippets when useful for context.\n"
+            "• Output strictly valid JSON — no markdown, prose, or commentary."
         )
         user_prompt = (
-            "You will read the INPUT TEXT and produce a strict JSON object with this schema:\n"
+            "You will receive a transcript CHUNK TEXT and minimal metadata.\n"
+            "Your task is to fill every field of the Enriched Chunk Schema v2 with grounded, "
+            "compact information extracted from the text.\n\n"
+            "Think step-by-step before writing JSON:\n"
+            "1- Identify key facts, people, organizations, concepts, and actions.\n"
+            "2- Note any temporal or numerical references (dates, amounts, scores, etc.).\n"
+            "3- Observe the speaker's tone or sentiment if it's clearly expressed.\n"
+            "4- Determine possible relations (subject-predicate-object) when verbs connect entities or concepts. Include conceptual relations between ideas (e.g., 'algorithm defines mapping between input and output').\n"
+            "5- When nothing fits a category, leave that array empty or value null — never invent data.\n\n"
+            "SCHEMA (strict, keep all keys — use [] or null when empty):\n"
             "{\n"
-            '  "segments": [\n'
-            "    {\n"
-            '      "start": number,\n'
-            '      "end": number,\n'
-            '      "text": string,\n'
-            '      "tags": string[],\n'
-            '      "named_entities": string[],\n'
-            '      "topics": string[],\n'
-            '      "keyphrases": string[],\n'
-            '      "code_blocks": [{ "lang": string, "code": string }],\n'
-            '      "difficulty": one of ["beginner", "intermediate", "advanced", null]\n'
-            "    }\n"
-            "  ]\n"
-            "}\n\n"
-            "INSTRUCTIONS (think step-by-step):\n"
-            "1) Segmenting (CoT): First, identify topic shifts. Group 2–3 related paragraphs per segment.\n"
-            "   Keep segments roughly 1200–2200 chars (flex if needed). Do NOT split mid-equation or mid-code.\n"
-            '2) Tags: 5–12 topical terms actually present in the segment (e.g., "asymptotic analysis", "hashing").\n'
-            '   Avoid generic terms like "video", "lecture", "topic", "learning". Lowercase; multi-words allowed.\n'
-            '3) named_entities and topics: proper names go in named_entities; technical concepts go in topics (e.g., "Pigeonhole Principle", "MIT OCW").\n'
-            "4) Keyphrases: 3–8 short phrases that summarize the core ideas or steps from this segment.\n"
-            "5) Code blocks: extract fenced code if present; otherwise []. Do not invent code.\n"
-            "6) Difficulty: estimate comprehension difficulty from the segment (beginner/intermediate/advanced) or null.\n"
-            "7) Fidelity: do not add facts not supported by the text.\n"
-            "8) Output: VALID JSON ONLY. No markdown, no comments.\n\n"
-            "GOOD EXAMPLE (abbreviated):\n"
-            "{\n"
-            '  "segments": [{\n'
-            '    "start": 0, "end": 0,\n'
-            '    "text": "Asymptotic analysis compares runtime as input size grows...",\n'
-            '    "tags": ["asymptotic analysis", "big o", "runtime", "efficiency"],\n'
-            '    "named_entities": ["MIT OCW"],\n'
-            '    "topics": ["algorithm analysis"],\n'
-            '    "keyphrases": ["compare algorithms by growth rate", "input size n"],\n'
-            '    "code_blocks": [],\n'
-            '    "difficulty": "beginner"\n'
-            "  }]\n"
-            "}\n\n"
-            "BAD EXAMPLES:\n"
-            '- Tags like ["video", "lecture", "topic"] (too generic).\n'
-            "- Fabricated code or entities not in the text.\n"
-            "- Output that is not strict JSON or includes markdown fences.\n\n"
-            "INPUT TEXT:\n" + text_block[:120000]
-        )
-        return system_prompt, user_prompt
-
-    def annotate(self, text_block: str) -> List[Dict[str, Any]]:
-        system_prompt, user_prompt = self.build_prompts(text_block)
-        out = self.call_model(system_prompt, user_prompt)
-        # Log LLM return preview
-        try:
-            print(
-                json.dumps(
-                    {
-                        "agent": "EnrichmentAgent",
-                        "event": "llm_return",
-                        "ok": bool(out),
-                        "input_chars": len(text_block or ""),
-                        "out_preview": (out[:160] if out else ""),
-                    }
-                )
-            )
-        except Exception:
-            pass
-        if not out:
-            segs = self._heuristic_annotate(text_block)
-            return segs
-        try:
-            data = json.loads(out)
-            segments = data.get("segments", []) if isinstance(data, dict) else []
-            if isinstance(segments, list) and segments:
-                try:
-                    lens = [len(s.get("text", "")) for s in segments]
-                    num = len(segments)
-                    avg_len = (sum(lens) / max(1, num)) if num else 0
-                    tags_any = sum(1 for s in segments if s.get("tags"))
-                    keys_any = sum(1 for s in segments if s.get("keyphrases"))
-                    print(
-                        json.dumps(
-                            {
-                                "agent": "EnrichmentAgent",
-                                "event": "llm_parsed",
-                                "segments": num,
-                                "avg_chars": int(avg_len),
-                                "tags_any": f"{tags_any}/{num}",
-                                "keyphrases_any": f"{keys_any}/{num}",
-                            }
-                        )
-                    )
-                except Exception:
-                    pass
-                return segments
-            # Empty or invalid → fallback
-            try:
-                print(
-                    json.dumps(
-                        {
-                            "agent": "EnrichmentAgent",
-                            "event": "llm_empty_or_invalid",
-                            "segments_type": type(segments).__name__,
-                        }
-                    )
-                )
-            except Exception:
-                pass
-            return self._heuristic_annotate(text_block)
-        except Exception as e:
-            try:
-                print(
-                    json.dumps(
-                        {
-                            "agent": "EnrichmentAgent",
-                            "event": "llm_parse_error",
-                            "error": str(e)[:200],
-                        }
-                    )
-                )
-            except Exception:
-                pass
-            return self._heuristic_annotate(text_block)
-
-    def _normalize_text(self, text: str) -> str:
-        if text is None:
-            return ""
-        t = text.replace("\r\n", "\n").replace("\r", "\n")
-        t = t.replace("\\n", "\n")
-        t = re.sub(r"\n{3,}", "\n\n", t)
-        return t.strip()
-
-    def _normalize_segment_fields(
-        self, seg: Dict[str, Any], default_text: str
-    ) -> Dict[str, Any]:
-        out: Dict[str, Any] = {}
-        out["start"] = float(seg.get("start", 0.0) or 0.0)
-        out["end"] = float(seg.get("end", 0.0) or 0.0)
-        raw_text = seg.get("text", default_text)
-        out["text"] = self._normalize_text(raw_text)
-        out["tags"] = list(seg.get("tags", []) or [])
-        legacy_entities = list(seg.get("entities", []) or [])
-        named_entities = list(seg.get("named_entities", []) or [])
-        topics = list(seg.get("topics", []) or [])
-        if legacy_entities and not named_entities and not topics:
-            named_entities = legacy_entities
-        out["named_entities"] = named_entities
-        out["topics"] = topics
-        out["keyphrases"] = list(seg.get("keyphrases", []) or [])
-        out["code_blocks"] = list(seg.get("code_blocks", []) or [])
-        out["difficulty"] = seg.get("difficulty")
-        # Temporary compatibility
-        out["entities"] = (
-            (named_entities + topics) if (named_entities or topics) else legacy_entities
-        )
-        return out
-
-    def _heuristic_annotate(self, text_block: str) -> List[Dict[str, Any]]:
-        code_fence_re = re.compile(r"```([a-zA-Z0-9_+-]*)[\s\S]*?```", re.MULTILINE)
-
-        def extract_tags(text: str) -> List[str]:
-            tags: set[str] = set()
-            for kw in [
-                "react",
-                "python",
-                "hooks",
-                "state",
-                "api",
-                "context",
-                "reducer",
-                "typescript",
-                "javascript",
-                "node",
-            ]:
-                if re.search(rf"\\b{re.escape(kw)}\\b", text, flags=re.IGNORECASE):
-                    tags.add(kw)
-            return sorted(tags)
-
-        segments: List[Dict[str, Any]] = []
-        units = [s.strip() for s in re.split(r"\n\n+", text_block or "") if s.strip()]
-        for seg in units:
-            seg_text = self._normalize_text(seg)
-            tags = extract_tags(seg_text)
-            named_entities: List[str] = []
-            topics: List[str] = []
-            keyphrases = tags[:5]
-            code_blocks = []
-            for m in code_fence_re.finditer(seg_text):
-                lang = m.group(1) or ""
-                code_blocks.append({"lang": lang, "code": m.group(0)})
-            segments.append(
-                {
-                    "start": 0.0,
-                    "end": 0.0,
-                    "text": seg_text,
-                    "tags": tags,
-                    "named_entities": named_entities,
-                    "topics": topics,
-                    "keyphrases": keyphrases,
-                    "code_blocks": code_blocks,
-                    "difficulty": None,
-                    "entities": (named_entities + topics),
-                }
-            )
-        try:
-            lens = [len(s.get("text", "")) for s in segments]
-            num = len(segments)
-            avg_len = (sum(lens) / max(1, num)) if num else 0
-            tags_any = sum(1 for s in segments if s.get("tags"))
-            keys_any = sum(1 for s in segments if s.get("keyphrases"))
-            print(
-                json.dumps(
-                    {
-                        "agent": "EnrichmentAgent",
-                        "event": "heuristic_segments",
-                        "segments": num,
-                        "avg_chars": int(avg_len),
-                        "tags_any": f"{tags_any}/{num}",
-                        "keyphrases_any": f"{keys_any}/{num}",
-                    }
-                )
-            )
-        except Exception:
-            pass
-        return segments
-
-    # --- Single-chunk annotation path (expects exactly one segment) ---
-    def build_single_prompts(self, text_block: str) -> tuple[str, str]:
-        system_prompt = "You are EnrichmentAgent. Annotate a single lecture segment with precise metadata."
-        user_prompt = (
-            "You will read the INPUT TEXT and produce EXACTLY ONE segment in strict JSON with this schema:\n"
-            "{\n"
-            '  "segments": [{\n'
-            '    "start": 0, "end": 0,\n'
-            '    "text": string,\n'
-            '    "tags": string[],\n'
-            '    "named_entities": string[],\n'
-            '    "topics": string[],\n'
-            '    "keyphrases": string[],\n'
-            '    "code_blocks": [{ "lang": string, "code": string }],\n'
-            '    "difficulty": one of ["beginner", "intermediate", "advanced", null]\n'
-            "  }]\n"
+            '  "summary": string,\n'
+            '  "entities": [ { "name": string, "type": "Person|Organization|Event|Concept|Location|Product|Other", "relevance": number, "source_fragment": string|null } ],\n'
+            '  "concepts": [ { "name": string, "category": "Strategy|Emotion|Technical|Theme|Topic|Other", "confidence": number } ],\n'
+            '  "relations": [ { "subject": string, "predicate": string, "object": string, "confidence": number } ],\n'
+            '  "temporal_references": [ { "date": string, "context": string } ],\n'
+            '  "numerical_data": [ { "value": string, "type": "money|percentage|count|chips|score|other", "context": string } ],\n'
+            '  "visual_cues": [ { "type": "slide_title|onscreen_text|gesture|chart|other", "text": string|null } ],\n'
+            '  "context": { "speaker": string|null, "sentiment": "positive|neutral|negative|null", "tone": "analytical|casual|instructional|narrative|humorous|null", "language": string|null, "tags": [string] }\n'
             "}\n\n"
             "INSTRUCTIONS:\n"
-            "- Do NOT split further; return exactly one segment.\n"
-            '- Provide 5–12 useful tags; avoid generic ones like "video", "lecture".\n'
-            "- Extract 3–8 keyphrases summarizing the content.\n"
-            "- Extract fenced code blocks if present.\n"
-            "- Output VALID JSON ONLY.\n\n"
-            "INPUT TEXT:\n" + text_block[:120000]
+            "• Summary: 1-3 factual sentences summarizing the chunk.\n"
+            "• Entities: Proper names only (people, places, orgs, events).\n"
+            "• Concepts: Technical or thematic ideas (e.g., 'range balancing', 'probability theory').\n"
+            "• Relations: Use verb-like predicates such as 'explains', 'uses', 'compares'.\n"
+            "• Temporal/Numerical: Include only when clearly mentioned.\n"
+            "• Visual Cues: Only if explicitly referenced (e.g., 'as shown on screen').\n"
+            "• Context: Assign sentiment/tone when obvious; otherwise null.\n"
+            "• Confidence/Relevance: floats in [0,1].\n"
+            "• Keep all keys; output valid JSON only.\n\n"
+            "EXAMPLE OUTPUT (abbreviated):\n"
+            "{\n"
+            '  "summary": "Phil Ivey explains how to balance betting ranges in tournament play.",\n'
+            '  "entities": [ {"name": "Phil Ivey", "type": "Person", "relevance": 0.98, "source_fragment": "Phil Ivey"} ],\n'
+            '  "concepts": [ {"name": "range balancing", "category": "Strategy", "confidence": 0.95} ],\n'
+            '  "relations": [ {"subject": "Phil Ivey", "predicate": "explains", "object": "range balancing", "confidence": 0.9} ],\n'
+            '  "temporal_references": [],\n'
+            '  "numerical_data": [],\n'
+            '  "visual_cues": [],\n'
+            '  "context": { "speaker": "Phil Ivey", "sentiment": "analytical", "tone": "instructional", "language": "en", "tags": ["poker", "strategy"] }\n'
+            "}\n\n"
+            "Double-check consistency before outputting. Output ONLY the final JSON. Do not include the example in your output.\n"
+            "You will be graded on JSON validity and adherence to the schema; non-compliant outputs receive a score of zero.\n\n"
+            "CHUNK TEXT:\n"
+            f"{chunk_text[:120000]}"
         )
+
         return system_prompt, user_prompt
 
-    def annotate_single(self, text_block: str) -> Dict[str, Any]:
-        system_prompt, user_prompt = self.build_single_prompts(text_block)
+    def annotate_chunk_structured(self, chunk_text: str) -> Dict[str, Any]:
+        system_prompt, user_prompt = self.build_chunk_structured_prompts(chunk_text)
         out = self.call_model(system_prompt, user_prompt)
         try:
             data = json.loads(out) if out else {}
-            segs = data.get("segments", []) if isinstance(data, dict) else []
-            if isinstance(segs, list) and segs:
-                seg = self._normalize_segment_fields(segs[0], text_block)
-                return seg
+            if isinstance(data, dict):
+                return data
         except Exception:
             pass
-        # Fallback minimal single segment
+        # Minimal fallback (empty annotations)
         return {
-            "start": 0.0,
-            "end": 0.0,
-            "text": self._normalize_text(text_block),
-            "tags": [],
-            "named_entities": [],
-            "topics": [],
-            "keyphrases": [],
-            "code_blocks": [],
-            "difficulty": None,
+            "summary": "",
             "entities": [],
+            "concepts": [],
+            "relations": [],
+            "temporal_references": [],
+            "numerical_data": [],
+            "visual_cues": [],
+            "context": {
+                "speaker": None,
+                "sentiment": None,
+                "tone": None,
+                "language": None,
+                "tags": [],
+            },
         }

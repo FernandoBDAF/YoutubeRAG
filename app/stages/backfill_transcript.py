@@ -1,122 +1,97 @@
-import os
-import sys
-import argparse
-from datetime import datetime, timezone
-from typing import Optional
-
-from dotenv import load_dotenv
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 try:
-    from app.services.utils import get_mongo_client
+    from app.services.transcripts import get_transcript
+    from config.paths import COLL_RAW_VIDEOS
+    from core.base_stage import BaseStage
+    from core.stage_config import BaseStageConfig
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
     _sys.path.append(
         _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", ".."))
     )
-    from app.services.utils import get_mongo_client
-
-from config.paths import DB_NAME, COLL_RAW_VIDEOS
-
-
-def _env_bool(name: str, default: bool = False) -> bool:
-    v = os.getenv(name)
-    if v is None:
-        return default
-    return str(v).strip().lower() in {"1", "true", "yes", "on"}
+    from app.services.transcripts import get_transcript
+    from config.paths import COLL_RAW_VIDEOS
+    from core.base_stage import BaseStage
+    from core.stage_config import BaseStageConfig
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Backfill a single video's transcript into raw_videos"
-    )
-    parser.add_argument("--video_id", required=False, help="YouTube video ID")
-    return parser.parse_args()
+@dataclass
+class BackfillTranscriptConfig(BaseStageConfig):
+    languages: List[str] = field(default_factory=lambda: ["en", "en-US", "en-GB"])
+
+    @classmethod
+    def from_args_env(cls, args, env, default_db):
+        base = BaseStageConfig.from_args_env(args, env, default_db)
+        langs = getattr(args, "languages", None) or ["en", "en-US", "en-GB"]
+        return cls(**vars(base), languages=langs)
 
 
-def fetch_transcript_text(video_id: str) -> Optional[str]:
-    try:
-        from app.services.transcripts import get_transcript
+class BackfillTranscriptStage(BaseStage):
+    name = "backfill_transcript"
+    description = "Fill missing transcript_raw for raw_videos or a single video"
+    ConfigCls = BackfillTranscriptConfig
 
-        url = f"https://www.youtube.com/watch?v={video_id}"
-        items = get_transcript(url)
-        if not items:
-            print(
-                f"No transcript from YouTube for {video_id}, url={url}"
-            )
-            return None
-        text = "\n".join(seg.get("text", "") for seg in items if seg.get("text"))
-        text = (text or "").strip()
-        if not text:
-            print(
-                f"Transcript loader returned empty text for {video_id}, url={url}"
-            )
-            return None
-        return text
-    except Exception as e:
-        print(f"Error fetching transcript for {video_id}: {e}")
-        return None
+    def build_parser(self, p):
+        super().build_parser(p)
+        p.add_argument("--languages", nargs="*", default=["en", "en-US", "en-GB"])
 
-
-def main() -> None:
-    load_dotenv()
-    args = parse_args()
-
-    client = get_mongo_client()
-    db = client[DB_NAME]
-    coll = db[COLL_RAW_VIDEOS]
-
-    video_id = args.video_id
-
-    if not video_id:
-        docs = list(coll.find({"transcript_raw": None}))
-        backfilled = 0
-        print(f"Backfilling {len(docs)} transcripts")
-        for doc in docs:
-            allow_upsert_existing = _env_bool("INGEST_UPSERT_EXISTING", False)
-            if (doc.get("transcript_raw") or "") and not allow_upsert_existing:
-                print(f"Transcript exists; skipping {video_id} (INGEST_UPSERT_EXISTING=false)")
-                continue
-
-            text = fetch_transcript_text(doc.get("video_id"))
-            if not text:
-                # Better logs already printed in fetch_transcript_text
-                continue
-
-            update = {
-                "transcript_raw": text,
-                "transcript_language": None,  # language not provided by loader
-                "fetched_at": datetime.now(timezone.utc),
+    def iter_docs(self):
+        # Read from configured read DB/collection (default raw_videos)
+        src_db = self.config.read_db_name or self.config.db_name
+        coll = self.get_collection(
+            self.config.read_coll or COLL_RAW_VIDEOS, io="read", db_name=src_db
+        )
+        if self.config.video_id:
+            q = {"video_id": self.config.video_id}
+        else:
+            q = {
+                "$or": [
+                    {"transcript_raw": {"$exists": False}},
+                    {"transcript_raw": None},
+                    {"transcript_raw": ""},
+                ]
             }
-            coll.update_one({"video_id": video_id}, {"$set": update}, upsert=False)
-            print(f"Backfilled transcript for {video_id} (chars={len(text)})")
-            backfilled += 1
-        print(f"Backfilled {backfilled} transcripts")
-        sys.exit(0)
+        return list(coll.find(q, {"video_id": 1}))
 
-    doc = coll.find_one({"video_id": video_id})
-    if not doc:
-        print(f"No raw_videos document for {video_id}")
-        sys.exit(1)
-
-    allow_upsert_existing = _env_bool("INGEST_UPSERT_EXISTING", False)
-    if (doc.get("transcript_raw") or "") and not allow_upsert_existing:
-        print(f"Transcript exists; skipping {video_id} (INGEST_UPSERT_EXISTING=false)")
-        sys.exit(0)
-
-    text = fetch_transcript_text(video_id)
-    if not text:
-        # Better logs already printed in fetch_transcript_text
-        sys.exit(0)
-
-    update = {
-        "transcript_raw": text,
-        "transcript_language": None,  # language not provided by loader
-        "fetched_at": datetime.now(timezone.utc),
-    }
-    coll.update_one({"video_id": video_id}, {"$set": update}, upsert=False)
-    print(f"Backfilled transcript for {video_id} (chars={len(text)})")
+    def handle_doc(self, d):
+        vid = d["video_id"]
+        src_db = self.config.read_db_name or self.config.db_name
+        dst_db = self.config.write_db_name or self.config.db_name
+        read_coll = self.get_collection(
+            self.config.read_coll or COLL_RAW_VIDEOS, io="read", db_name=src_db
+        )
+        write_coll = self.get_collection(
+            self.config.write_coll or COLL_RAW_VIDEOS, io="write", db_name=dst_db
+        )
+        existing = read_coll.find_one({"video_id": vid}, {"transcript_raw": 1})
+        if (
+            existing.get("transcript_raw") or ""
+        ).strip() and not self.config.upsert_existing:
+            self.stats["skipped"] += 1
+            self.log(f"Skip existing {vid}")
+            return
+        url = f"https://www.youtube.com/watch?v={vid}"
+        self.log(f"Fetching transcript for {vid} (langs={self.config.languages})")
+        print(f"Fetching transcript for {vid} (langs={self.config.languages})")
+        items = get_transcript(url, languages=self.config.languages)
+        if not items:
+            self.stats["failed"] += 1
+            self.log(f"No transcript found for {vid}")
+            print(f"No transcript found for {vid}")
+            return
+        text = "\n".join(i.get("text", "") for i in items if i.get("text"))
+        if not self.config.dry_run:
+            write_coll.update_one(
+                {"video_id": vid}, {"$set": {"transcript_raw": text}}, upsert=True
+            )
+        self.stats["updated"] += 1
+        self.log(f"Updated {vid} chars={len(text)}")
+        print(f"Updated {vid} chars={len(text)}")
 
 
 if __name__ == "__main__":
-    main()
+    stage = BackfillTranscriptStage()
+    raise SystemExit(stage.run())

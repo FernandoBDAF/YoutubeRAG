@@ -28,7 +28,7 @@ def answer_with_openai(contexts: List[Dict[str, Any]], question: str) -> str:
             },
         ]
         resp = client.chat.completions.create(
-            model=os.getenv("DEFAULT_MODEL", "gpt-4o-mini"), messages=messages
+            model=os.getenv("OPENAI_DEFAULT_MODEL", "gpt-5-nano"), messages=messages
         )
         return resp.choices[0].message.content.strip()
     except Exception as e:
@@ -64,7 +64,7 @@ def stream_answer_with_openai(
             },
         ]
         stream = client.chat.completions.create(
-            model=os.getenv("DEFAULT_MODEL", "gpt-4o-mini"),
+            model=os.getenv("OPENAI_DEFAULT_MODEL", "gpt-4o-mini"),
             messages=messages,
             stream=True,
         )

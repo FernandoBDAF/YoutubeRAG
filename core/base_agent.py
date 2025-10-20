@@ -44,7 +44,7 @@ class BaseAgent(ABC):
 
         # Load model: explicit > env var > safe default
         self.config.model_name = (
-            self.config.model_name or os.getenv("DEFAULT_MODEL") or "gpt-5-nano"
+            self.config.model_name or os.getenv("OPENAI_DEFAULT_MODEL") or "gpt-5-nano"
         )
 
         # Initialize client (require key only when LLM path is used)

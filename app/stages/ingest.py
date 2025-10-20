@@ -1,14 +1,9 @@
 import os
 import re
 import sys
-import argparse
+from dataclasses import dataclass
 from datetime import datetime, timezone
-import time
-import random
 from typing import Any, Dict, List, Optional, Tuple
-import requests
-
-from dotenv import load_dotenv
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -16,6 +11,8 @@ from googleapiclient.errors import HttpError
 
 try:
     from app.services.utils import get_mongo_client
+    from core.base_stage import BaseStage
+    from core.stage_config import BaseStageConfig
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
@@ -23,35 +20,12 @@ except ModuleNotFoundError:
         _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", ".."))
     )
     from app.services.utils import get_mongo_client
+    from core.base_stage import BaseStage
+    from core.stage_config import BaseStageConfig
 from config.paths import (
     DB_NAME,
     COLL_RAW_VIDEOS,
 )
-
-
-def _env_bool(name: str, default: bool = False) -> bool:
-    val = os.getenv(name)
-    if val is None:
-        return default
-    return str(val).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Ingest YouTube videos → MongoDB raw_videos"
-    )
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--playlist_id", type=str, help="YouTube playlist ID to ingest")
-    group.add_argument(
-        "--channel_id", type=str, help="YouTube channel ID to ingest recent uploads"
-    )
-    group.add_argument(
-        "--video_ids", type=str, nargs="+", help="One or more YouTube video IDs"
-    )
-    parser.add_argument(
-        "--max", type=int, default=10, help="Max videos to ingest (default 10)"
-    )
-    return parser.parse_args()
 
 
 def get_youtube_client() -> Any:
@@ -202,7 +176,7 @@ def to_raw_video_doc(
             thumb_url = thumbnails[key]["url"]
             break
 
-    return {
+    doc = {
         "video_id": item.get("id"),
         "title": title,
         "description": description,
@@ -223,56 +197,183 @@ def to_raw_video_doc(
         # timezone-aware datetime is stored as BSON date in Mongo
         "fetched_at": datetime.now(timezone.utc),
     }
+    # If the item was annotated with a playlist id, persist it
+    pl = item.get("_playlist_id")
+    if pl:
+        doc["playlist_id"] = pl
+    return doc
 
 
-def upsert_raw_video(db, doc: Dict[str, Any]) -> None:
-    coll = db[COLL_RAW_VIDEOS]
-    coll.update_one({"video_id": doc["video_id"]}, {"$set": doc}, upsert=True)
+@dataclass
+class IngestConfig(BaseStageConfig):
+    playlist_id: Optional[str] = None
+    channel_id: Optional[str] = None
+    video_ids: Optional[List[str]] = None
+
+    @classmethod
+    def from_args_env(cls, args, env, default_db):
+        base = BaseStageConfig.from_args_env(args, env, default_db)
+        vids = getattr(args, "video_ids", None)
+        return cls(
+            **vars(base),
+            playlist_id=getattr(args, "playlist_id", None),
+            channel_id=getattr(args, "channel_id", None),
+            video_ids=vids,
+        )
 
 
-def main() -> None:
-    load_dotenv()
-    args = parse_args()
-    youtube = get_youtube_client()
+class IngestStage(BaseStage):
+    name = "ingest"
+    description = "Ingest YouTube videos → raw_videos"
+    ConfigCls = IngestConfig
 
-    # Resolve video IDs
-    if args.playlist_id:
-        video_ids = list_videos_in_playlist(youtube, args.playlist_id, args.max)
-    elif args.channel_id:
-        video_ids = list_recent_videos_for_channel(youtube, args.channel_id, args.max)
-    else:
-        video_ids = args.video_ids[: args.max]
+    def build_parser(self, p):
+        super().build_parser(p)
+        g = p.add_mutually_exclusive_group(required=False)
+        g.add_argument("--playlist_id", type=str)
+        g.add_argument("--channel_id", type=str)
+        g.add_argument("--video_ids", nargs="+")
 
-    if not video_ids:
-        print("No videos to ingest.")
-        sys.exit(0)
+    def setup(self) -> None:
+        super().setup()
+        self.youtube = get_youtube_client()
+        self._details: Dict[str, Dict[str, Any]] = {}
 
-    details = fetch_video_details(youtube, video_ids)
+    def iter_docs(self) -> List[Dict[str, Any]]:
+        # Resolve video ids based on config
+        if self.config.playlist_id:
+            vids = list_videos_in_playlist(
+                self.youtube, self.config.playlist_id, int(self.config.max or 100)
+            )
+        elif self.config.channel_id:
+            vids = list_recent_videos_for_channel(
+                self.youtube, self.config.channel_id, int(self.config.max or 100)
+            )
+        elif self.config.video_ids is not None:
+            vids = self.config.video_ids or []
+            if self.config.max:
+                vids = vids[: int(self.config.max)]
+        else:
+            # Fallback: process entries in raw_videos where channel_id is null (read DB)
+            coll = self.get_collection(
+                self.config.read_coll or COLL_RAW_VIDEOS, io="read"
+            )
+            vids = [
+                d.get("video_id")
+                for d in coll.find({"channel_id": {"$in": [None, ""]}}, {"video_id": 1})
+            ]
+            if self.config.max:
+                vids = vids[: int(self.config.max)]
+            print(
+                f"[ingest] Fallback mode: found {len(vids)} video(s) with missing channel_id"
+            )
+        if not vids:
+            print("[ingest] No videos to ingest.")
+            return []
+        # Skip videos that already exist when not upserting to save API calls
+        if not self.config.upsert_existing:
+            coll = self.get_collection(
+                self.config.read_coll or COLL_RAW_VIDEOS, io="read"
+            )
+            existing = {
+                d.get("video_id")
+                for d in coll.find({"video_id": {"$in": vids}}, {"video_id": 1})
+            }
+            if existing:
+                before = len(vids)
+                vids = [v for v in vids if v not in existing]
+                print(
+                    f"[ingest] Skipping {len(existing)} existing video(s); {len(vids)}/{before} remain"
+                )
+            if not vids:
+                return []
+        # Pre-fetch details in batch for efficiency; single batch fetch for all remaining vids
+        details = fetch_video_details(self.youtube, vids)
+        # If coming from a playlist, annotate each detail doc with the playlist id
+        if self.config.playlist_id:
+            for v in vids:
+                d = details.get(v)
+                if d is not None:
+                    d["_playlist_id"] = self.config.playlist_id
+        # Retry once for any missing IDs (partial API response)
+        missing = [v for v in vids if v not in details]
+        if missing:
+            retry = fetch_video_details(self.youtube, missing)
+            if retry:
+                details.update(retry)
+                # ensure playlist annotation is preserved on retried details too
+                if self.config.playlist_id:
+                    for v in missing:
+                        d = details.get(v)
+                        if d is not None:
+                            d["_playlist_id"] = self.config.playlist_id
+                print(
+                    f"[ingest] Retried {len(missing)}; recovered {len(retry)} detail(s)"
+                )
+        self._details = details
+        print(
+            f"[ingest] Collected {len(vids)} video id(s); details for {len(self._details)}"
+        )
+        return [{"video_id": v} for v in vids]
 
-    client = get_mongo_client()
-    db = client[DB_NAME]
-
-    success = 0
-    allow_upsert_existing = _env_bool("INGEST_UPSERT_EXISTING", default=False)
-    for vid in video_ids:
-        item = details.get(vid)
+    def handle_doc(self, doc: Dict[str, Any]) -> None:
+        vid = doc.get("video_id")
+        if not vid:
+            return
+        # Collections on write DB for persistence
+        coll = self.get_collection(
+            self.config.write_coll or COLL_RAW_VIDEOS, io="write"
+        )
+        # Skip existing unless upsert
+        if not self.config.upsert_existing:
+            if coll.find_one({"video_id": vid}):
+                print(f"[ingest] Skip existing {vid}")
+                self.stats["skipped"] += 1
+                return
+        item = self._details.get(vid)
+        coll = self.get_collection(
+            self.config.write_coll or COLL_RAW_VIDEOS, io="write"
+        )
         if not item:
-            continue
-        # Skip existing unless env overrides
-        if not allow_upsert_existing:
-            if db[COLL_RAW_VIDEOS].find_one({"video_id": vid}):
-                print(f"Skip existing {vid}")
-                continue
-        transcript_text, transcript_lang = fetch_transcript_text(vid)
-        doc = to_raw_video_doc(item, transcript_text, transcript_lang)
-        upsert_raw_video(db, doc)
-        success += 1
-        print(f"Ingested {vid}: title='{doc.get('title','')[:60]}'")
-
-    print(
-        f"Done. Upserted {success} / {len(video_ids)} videos into '{COLL_RAW_VIDEOS}'."
-    )
+            # Create a minimal entry with channel_id=None
+            try:
+                coll.update_one(
+                    {"video_id": vid},
+                    {
+                        "$setOnInsert": {"video_id": vid},
+                        "$set": {
+                            "channel_id": None,
+                            "fetched_at": datetime.now(timezone.utc),
+                        },
+                    },
+                    upsert=True,
+                )
+                self.stats["updated"] += 1
+                print(f"[ingest] Created minimal stub for {vid} (no details)")
+            except Exception as e:
+                self.stats["failed"] += 1
+                print(f"[ingest] Error creating stub for {vid}: {e}")
+            return
+        try:
+            transcript_text, transcript_lang = fetch_transcript_text(vid)
+        except Exception as e:
+            print(f"[ingest] Error fetching transcript for {vid}: {e}")
+            self.stats["transcript_failed"] += 1
+            transcript_text, transcript_lang = None, None
+        raw_doc = to_raw_video_doc(item, transcript_text, transcript_lang)
+        try:
+            coll.update_one(
+                {"video_id": raw_doc["video_id"]}, {"$set": raw_doc}, upsert=True
+            )
+            self.stats["updated"] += 1
+            print(
+                f"[ingest] Upserted {vid}: title='{(raw_doc.get('title') or '')[:60]}'"
+            )
+        except Exception as e:
+            self.stats["failed"] += 1
+            print(f"[ingest] Error upserting {vid}: {e}")
 
 
 if __name__ == "__main__":
-    main()
+    stage = IngestStage()
+    raise SystemExit(stage.run())

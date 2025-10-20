@@ -1,5 +1,6 @@
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, field
 
 import requests
 import time
@@ -8,6 +9,8 @@ from pymongo import MongoClient
 
 try:
     from app.services.utils import get_mongo_client
+    from core.base_stage import BaseStage
+    from core.stage_config import BaseStageConfig
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
@@ -15,6 +18,8 @@ except ModuleNotFoundError:
         _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", ".."))
     )
     from app.services.utils import get_mongo_client
+    from core.base_stage import BaseStage
+    from core.stage_config import BaseStageConfig
 from app.services.rate_limit import RateLimiter
 from config.paths import (
     DB_NAME,
@@ -22,31 +27,8 @@ from config.paths import (
     COLL_CHUNKS,
     VECTOR_DIM,
 )
-from core.concurrency import run_llm_concurrent
 from core.text_utils import normalize_newlines, sha256_text
 import re
-
-
-def chunk_text_segments(
-    segments: List[Dict[str, Any]], target_tokens: int = 500
-) -> List[Dict[str, Any]]:
-    chunks: List[Dict[str, Any]] = []
-    current_text: List[str] = []
-    current_count = 0
-    for seg in segments:
-        text = seg.get("text", "")
-        tokens = max(1, len(text.split()))
-        if current_count + tokens > target_tokens and current_text:
-            chunks.append({"text": "\n\n".join(current_text)})
-            # simple overlap: keep last sentence as seed
-            tail = current_text[-1] if current_text else ""
-            current_text = [tail] if tail else []
-            current_count = max(1, len(tail.split())) if tail else 0
-        current_text.append(text)
-        current_count += tokens
-    if current_text:
-        chunks.append({"text": "\n\n".join(current_text)})
-    return chunks
 
 
 def embed_texts(texts: List[str]) -> List[List[float]]:
@@ -142,68 +124,159 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
     return []
 
 
-def main() -> None:
-    load_dotenv()
-    use_llm = os.getenv("CHUNK_WITH_LLM") == "1" or "--llm" in os.sys.argv
-    client: MongoClient = get_mongo_client()
-    db = client[DB_NAME]
-    enriched = db[COLL_ENRICHED]
-    chunks_coll = db[COLL_CHUNKS]
+@dataclass
+class ChunkConfig(BaseStageConfig):
+    chunk_strategy: str = "fixed"  # fixed | recursive | semantic
+    token_size: int = 500
+    overlap_pct: float = 0.15
+    split_chars: List[str] = field(default_factory=lambda: ["."])
+    semantic_model: Optional[str] = None
 
-    def _env_bool(name: str, default: bool = False) -> bool:
-        v = os.getenv(name)
-        if v is None:
-            return default
-        return str(v).strip().lower() in {"1", "true", "yes", "on"}
+    @classmethod
+    def from_args_env(cls, args, env, default_db):
+        base = BaseStageConfig.from_args_env(args, env, default_db)
+        strategy = (
+            (
+                getattr(args, "chunk_strategy", None)
+                or env.get("CHUNK_STRATEGY", "fixed")
+            )
+            .strip()
+            .lower()
+        )
+        token_size = int(getattr(args, "token_size", env.get("TOKEN_SIZE", 500)))
+        overlap_pct = float(getattr(args, "overlap_pct", env.get("OVERLAP_PCT", 0.15)))
+        split_chars_arg = getattr(args, "split_chars", None) or env.get(
+            "SPLIT_CHARS", "."
+        )
+        split_chars = [s.strip() for s in str(split_chars_arg).split(",") if s.strip()]
+        semantic_model = getattr(args, "semantic_model", None) or env.get(
+            "SEMANTIC_MODEL"
+        )
+        return cls(
+            **vars(base),
+            chunk_strategy=strategy,
+            token_size=token_size,
+            overlap_pct=overlap_pct,
+            split_chars=split_chars,
+            semantic_model=semantic_model,
+        )
 
-    allow_upsert_existing = _env_bool("CHUNK_UPSERT_EXISTING", False)
-    embedder_choice = os.getenv("EMBEDDER", "voyage").strip().lower()
-    hashing_dim = int(os.getenv("VECTOR_DIM", str(VECTOR_DIM)))
 
-    for doc in enriched.find({"segments": {"$exists": True, "$ne": []}}).limit(20):
+class ChunkStage(BaseStage):
+    name = "chunk"
+    description = "Chunk enriched segments and generate embeddings"
+    ConfigCls = ChunkConfig
+
+    def build_parser(self, p):
+        super().build_parser(p)
+        p.add_argument(
+            "--chunk_strategy",
+            choices=["fixed", "recursive", "semantic"],
+            default="fixed",
+        )
+        p.add_argument("--token_size", type=int, default=500)
+        p.add_argument("--overlap_pct", type=float, default=0.15)
+        p.add_argument("--split_chars", type=str, default=".")
+        p.add_argument("--semantic_model", type=str)
+        try:
+            p.add_argument("--video_id", type=str)
+        except Exception:
+            pass
+        try:
+            p.add_argument("--upsert_existing", action="store_true")
+        except Exception:
+            pass
+
+    def iter_docs(self):
+        if self.config.video_id:
+            docs = list(
+                self.db[COLL_ENRICHED].find(
+                    {"video_id": self.config.video_id}, {"video_id": 1, "segments": 1}
+                )
+            )
+            print(
+                f"[chunk] Selected {len(docs)} doc(s) for video_id={self.config.video_id}"
+            )
+            return docs
+        enriched = self.db[COLL_ENRICHED]
+        docs = list(enriched.find({"segments": {"$exists": True, "$ne": []}}))
+        print(
+            f"[chunk] Selected {len(docs)} enriched doc(s) for processing (strategy={self.config.chunk_strategy})"
+        )
+        return docs
+
+    def handle_doc(self, doc):
+        db = self.db
+        chunks_coll = db[COLL_CHUNKS]
         video_id = doc.get("video_id")
         segments = doc.get("segments", [])
         if not video_id or not segments:
-            continue
-        # try to fetch channel_id and published_at from raw_videos if present
+            return
+        print(
+            f"[chunk] Processing video_id={video_id} with strategy={self.config.chunk_strategy} token_size={self.config.token_size} overlap_pct={self.config.overlap_pct}"
+        )
         try:
             rv = db["raw_videos"].find_one(
                 {"video_id": video_id}, {"channel_id": 1, "published_at": 1}
             )
         except Exception:
             rv = None
-        if use_llm:
-            try:
-                from agents.chunk_agent import ChunkEmbedAgent
+        # Build full text then apply selected chunking strategy
+        full_text = "\n".join([s.get("text") for s in segments])
+        print(f"[chunk] Full text length={len(full_text)} chars")
+        chunks_plain = []
+        try:
+            if self.config.chunk_strategy == "fixed":
+                from langchain.text_splitter import TokenTextSplitter
 
-                agent = ChunkEmbedAgent()
-                chunks_plain = agent.make_chunks(segments) or []
-            except Exception:
-                chunks_plain = chunk_text_segments(segments)
-        else:
-            chunks_plain = chunk_text_segments(segments)
-        # Normalize texts and add stable chunk hashes
-        texts = [normalize_newlines(c["text"]) for c in chunks_plain]
-        # Strip common bracketed stage cues to avoid embedding noise
+                splitter = TokenTextSplitter(
+                    chunk_size=int(self.config.token_size),
+                    chunk_overlap=int(
+                        self.config.token_size * float(self.config.overlap_pct)
+                    ),
+                )
+                chunks_plain = splitter.split_text(full_text)
+            elif self.config.chunk_strategy == "recursive":
+                from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+                splitter = RecursiveCharacterTextSplitter(
+                    separators=self.config.split_chars or ["."],
+                    chunk_size=int(self.config.token_size),
+                    chunk_overlap=int(
+                        self.config.token_size * float(self.config.overlap_pct)
+                    ),
+                )
+                chunks_plain = splitter.split_text(full_text)
+            elif self.config.chunk_strategy == "semantic":
+                from langchain_experimental.text_splitter import SemanticChunker
+                from langchain_openai import OpenAIEmbeddings
+
+                # Prefer voyage embeddings via our embed_texts wrapper is not directly supported by LC; use OpenAI if SEMANTIC_MODEL points there
+                model_name = self.config.semantic_model or os.getenv(
+                    "OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"
+                )
+                emb = OpenAIEmbeddings(model=model_name)
+                splitter = SemanticChunker(embeddings=emb)
+                chunks_plain = splitter.split_text(full_text)
+        except Exception as e:
+            # Fallback: no chunking
+            chunks_plain = [full_text]
+            print(f"[chunk] Chunking failed ({e}); using single chunk fallback")
+        print(f"[chunk] Produced {len(chunks_plain)} chunk(s) before normalization")
+        texts = [
+            normalize_newlines(c if isinstance(c, str) else (c.get("text") or ""))
+            for c in chunks_plain
+        ]
         cue_re = re.compile(
             r"\[(APPLAUSE|SQUEAKING|RUSTLING|MUSIC|LAUGHTER|NOISE|CLICKING)\]",
             re.IGNORECASE,
         )
         display_texts = [cue_re.sub("", t) for t in texts]
         texts = display_texts
-        if embedder_choice == "hashing":
-            try:
-                from core.embedder_hashing import HashingEmbedder
-
-                hasher = HashingEmbedder(n_features=hashing_dim)
-                vectors = [hasher.embed(t) for t in texts]
-            except Exception as e:
-                print(f"Hashing embedder error: {e}; falling back to Voyage")
-                vectors = embed_texts(texts) if texts else []
-        else:
-            vectors = embed_texts(texts) if texts else []
-        # derive basic metadata proxies (MVP)
-        # compute age_days if possible
+        # Embeddings: Voyage only (simplified per plan)
+        print(f"[chunk] Embedding {len(texts)} chunk text(s) with Voyage")
+        vectors = embed_texts(texts) if texts else []
+        print(f"[chunk] Received {len(vectors)} embedding vector(s)")
         age_days = 180
         channel_id = None
         try:
@@ -228,7 +301,18 @@ def main() -> None:
         except Exception:
             pass
         code_present_any = any(bool(s.get("code_blocks")) for s in segments)
-        # Normalize tags: lowercase, hyphenate (underscores→hyphens), deduplicate
+        # Capture chunking parameters used for this run
+        chunking_info: Dict[str, Any] = {
+            "strategy": self.config.chunk_strategy,
+            "token_size": int(self.config.token_size),
+            "overlap_pct": float(self.config.overlap_pct),
+        }
+        if self.config.chunk_strategy in ("recursive", "semantic"):
+            chunking_info["split_chars"] = self.config.split_chars or ["."]
+        if self.config.chunk_strategy == "semantic":
+            chunking_info["semantic_model"] = self.config.semantic_model or os.getenv(
+                "OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"
+            )
         raw_tags: List[str] = [t for s in segments for t in s.get("tags", [])]
         _seen: set[str] = set()
         _norm_tags: List[str] = []
@@ -256,29 +340,38 @@ def main() -> None:
                         "age_days": age_days,
                         "code_present": code_present_any,
                         "channel_id": channel_id,
+                        "chunking": chunking_info,
                     },
                     "embedding": vec,
-                    "embedding_model": (
-                        "hashing" if embedder_choice == "hashing" else "voyage-2"
-                    ),
-                    "embedding_dim": (
-                        hashing_dim if embedder_choice == "hashing" else VECTOR_DIM
-                    ),
+                    "embedding_model": os.getenv("VOYAGE_EMBED_MODEL", "voyage-2"),
+                    "embedding_dim": VECTOR_DIM,
                 }
             )
         if out_docs:
-            if not allow_upsert_existing:
-                # Skip if we already have chunks for this video
+            if not self.config.upsert_existing:
                 if chunks_coll.find_one({"video_id": video_id}):
                     print(f"Skip existing chunks {video_id}")
                     return
-            # Bulk upsert per chunk_id in batches to reduce round-trips
+            else:
+                try:
+                    res = chunks_coll.delete_many({"video_id": video_id})
+                    print(
+                        f"[chunk] Removed {getattr(res, 'deleted_count', 0)} existing chunk(s) for video_id={video_id}"
+                    )
+                except Exception:
+                    # proceed even if delete fails; upserts will overwrite matching chunk_ids
+                    print(
+                        f"[chunk] Warning: failed to delete existing chunks for video_id={video_id}; proceeding with upserts"
+                    )
             try:
                 from pymongo import UpdateOne
 
                 BATCH = 500
                 for i in range(0, len(out_docs), BATCH):
                     batch = out_docs[i : i + BATCH]
+                    print(
+                        f"[chunk] Writing batch {i//BATCH + 1} with {len(batch)} chunk(s)"
+                    )
                     ops = [
                         UpdateOne(
                             {"video_id": d["video_id"], "chunk_id": d["chunk_id"]},
@@ -290,7 +383,6 @@ def main() -> None:
                     if ops:
                         chunks_coll.bulk_write(ops, ordered=False)
             except Exception:
-                # Fallback to per-doc update_one
                 for d in out_docs:
                     chunks_coll.update_one(
                         {"video_id": d["video_id"], "chunk_id": d["chunk_id"]},
@@ -298,9 +390,10 @@ def main() -> None:
                         upsert=True,
                     )
             print(
-                f"Chunked+Embedded {video_id}: {len(out_docs)} chunks (llm={use_llm})"
+                f"Chunked+Embedded {video_id}: {len(out_docs)} chunks (strategy={self.config.chunk_strategy})"
             )
 
 
 if __name__ == "__main__":
-    main()
+    stage = ChunkStage()
+    raise SystemExit(stage.run())

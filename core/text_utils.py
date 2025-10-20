@@ -1,6 +1,6 @@
 import re
 import hashlib
-from typing import List
+from typing import List, Optional
 
 
 def normalize_newlines(text: str) -> str:
@@ -38,3 +38,21 @@ def dedup_lower(seq: List[str]) -> List[str]:
         seen.add(k)
         out.append(k)
     return out
+
+
+def seconds_to_hhmmss(seconds: Optional[float]) -> str:
+    try:
+        s = max(0, int(float(seconds or 0)))
+    except Exception:
+        s = 0
+    h = s // 3600
+    m = (s % 3600) // 60
+    sec = s % 60
+    return f"{h:02d}:{m:02d}:{sec:02d}"
+
+
+def safe_float(v: object, default: float = 0.0) -> float:
+    try:
+        return float(v)
+    except Exception:
+        return default

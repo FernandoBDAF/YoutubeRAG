@@ -56,7 +56,7 @@ def run_llm_concurrent(
     retries: int = 1,
     backoff_s: float = 0.5,
     qps: Optional[float] = None,
-    jitter: bool = True,
+    jitter: bool = False,
     on_error: Optional[Callable[[Exception, Any], Any]] = None,
     preserve_order: bool = True,
 ) -> List[Any]:

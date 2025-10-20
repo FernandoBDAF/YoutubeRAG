@@ -1,22 +1,18 @@
 import os
-import re
-import hashlib
-from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Tuple
-from core.concurrency import run_llm_concurrent
-from core.text_utils import (
-    normalize_newlines,
-    strip_stray_backslashes,
-    count_words,
-    sha256_text,
-    dedup_lower,
-)
+from dataclasses import dataclass
+from typing import Any, Dict, List, Tuple, Optional
 
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
 try:
     from app.services.utils import get_mongo_client
+    from core.base_stage import BaseStage
+    from core.stage_config import BaseStageConfig
+
+    # Ensure these are available in the normal import path as well
+    from core.text_utils import normalize_newlines
+    from core.concurrency import run_llm_concurrent
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
@@ -24,387 +20,333 @@ except ModuleNotFoundError:
         _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", ".."))
     )
     from app.services.utils import get_mongo_client
-from config.paths import DB_NAME, COLL_CLEANED, COLL_ENRICHED, COLL_RAW_VIDEOS
+    from core.base_stage import BaseStage
+    from core.stage_config import BaseStageConfig
+    from core.text_utils import normalize_newlines
+    from core.concurrency import run_llm_concurrent
+from config.paths import (
+    DB_NAME,
+    COLL_CLEANED,
+    COLL_ENRICHED,
+    COLL_RAW_VIDEOS,
+    COLL_CHUNKS,
+)
 
 
-CODE_FENCE_RE = re.compile(r"```([a-zA-Z0-9_+-]*)[\s\S]*?```", re.MULTILINE)
+from core.enrich_utils import normalize_enrich_payload_for_chunk
+from app.stages.clean import build_embedding_text
 
 
-def simple_tag_extract(text: str) -> List[str]:
-    """Heuristic tags from a wider CS vocabulary with a bag-of-words fallback."""
-    text_l = text.lower()
-    vocab = [
-        # General CS / algorithms
-        "algorithm",
-        "algorithms",
-        "data structure",
-        "data structures",
-        "complexity",
-        "big o",
-        "runtime",
-        "proof",
-        "correctness",
-        "efficiency",
-        "induction",
-        "recursion",
-        "divide and conquer",
-        "greedy",
-        "dynamic programming",
-        "graph",
-        "graphs",
-        "tree",
-        "binary tree",
-        "heap",
-        "priority queue",
-        "hash",
-        "hashing",
-        "set",
-        "sorting",
-        "search",
-        "array",
-        "list",
-        "stack",
-        "queue",
-        # Dev (retain)
-        "react",
-        "python",
-        "hooks",
-        "state",
-        "api",
-        "context",
-        "reducer",
-        "typescript",
-        "javascript",
-        "node",
-    ]
-    candidates = set()
-    for kw in vocab:
-        if re.search(rf"\b{re.escape(kw)}\b", text_l):
-            candidates.add(kw)
-    if not candidates:
-        # Fallback: pick top tokens (length>=6) excluding common stopwords
-        stop = {
-            "because",
-            "about",
-            "would",
-            "there",
-            "their",
-            "which",
-            "these",
-            "those",
-            "could",
-            "should",
-            "might",
-            "where",
-            "being",
-            "between",
-            "among",
-            "through",
-            "after",
-            "before",
-            "class",
-            "video",
-            "something",
-            "someone",
-            "itself",
-            "within",
-            "without",
-            "using",
-        }
-        words = re.findall(r"[a-zA-Z]{6,}", text_l)
-        freq: Dict[str, int] = {}
-        for w in words:
-            if w in stop:
-                continue
-            freq[w] = freq.get(w, 0) + 1
-        top = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:6]
-        candidates.update([w for w, _ in top])
-    return sorted(candidates)
+"""LLM-only enrichment stage: no heuristic fallback paths."""
 
 
-def simple_code_blocks(text: str) -> List[Dict[str, str]]:
-    blocks: List[Dict[str, str]] = []
-    for m in CODE_FENCE_RE.finditer(text):
-        lang = m.group(1) or ""
-        blocks.append({"lang": lang, "code": m.group(0)})
-    return blocks
+@dataclass
+class EnrichConfig(BaseStageConfig):
+    # LLM is enforced; flag kept for CLI parity but ignored.
+    use_llm: bool = True
+    # Explicit LLM/concurrency tuning with defaults
+    llm_retries: int = 1
+    llm_backoff_s: float = 0.5
+    llm_qps: Optional[float] = None
+    model_name: Optional[str] = None
 
-
-from core.enrich_utils import split_units as _split_units, pack_units as _pack_units, normalize_llm_segments
-
-
-def enrich_text_to_segments(
-    text: str, target_chars: int = 1800
-) -> List[Dict[str, Any]]:
-    # Coalesce small units into ~target_chars segments
-    units = _split_units(text)
-    packed = _pack_units(units, target_chars=target_chars)
-
-    segments: List[Dict[str, Any]] = []
-    for seg in packed:
-        tags = simple_tag_extract(seg)
-        named_entities: List[str] = []
-        topics: List[str] = []
-        keyphrases = tags[:6]
-        code_blocks = simple_code_blocks(seg)
-        segments.append(
-            {
-                "start": 0.0,
-                "end": 0.0,
-                "text": seg,
-                "tags": tags,
-                "named_entities": named_entities,
-                "topics": topics,
-                "keyphrases": keyphrases,
-                "code_blocks": code_blocks,
-                "difficulty": None,
-                "entities": (named_entities + topics),
-            }
+    @classmethod
+    def from_args_env(cls, args, env, default_db):
+        base = BaseStageConfig.from_args_env(args, env, default_db)
+        # Map ENRICH_MAX into base.max if no CLI max given
+        if getattr(base, "max", None) is None:
+            m = env.get("ENRICH_MAX")
+            if (m or "").strip().isdigit():
+                base.max = int(m)
+        # Accept CLI overrides (fallback to env)
+        retries_cli = getattr(args, "llm_retries", None)
+        backoff_cli = getattr(args, "llm_backoff_s", None)
+        qps_cli = getattr(args, "llm_qps", None)
+        model_cli = getattr(args, "model_name", None)
+        llm_retries = int(
+            retries_cli
+            if retries_cli is not None
+            else (env.get("LLM_RETRIES", "3") or 3)
         )
-    return segments
+        llm_backoff_s = float(
+            backoff_cli
+            if backoff_cli is not None
+            else (env.get("LLM_BACKOFF_S", "5.0") or 5.0)
+        )
+        llm_qps_env = env.get("LLM_QPS")
+        llm_qps = (
+            float(qps_cli)
+            if qps_cli is not None
+            else (float(llm_qps_env) if llm_qps_env else None)
+        )
+        model_name = model_cli or env.get("OPENAI_MODEL")
+        return cls(
+            **vars(base),
+            use_llm=True,
+            llm_retries=llm_retries,
+            llm_backoff_s=llm_backoff_s,
+            llm_qps=llm_qps,
+            model_name=model_name,
+        )
 
 
-def main() -> None:
-    load_dotenv()
-    use_llm = os.getenv("ENRICH_WITH_LLM") == "1" or "--llm" in os.sys.argv
-    client: MongoClient = get_mongo_client()
-    db = client[DB_NAME]
-    cleaned = db[COLL_CLEANED]
-    enriched = db[COLL_ENRICHED]
-    raw_videos = db[COLL_RAW_VIDEOS]
+class EnrichStage(BaseStage):
+    name = "enrich"
+    description = "Enrich cleaned transcripts into segments with tags and metadata"
+    ConfigCls = EnrichConfig
 
-    def _env_bool(name: str, default: bool = False) -> bool:
-        v = os.getenv(name)
-        if v is None:
-            return default
-        return str(v).strip().lower() in {"1", "true", "yes", "on"}
+    def build_parser(self, p):
+        super().build_parser(p)
+        # Optional LLM tuning flags
+        p.add_argument("--llm_retries", type=int)
+        p.add_argument("--llm_backoff_s", type=float)
+        p.add_argument("--llm_qps", type=float)
+        p.add_argument("--model_name", type=str)
 
-    allow_upsert_existing = _env_bool("ENRICH_UPSERT_EXISTING", False)
-    max_items_env = os.getenv("ENRICH_MAX")
-    max_items = int(max_items_env) if (max_items_env or "").strip().isdigit() else 0
-    verbose = _env_bool("ENRICH_VERBOSE", False)
+    def iter_docs(self):
+        # When upserting existing, reprocess all chunks for the selection (ignore summary filter)
+        if self.config.upsert_existing:
+            q: Dict[str, Any] = {}
+        else:
+            # Only select chunks that have not been enriched yet
+            q = {
+                "$or": [
+                    {"summary": {"$exists": False}},
+                    {"summary": None},
+                    {"summary": ""},
+                ]
+            }
+        if self.config.video_id:
+            q["video_id"] = self.config.video_id
+        # Read from configured read collection (default video_chunks) on read DB
+        src_db = self.config.read_db_name or self.config.db_name
+        coll_name = self.config.read_coll or COLL_CHUNKS
+        coll = self.get_collection(coll_name, io="read", db_name=src_db)
+        docs = list(coll.find(q, {"chunk_id": 1, "video_id": 1, "chunk_text": 1}))
+        print(
+            f"[enrich] Selected {len(docs)} chunk(s) to enrich (video_id={self.config.video_id or 'ALL'})"
+        )
+        return docs
 
-    total_cleaned = cleaned.count_documents(
-        {"cleaned_text": {"$exists": True, "$ne": None}}
-    )
-    total_existing = enriched.count_documents({})
-    print(
-        f"Enrich start: cleaned={total_cleaned} enriched={total_existing} allow_upsert_existing={allow_upsert_existing} max={max_items or 'all'} llm={use_llm}"
-    )
+    def handle_doc(self, doc):
+        # Write to configured write collection (default video_chunks) on write DB
+        dst_db = self.config.write_db_name or self.config.db_name
+        dst_coll_name = self.config.write_coll or COLL_CHUNKS
+        chunks = self.get_collection(dst_coll_name, io="write", db_name=dst_db)
 
-    cursor = cleaned.find({"cleaned_text": {"$exists": True, "$ne": None}})
-    if max_items and max_items > 0:
-        cursor = cursor.limit(max_items)
-
-    processed = 0
-    skipped = 0
-    failed = 0
-    for doc in cursor:
         video_id = doc.get("video_id")
-        text = (doc.get("cleaned_text") or "").strip()
-        if not video_id or not text:
-            continue
-        if not allow_upsert_existing and enriched.find_one({"video_id": video_id}):
-            if verbose:
-                print(f"Skip existing enriched {video_id}")
-            skipped += 1
-            continue
-        source = "heuristic"
-        # Normalize cleaned text newlines
+        chunk_id = doc.get("chunk_id")
+        text = (doc.get("chunk_text") or "").strip()
+        if not video_id or not chunk_id:
+            raise RuntimeError("Missing identifiers for chunk enrichment")
+        if not text:
+            raise RuntimeError(f"No chunk_text for chunk_id={chunk_id}")
+        print(
+            f"[enrich] Start video_id={video_id} chunk_id={chunk_id} text_len={len(text)}"
+        )
+        source = "llm"
         text = normalize_newlines(text)
-        # Fetch duration seconds if available
-        rv = raw_videos.find_one({"video_id": video_id}) or {}
-        duration_seconds = rv.get("duration_seconds") or rv.get("duration") or 0
+        # LLM-only enrichment (single call)
         try:
-            if use_llm:
-                try:
-                    from agents.enrich_agent import EnrichmentAgent
+            from agents.enrich_agent import EnrichmentAgent
 
-                    agent = EnrichmentAgent()
-                    # Pre-split text into ~target_chars units and annotate concurrently (sequential map for now)
-                    units = _split_units(text)
-                    # Coalesce small units first to reduce API calls
-                    packed_texts: List[str] = []
-                    buf: List[str] = []
-                    size = 0
-                    for u in units:
-                        if size + len(u) + 2 <= 1800:
-                            buf.append(u)
-                            size += len(u) + 2
-                        else:
-                            if buf:
-                                packed_texts.append("\n\n".join(buf))
-                            buf = [u]
-                            size = len(u)
-                    if buf:
-                        packed_texts.append("\n\n".join(buf))
-
-                    # Concurrent annotate preserving order via core helper
-                    concurrency = int(os.getenv("ENRICH_CONCURRENCY", "8") or "8")
-
-                    def _agent_factory():
-                        return EnrichmentAgent()
-
-                    def _on_error(e, chunk):
-                        return {
-                            "start": 0.0,
-                            "end": 0.0,
-                            "text": chunk,
-                            "tags": simple_tag_extract(chunk),
-                            "named_entities": [],
-                            "topics": [],
-                            "keyphrases": [],
-                            "code_blocks": simple_code_blocks(chunk),
-                            "difficulty": None,
-                            "entities": [],
-                        }
-
-                    raw_segments = run_llm_concurrent(
-                        packed_texts,
-                        _agent_factory,
-                        "annotate_single",
-                        max_workers=concurrency,
-                        retries=int(os.getenv("LLM_RETRIES", "1") or "1"),
-                        backoff_s=float(os.getenv("LLM_BACKOFF_S", "0.5") or "0.5"),
-                        qps=None,
-                        jitter=True,
-                        on_error=_on_error,
-                        preserve_order=True,
-                    )
-                # Normalize text fields on results
-                segments = normalize_llm_segments(raw_segments)
-                    source = "llm"
-                except Exception as _e:
-                    segments = enrich_text_to_segments(text)
-                    source = "heuristic_fallback"
-            else:
-                segments = enrich_text_to_segments(text)
-                source = "heuristic"
+            print(f"[enrich] Calling structured annotation for chunk_id={chunk_id}")
+            agent = EnrichmentAgent()
+            structured = agent.annotate_chunk_structured(text)
         except Exception as e:
-            failed += 1
-            print(f"Enrich error video_id={video_id}: {e}")
-            continue
-        # Post-process: index, char_count, hash, quality flags, time estimate
-        total_words = max(1, count_words(text))
-        cum_words = 0
-        enriched_segments: List[Dict[str, Any]] = []
-        for i, s in enumerate(segments):
-            seg_text = (s.get("text", "") or "").strip()
-            char_count = len(seg_text)
-            word_count = count_words(seg_text)
-            start_ratio = (cum_words / total_words) if total_words else 0.0
-            cum_words += word_count
-            end_ratio = (cum_words / total_words) if total_words else 0.0
-            est_start = (
-                float(duration_seconds) * float(start_ratio)
-                if duration_seconds
-                else 0.0
-            )
-            est_end = (
-                float(duration_seconds) * float(end_ratio) if duration_seconds else 0.0
-            )
-            segment_hash = sha256_text(seg_text)
-            quality_flags: List[str] = []
-            if not s.get("tags"):
-                quality_flags.append("missing_tags")
-            if char_count < 400:
-                quality_flags.append("too_short")
-            unique_tokens = len(set(re.findall(r"\b\w+\b", seg_text.lower())))
-            ratio = (unique_tokens / max(1, word_count)) if word_count else 0.0
-            if ratio < 0.25 and char_count >= 200:
-                quality_flags.append("low_entropy")
-            # Normalize and dedup fields
-            tags = dedup_lower(s.get("tags", []))
-            keyphrases = dedup_lower(s.get("keyphrases", []))
-            named_entities = []
-            for ne in s.get("named_entities", []) or []:
-                ne = (ne or "").strip()
-                if ne:
-                    named_entities.append(ne.title())
-            _seen = set()
-            named_entities = [
-                x for x in named_entities if not (x in _seen or _seen.add(x))
-            ]
-            topics = dedup_lower(s.get("topics", []))
-            entities = s.get("entities", []) or (named_entities + topics)
+            print(f"Enrich LLM error video_id={video_id}: {e}")
+            raise
 
-            if os.getenv("ENRICH_ENFORCE_COUNTS", "false").lower() in {
-                "1",
-                "true",
-                "yes",
-                "on",
-            }:
-                if len(tags) > 12:
-                    tags = tags[:12]
-                if len(keyphrases) > 8:
-                    keyphrases = keyphrases[:8]
-            enriched_segments.append(
-                {
-                    "segment_index": i,
-                    "start": est_start,
-                    "end": est_end,
-                    "text": seg_text,
-                    "char_count": char_count,
-                    "segment_hash": segment_hash,
-                    "tags": tags,
-                    "named_entities": named_entities,
-                    "topics": topics,
-                    "entities": entities,
-                    "keyphrases": keyphrases,
-                    "code_blocks": s.get("code_blocks", []),
-                    "difficulty": s.get("difficulty"),
-                    "quality_flags": quality_flags or None,
-                }
-            )
-        # Debug metrics
+        payload = normalize_enrich_payload_for_chunk(structured)
+
+        # Discretize confidences (high/medium/low) alongside raw values
+        def _disc(x: float) -> str:
+            try:
+                v = float(x)
+            except Exception:
+                return "low"
+            if v >= 0.8:
+                return "high"
+            if v >= 0.5:
+                return "medium"
+            return "low"
+
         try:
-            num = len(enriched_segments)
-            lens = [len(s.get("text", "")) for s in enriched_segments] or [0]
-            avg_len = sum(lens) / max(1, num)
-            with_tags = sum(1 for s in enriched_segments if s.get("tags"))
-            with_keys = sum(1 for s in enriched_segments if s.get("keyphrases"))
-            timed = sum(
-                1 for s in enriched_segments if (s.get("start", 0) or s.get("end", 0))
-            )
-            print(
-                f"Enrich debug video_id={video_id} source={source} segs={num} avg_chars={avg_len:.0f} "
-                f"tags_any={with_tags}/{num} keyphrases_any={with_keys}/{num} timed={timed}/{num}"
-            )
+            for e in payload.get("entities", []) or []:
+                e["relevance_level"] = _disc(e.get("relevance", 0.0))
+            for c in payload.get("concepts", []) or []:
+                c["confidence_level"] = _disc(c.get("confidence", 0.0))
+            for r in payload.get("relations", []) or []:
+                r["confidence_level"] = _disc(r.get("confidence", 0.0))
+            # quality_score (weighted mean)
+            ents = [
+                float(e.get("relevance", 0.0) or 0.0)
+                for e in payload.get("entities", [])
+            ]
+            cons = [
+                float(c.get("confidence", 0.0) or 0.0)
+                for c in payload.get("concepts", [])
+            ]
+            rels = [
+                float(r.get("confidence", 0.0) or 0.0)
+                for r in payload.get("relations", [])
+            ]
+
+            def _avg(xs):
+                return (sum(xs) / len(xs)) if xs else None
+
+            avg_e = _avg(ents)
+            avg_c = _avg(cons)
+            avg_r = _avg(rels)
+            w_e, w_r, w_c = 0.4, 0.4, 0.2
+            parts = []
+            if avg_e is not None:
+                parts.append((avg_e, w_e))
+            if avg_r is not None:
+                parts.append((avg_r, w_r))
+            if avg_c is not None:
+                parts.append((avg_c, w_c))
+            if parts:
+                numer = sum(v * w for v, w in parts)
+                denom = sum(w for _, w in parts) or 1.0
+                payload["quality_score"] = max(0.0, min(1.0, numer / denom))
+            else:
+                payload["quality_score"] = None
         except Exception:
             pass
-
-        # If LLM path yielded poor metadata (e.g., empty tags across many short segments),
-        # fall back to heuristic coalescing/annotation for better downstream behavior.
-        if source == "llm":
-            try:
-                if num >= 50 and with_tags == 0 and avg_len < 600:
-                    segments = enrich_text_to_segments(text)
-                    source = "llm_fallback_coalesce"
-                    num = len(segments)
-                    lens = [len(s.get("text", "")) for s in segments] or [0]
-                    avg_len = sum(lens) / max(1, num)
-                    with_tags = sum(1 for s in segments if s.get("tags"))
-                    with_keys = sum(1 for s in segments if s.get("keyphrases"))
-                    print(
-                        f"Enrich adjust video_id={video_id} source={source} segs={num} avg_chars={avg_len:.0f} "
-                        f"tags_any={with_tags}/{num} keyphrases_any={with_keys}/{num}"
-                    )
-            except Exception:
-                pass
-        payload: Dict[str, Any] = {
-            "video_id": video_id,
-            "segments": enriched_segments,
-        }
-        enriched.update_one({"video_id": video_id}, {"$set": payload}, upsert=True)
-        processed += 1
-        print(
-            f"Enriched {video_id} → {COLL_ENRICHED} (segments={len(enriched_segments)} llm={use_llm} source={source})"
+        # provenance and model
+        payload.setdefault("provenance", {})
+        prov = payload["provenance"] if isinstance(payload["provenance"], dict) else {}
+        prov.update(
+            {
+                "source_pipeline_stage": "enrich_agent_v2",
+                "version": "2.0",
+                "model_used": os.getenv("OPENAI_DEFAULT_MODEL") or "gpt-4o-mini",
+            }
         )
+        try:
+            from datetime import datetime, timezone
 
-    print(
-        f"Enrich done: processed={processed} skipped_existing={skipped} failed={failed} total_candidates={(max_items or total_cleaned)}"
-    )
+            if not prov.get("created_at"):
+                prov["created_at"] = datetime.now(timezone.utc).isoformat()
+        except Exception:
+            pass
+        payload["provenance"] = prov
+        print(
+            f"[enrich] Upserting structured fields for chunk_id={chunk_id} into {dst_coll_name}"
+        )
+        # Always produce embedding_text from enriched content
+        try:
+            payload["embedding_text"] = build_embedding_text(
+                {
+                    "summary": payload.get("summary", ""),
+                    "entities": payload.get("entities", []),
+                    "concepts": payload.get("concepts", []),
+                    "chunk_text": text,
+                }
+            )
+        except Exception:
+            payload["embedding_text"] = text
+
+        chunks.update_one({"chunk_id": chunk_id}, {"$set": payload}, upsert=True)
+        self.stats["updated"] += 1
+        print(f"Enriched chunk {chunk_id} for video_id={video_id}")
+
+    def run(self, config: Optional[BaseStageConfig] = None) -> int:
+        # Override to enable LLM concurrency across chunks
+        if config is None:
+            self.parse_args()
+            self.config = self.ConfigCls.from_args_env(
+                self.args, dict(os.environ), DB_NAME
+            )
+        else:
+            self.config = config
+        self.setup()
+
+        try:
+            docs = list(self.iter_docs())
+            if self.config.max is not None:
+                docs = docs[: int(self.config.max)]
+            total = len(docs)
+            if total == 0:
+                print("[enrich] Nothing to process")
+                self.finalize()
+                return 0
+
+            texts = [
+                normalize_newlines((d.get("chunk_text") or "").strip()) for d in docs
+            ]
+
+            print(
+                f"[enrich] Launching concurrent LLM calls for {total} chunk(s) (workers={int(self.config.concurrency or 8)})"
+            )
+
+            from agents.enrich_agent import EnrichmentAgent
+
+            results = run_llm_concurrent(
+                texts,
+                agent_factory=lambda: EnrichmentAgent(),
+                method_name="annotate_chunk_structured",
+                max_workers=int(self.config.concurrency or 8),
+                retries=int(self.config.llm_retries or 4),
+                backoff_s=float(self.config.llm_backoff_s or 5.0),
+                qps=self.config.llm_qps,
+                jitter=False,
+                on_error=lambda e, t: {},
+                preserve_order=True,
+            )
+
+            chunks_coll_name = self.config.write_coll or COLL_CHUNKS
+            dst_db = self.config.write_db_name or self.config.db_name
+            chunks_coll = self.get_collection(
+                chunks_coll_name, io="write", db_name=dst_db
+            )
+            for idx, (doc, structured) in enumerate(zip(docs, results), start=1):
+                video_id = doc.get("video_id")
+                chunk_id = doc.get("chunk_id")
+                if not (video_id and chunk_id):
+                    print(f"[enrich] Skip invalid doc at index {idx}")
+                    self.stats["failed"] += 1
+                    continue
+                payload = normalize_enrich_payload_for_chunk(structured or {})
+                payload.setdefault("provenance", {})
+                prov = (
+                    payload["provenance"]
+                    if isinstance(payload["provenance"], dict)
+                    else {}
+                )
+                prov.update(
+                    {
+                        "source_pipeline_stage": "enrich_agent_v2",
+                        "version": "2.0",
+                        "model_used": os.getenv("OPENAI_DEFAULT_MODEL")
+                        or "gpt-4o-mini",
+                    }
+                )
+                try:
+                    from datetime import datetime, timezone
+
+                    if not prov.get("created_at"):
+                        prov["created_at"] = datetime.now(timezone.utc).isoformat()
+                except Exception:
+                    pass
+                payload["provenance"] = prov
+
+                print(
+                    f"[enrich] Upserting {idx}/{total} chunk_id={chunk_id} into {chunks_coll_name}"
+                )
+                chunks_coll.update_one(
+                    {"chunk_id": chunk_id}, {"$set": payload}, upsert=True
+                )
+                self.stats["updated"] += 1
+
+            self.finalize()
+            return 0
+        except Exception as e:
+            print(f"[enrich] Fatal error: {e}")
+            return 1
 
 
 if __name__ == "__main__":
-    main()
+    stage = EnrichStage()
+    raise SystemExit(stage.run())

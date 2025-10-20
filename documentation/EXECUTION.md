@@ -28,12 +28,11 @@ This is the single source of truth for scope, order of work, and status. Keep it
 4. Enrich (tags/entities/code)
    - Heuristics for `tags`, `entities`, `keyphrases`, `code_blocks`
    - Persist segments to `enriched_transcripts`
-5. Chunk + Embeddings + Vector index
-   - Chunk enriched text (~500 tokens, small overlap)
-   - Normalize chunk text prior to embedding; store `chunk_hash` (sha256)
-   - Embed with Voyage; upsert chunks + `metadata` to `video_chunks`
+5. Per-chunk pipeline (chunk → enrich → embed)
+   - Chunk cleaned text (~500 tokens, small overlap); write base chunk docs to `video_chunks`
+   - Enrich each chunk via LLM to add `summary`, entities/concepts/relations, context, etc.
+   - Embed chosen `embedding_text` (default `chunk_text`) with Voyage and persist vector
    - Verify vector index returns results in Atlas
-   - Optional: `--llm` chunking via ChunkEmbedAgent (heuristic fallback)
 6. RAG retrieval + generation + logging
    - Embed query; run `$vectorSearch` with filters
    - Re-rank by vector score, `trust_score`, recency (`age_days`)
@@ -99,30 +98,67 @@ Notes: For small datasets, answers may look similar across queries; increase Top
 
 ### Commands (quick reference)
 
+- Unified Stage CLI flags (all stages):
+
+  - `--db_name` override database name (defaults to `config.paths.DB_NAME` or `$DB_NAME`)
+  - `--llm` enable LLM-assisted path when stage supports it
+  - `--max` limit processing count when stage supports it
+  - `--verbose` extra logs
+  - `--dry_run` compute but do not write to DB
+  - `--upsert_existing` overwrite/replace existing records when applicable
+  - `--video_id` process a single video when supported
+  - `--concurrency` control worker/concurrency when supported
+
+- Programmatic invocation (all stages follow this pattern):
+
+  - Example (Clean):
+    ```python
+    from app.stages.clean import CleanStage, CleanConfig
+    CleanStage().run(CleanConfig(db_name="mongo_hack", use_llm=True, max=10))
+    ```
+  - Example (Enrich):
+    ```python
+    from app.stages.enrich import EnrichStage, EnrichConfig
+    EnrichStage().run(EnrichConfig(db_name="mongo_hack", use_llm=False, max=20))
+    ```
+  - Example (Chunk):
+    ```python
+    from app.stages.chunk import ChunkStage, ChunkConfig
+    ChunkStage().run(ChunkConfig(db_name="mongo_hack", chunk_strategy="fixed"))
+    ```
+
 - Install deps: `pip install -r Mongo_Hack/requirements.txt`
 - Ingest playlist: `python Mongo_Hack/app/stages/ingest.py --playlist_id <ID> --max 10`
 - Ingest channel: `python Mongo_Hack/app/stages/ingest.py --channel_id <ID> --max 10`
 - Ingest IDs: `python Mongo_Hack/app/stages/ingest.py --video_ids <id1> <id2>`
-- Clean (MVP): `python Mongo_Hack/app/stages/clean.py`
-- Clean (LLM): `python Mongo_Hack/app/stages/clean.py --llm` (or set `CLEAN_WITH_LLM=1`)
-- Enrich: `python Mongo_Hack/app/stages/enrich.py`
-  - Optional LLM: `python Mongo_Hack/app/stages/enrich.py --llm` (or set `ENRICH_WITH_LLM=1`)
-  - Orchestrator: `python Mongo_Hack/main.py enrich --llm`
-- Chunk+Embed: `python Mongo_Hack/app/stages/chunk_embed.py`
-  - Optional LLM: `python Mongo_Hack/app/stages/chunk_embed.py --llm` (or set `CHUNK_WITH_LLM=1`)
-  - Orchestrator: `python Mongo_Hack/main.py chunk --llm`
+- Clean (MVP): `python Mongo_Hack/app/stages/clean.py [--db_name mongo_hack]`
+- Clean (LLM): `python Mongo_Hack/app/stages/clean.py --llm [--db_name mongo_hack]` (or set `CLEAN_WITH_LLM=1`)
+- Enrich: `python Mongo_Hack/app/stages/enrich.py [--db_name mongo_hack]`
+  - Optional LLM: `python Mongo_Hack/app/stages/enrich.py --llm [--db_name mongo_hack]` (or set `ENRICH_WITH_LLM=1`)
+  - Orchestrator: `python Mongo_Hack/main.py enrich --llm [--db_name mongo_hack]`
+- Chunk: `python Mongo_Hack/app/stages/chunk.py [--db_name mongo_hack]`
+  - Strategies:
+    - Fixed: `--chunk_strategy fixed --token_size 500 --overlap_pct 0.15`
+    - Recursive: `--chunk_strategy recursive --token_size 400 --overlap_pct 0.10 --split_chars ".,;"`
+    - Semantic: `--chunk_strategy semantic --token_size 500 --overlap_pct 0.15 --split_chars "." --semantic_model text-embedding-3-small`
+- Enrich (per-chunk LLM): `python Mongo_Hack/app/stages/enrich.py [--db_name mongo_hack]`
+- Embed: `python Mongo_Hack/app/stages/embed.py [--db_name mongo_hack] [--embed_source chunk|summary]`
   - Rate limit (recommended for demos): `export VOYAGE_RPM=5` (defaults to 20)
-  - Concurrency: chunking/LLM paths leverage shared helpers where applicable; embed batching uses Voyage client
-- Redundancy: `python Mongo_Hack/app/stages/redundancy.py`
-  - Optional LLM: `python Mongo_Hack/app/stages/redundancy.py --llm` (or set `DEDUP_WITH_LLM=1`)
-  - Orchestrator: `python Mongo_Hack/main.py redundancy --llm`
-- Trust: `python Mongo_Hack/app/stages/trust.py`
-  - Optional LLM: `python Mongo_Hack/app/stages/trust.py --llm` (or set `TRUST_WITH_LLM=1`)
-  - Orchestrator: `python Mongo_Hack/main.py trust --llm`
+  - Concurrency: embed batching uses Voyage client with backoff
+- Redundancy: `python Mongo_Hack/app/stages/redundancy.py [--db_name mongo_hack]`
+  - Optional LLM: `python Mongo_Hack/app/stages/redundancy.py --llm [--db_name mongo_hack]` (or set `REDUNDANCY_WITH_LLM=1`)
+  - Orchestrator: `python Mongo_Hack/main.py redundancy --llm [--db_name mongo_hack]`
+- Trust: `python Mongo_Hack/app/stages/trust.py [--db_name mongo_hack]`
+  - Optional LLM: `python Mongo_Hack/app/stages/trust.py --llm [--db_name mongo_hack]` (or set `TRUST_WITH_LLM=1`)
+  - Orchestrator: `python Mongo_Hack/main.py trust --llm [--db_name mongo_hack]`
+- Compress (optional): `python Mongo_Hack/app/stages/compress.py [--db_name mongo_hack]`
+  - Example: `python Mongo_Hack/app/stages/compress.py --video_id ZA-tUyM_y7s --target_tokens 1200 --ratio 0.4`
+  - Source: `--source cleaned` (default) or `--source enriched`
+  - Fields written: `compressed_text`, `compression_meta`
 - Seed demo (playlist): `python Mongo_Hack/app/stages/seed_demo.py` (edit playlist ID first)
 - Run UI: `streamlit run Mongo_Hack/streamlit_app.py`
 - Orchestrator: `python Mongo_Hack/main.py <stage>` (see README)
-  - Full pipeline example: `python Mongo_Hack/main.py pipeline --playlist_id <ID> --max 5 --llm`
+  - Pipeline runner (typed configs): `python Mongo_Hack/app/pipelines/examples/yt_clean_enrich.py`
   - Atlas index helper: `Mongo_Hack/scripts/atlas_index_create.sh <PROJECT_ID> <CLUSTER_NAME>`
 
 ### Data Contracts (key fields)

@@ -1,11 +1,11 @@
 .venv/
 .venv/*
-*/__pycache__
-__pycache__/
+*/__pycache__*
+*__pycache__*
 *.pyc
 *.pyc
 */bin
 .venv/
-__pycache__/
+*pycache*
 *.py[cod]
 .env

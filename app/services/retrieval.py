@@ -160,25 +160,31 @@ def keyword_search(
 
 def structured_search(
     col: Collection,
+    fields: Optional[List[str]] = None,
     filters: Optional[Dict[str, Any]] = None,
     sort_by: Optional[Dict[str, int]] = None,
-    top_k: int = 8,
+    top_k: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     query = filters or {}
-    projection = {
-        "video_id": 1,
-        "chunk_id": 1,
-        "text": 1,
-        "metadata": 1,
-        "trust_score": 1,
-    }
+    projection = (
+        {f: 1 for f in fields}
+        if isinstance(fields, list)
+        else (
+            {f.strip(): 1 for f in fields.split(",")} if isinstance(fields, str) else {}
+        )
+    )
     try:
-        cur = col.find(query, projection)
+        if query:
+            cur = col.find(query, projection)
+        else:
+            cur = col.find({}, projection)
         if sort_by:
             cur = cur.sort(list(sort_by.items()))
-        cur = cur.limit(int(top_k))
+        if top_k:
+            cur = cur.limit(int(top_k))
         return list(cur)
-    except Exception:
+    except Exception as e:
+        print(f"Error: {e}")
         return []
 
 
@@ -188,7 +194,7 @@ def vector_search(
     pipeline = [
         {
             "$vectorSearch": {
-                "index": "embedding_index",
+                "index": "vector_index_text",
                 "path": "embedding",
                 "queryVector": query_vector,
                 "numCandidates": 200,

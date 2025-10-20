@@ -1,11 +1,14 @@
 import os
-from typing import Any, Dict, List
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
 try:
     from app.services.utils import get_mongo_client
+    from core.base_stage import BaseStage
+    from core.stage_config import BaseStageConfig
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
@@ -13,6 +16,8 @@ except ModuleNotFoundError:
         _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", ".."))
     )
     from app.services.utils import get_mongo_client
+    from core.base_stage import BaseStage
+    from core.stage_config import BaseStageConfig
 from config.paths import DB_NAME, COLL_CHUNKS
 import os
 
@@ -28,55 +33,81 @@ def cosine(a: List[float], b: List[float]) -> float:
     return num / (da * db)
 
 
-def main(threshold: float = 0.92, k: int = 8) -> None:
-    load_dotenv()
-    use_llm = os.getenv("DEDUP_WITH_LLM") == "1" or "--llm" in os.sys.argv
-    # Env-configurable parameters
-    try:
-        threshold = float(os.getenv("DEDUP_THRESHOLD", threshold))
-    except Exception:
-        pass
-    try:
-        llm_margin = float(os.getenv("DEDUP_LLM_MARGIN", 0.03))
-    except Exception:
-        llm_margin = 0.03
-    # Tunables for adjacency handling
-    nonadj_fallback = str(
-        os.getenv("DEDUP_NONADJ_FALLBACK", "true")
-    ).strip().lower() in {"1", "true", "yes", "on"}
-    try:
-        adj_override = float(os.getenv("DEDUP_ADJ_OVERRIDE", "0.975"))
-    except Exception:
-        adj_override = 0.975
-    client: MongoClient = get_mongo_client()
-    db = client[DB_NAME]
-    chunks = list(
-        db[COLL_CHUNKS].find({}, {"video_id": 1, "chunk_id": 1, "embedding": 1})
+@dataclass
+class RedundancyConfig(BaseStageConfig):
+    threshold: float = 0.92
+    llm_margin: float = 0.03
+    nonadj_fallback: bool = True
+    adj_override: float = 0.975
+    skip_adjacent: bool = True
+    use_llm: bool = False
+
+    @classmethod
+    def from_args_env(cls, args, env, default_db):
+        base = BaseStageConfig.from_args_env(args, env, default_db)
+        use_llm = bool(
+            getattr(args, "llm", False)
+            or (env.get("REDUNDANCY_WITH_LLM") == "1")
+            or (env.get("DEDUP_WITH_LLM") == "1")
+        )
+
+        def _getf(keys: List[str], default: float) -> float:
+            for k in keys:
+                v = env.get(k)
+                if v is not None:
+                    try:
+                        return float(v)
+                    except Exception:
+                        pass
+            return default
+
+        def _getb(keys: List[str], default: bool) -> bool:
+            for k in keys:
+                v = env.get(k)
+                if v is not None:
+                    if str(v).strip().lower() in {"1", "true", "yes", "on"}:
+                        return True
+                    if str(v).strip().lower() in {"0", "false", "no", "off"}:
+                        return False
+            return default
+
+        threshold = _getf(["REDUNDANCY_THRESHOLD", "DEDUP_THRESHOLD"], 0.92)
+        llm_margin = _getf(["REDUNDANCY_LLM_MARGIN", "DEDUP_LLM_MARGIN"], 0.03)
+        nonadj_fallback = _getb(
+            ["REDUNDANCY_NONADJ_FALLBACK", "DEDUP_NONADJ_FALLBACK"], True
+        )
+        adj_override = _getf(["REDUNDANCY_ADJ_OVERRIDE", "DEDUP_ADJ_OVERRIDE"], 0.975)
+        skip_adjacent = _getb(["REDUNDANCY_SKIP_ADJACENT", "DEDUP_SKIP_ADJACENT"], True)
+        return cls(
+            **vars(base),
+            threshold=threshold,
+            llm_margin=llm_margin,
+            nonadj_fallback=nonadj_fallback,
+            adj_override=adj_override,
+            skip_adjacent=skip_adjacent,
+            use_llm=use_llm,
+        )
+
+
+class RedundancyStage(BaseStage):
+    name = "redundancy"
+    description = (
+        "Mark redundant chunks using cosine, adjacency guard, and optional LLM."
     )
-    # If skipping updates for existing flags is desired, env can disable
-    skip_existing = str(os.getenv("DEDUP_UPSERT_EXISTING", "false")).lower() not in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-    by_video: Dict[str, List[Dict[str, Any]]] = {}
-    for c in chunks:
-        by_video.setdefault(c.get("video_id"), []).append(c)
+    ConfigCls = RedundancyConfig
 
-    skip_adjacent = str(os.getenv("DEDUP_SKIP_ADJACENT", "true")).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    def iter_docs(self):
+        src_db = self.config.read_db_name or self.config.db_name
+        coll = self.get_collection(
+            self.config.read_coll or COLL_CHUNKS, io="read", db_name=src_db
+        )
+        chunks = list(coll.find({}, {"video_id": 1, "chunk_id": 1, "embedding": 1}))
+        by_video: Dict[str, List[Dict[str, Any]]] = {}
+        for c in chunks:
+            by_video.setdefault(c.get("video_id"), []).append(c)
+        return [{"video_id": vid, "items": items} for vid, items in by_video.items()]
 
-    for video_id, items in by_video.items():
-        # ensure deterministic order for canonicalization
-        try:
-            items.sort(key=lambda d: str(d.get("chunk_id", "")))
-        except Exception:
-            pass
+    def handle_doc(self, group):
         for i, ci in enumerate(items):
             vi = ci.get("embedding", [])
             best_score = -1.0
@@ -90,7 +121,7 @@ def main(threshold: float = 0.92, k: int = 8) -> None:
                     best_score = s
                     best = cj
             # If best is adjacent and we skip adjacency, optionally choose best non-adjacent
-            if best is not None and skip_adjacent:
+            if best is not None and self.config.skip_adjacent:
                 try:
 
                     def _suffix_num(cid: str) -> int:
@@ -109,7 +140,7 @@ def main(threshold: float = 0.92, k: int = 8) -> None:
                     )
                 except Exception:
                     best_is_adj = False
-                if best_is_adj and nonadj_fallback:
+                if best_is_adj and self.config.nonadj_fallback:
                     alt_best = None
                     alt_score = -1.0
                     for j, cj in enumerate(items):
@@ -133,22 +164,24 @@ def main(threshold: float = 0.92, k: int = 8) -> None:
                         best = alt_best
                         best_score = alt_score
             method = "cosine"
-            reason = "high_sim" if best_score >= threshold else None
-            is_dup = best_score >= threshold
+            reason = "high_sim" if best_score >= self.config.threshold else None
+            is_dup = best_score >= self.config.threshold
             # Trigger LLM only for borderline cases around threshold
-            borderline = abs(best_score - threshold) <= llm_margin
-            if use_llm and best is not None and borderline:
+            borderline = (
+                abs(best_score - self.config.threshold) <= self.config.llm_margin
+            )
+            if self.config.use_llm and best is not None and borderline:
                 try:
                     from agents.dedup_agent import DeduplicateAgent
 
-                    from_text = db[COLL_CHUNKS].find_one(
+                    from_text = coll.find_one(
                         {
                             "video_id": ci.get("video_id"),
                             "chunk_id": ci.get("chunk_id"),
                         },
                         {"text": 1},
                     )
-                    to_text = db[COLL_CHUNKS].find_one(
+                    to_text = coll.find_one(
                         {
                             "video_id": best.get("video_id"),
                             "chunk_id": best.get("chunk_id"),
@@ -161,14 +194,14 @@ def main(threshold: float = 0.92, k: int = 8) -> None:
                         (to_text or {}).get("text", ""),
                     )
                     is_dup = bool(verdict.get("redundant", False)) or (
-                        best_score >= threshold
+                        best_score >= self.config.threshold
                     )
                     method = "llm"
                     reason = "borderline"
                 except Exception:
-                    is_dup = best_score >= threshold
+                    is_dup = best_score >= self.config.threshold
             # Adjacency guard: skip duplicates when best is immediate neighbor
-            if is_dup and best is not None and skip_adjacent:
+            if is_dup and best is not None and self.config.skip_adjacent:
                 try:
 
                     def _suffix_num(cid: str) -> int:
@@ -185,7 +218,7 @@ def main(threshold: float = 0.92, k: int = 8) -> None:
                     if (
                         ci.get("video_id") == best.get("video_id")
                         and abs(this_n - best_n) == 1
-                        and best_score < adj_override
+                        and best_score < self.config.adj_override
                     ):
                         is_dup = False
                         reason = None
@@ -206,9 +239,9 @@ def main(threshold: float = 0.92, k: int = 8) -> None:
                 except Exception:
                     primary_chunk_id = best.get("chunk_id") if best else None
 
-            if skip_existing:
+            if not self.config.upsert_existing:
                 # Only update when fields are missing
-                existing = db[COLL_CHUNKS].find_one(
+                existing = coll.find_one(
                     {"video_id": ci.get("video_id"), "chunk_id": ci.get("chunk_id")},
                     {"is_redundant": 1, "redundancy_score": 1},
                 )
@@ -218,7 +251,7 @@ def main(threshold: float = 0.92, k: int = 8) -> None:
                     and "redundancy_score" in existing
                 ):
                     continue
-            db[COLL_CHUNKS].update_one(
+            coll.update_one(
                 {"video_id": ci.get("video_id"), "chunk_id": ci.get("chunk_id")},
                 {
                     "$set": {
@@ -240,8 +273,9 @@ def main(threshold: float = 0.92, k: int = 8) -> None:
                 },
                 upsert=False,
             )
-        print(f"Redundancy pass done for video {video_id} (llm={use_llm})")
+        print(f"Redundancy pass done for video {video_id} (llm={self.config.use_llm})")
 
 
 if __name__ == "__main__":
-    main()
+    stage = RedundancyStage()
+    raise SystemExit(stage.run())
