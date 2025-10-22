@@ -19,7 +19,7 @@ def setup_vector_search_index(
                     text_embedding_field_name: {
                         "dimensions": 1024,
                         "similarity": "cosine",
-                        "type": "knnVector",
+                        "type": "vector",
                     }
                 },
             }
@@ -28,8 +28,8 @@ def setup_vector_search_index(
     )
 
     index_exists = False
-    print(f"Listing indexes for collection: {collection.name}")
-    for index in collection.list_indexes():
+    print(f"Listing search indexes for collection: {collection.name}")
+    for index in collection.list_search_indexes():
         if index["name"] == vector_search_index_name:
             index_exists = True
             break

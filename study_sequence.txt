@@ -1,0 +1,86 @@
+I am building a RAG system with long transcripts and chunking them into 500 tokens size, event with 75 tokens overlap seems to risky for me in terms of each of these chunks loose contexts. What would be the strategies do deal with such type of issue - suggest me a sequence of videos to see making reference to which part of the video should I start. Be mindful of the sequence so I can maximazi my learning process.
+
+Answer:
+
+Here's a learning path you can follow that (a) addresses your concern about chunks losing context, (b) uses content from the videos you provided, and (c) builds up from fundamentals to practical, long-doc strategies. I’ve linked each step to a concrete video chunk so you can start exactly where it’s most relevant.
+
+Learning sequence (with where to start in each video)
+
+1) Get the big picture: what RAG and Graph RAG are, and the basic workflow
+- Start with: Video: 14poVuga4Qw, chunk: 69df2757-50e2-4a0d-bec9-4f63404c7480
+- Focus: Graph Rag overview and the typical Rag workflow (load text with a loader, preprocess, embeddings, store in a vector DB)
+- Why first: establishes the problem space and the standard workflow before you layer in complex strategies
+- Citation: (14poVuga4Qw:69df2757-50e2-4a0d-bec9-4f63404c7480)
+
+2) Understand Graph Rag vs Baseline Rag and why Graph Rag matters
+- Start with: Video: Aw7iQjKAX2k, chunk: 38baef54-e13f-4731-a8b5-0e50554cdd14
+- Focus: Graph Rag vs traditional Rag, and the benefits for development, production, and governance
+- Why next: helps you see what you gain by moving away from pure vector similarity
+- Citation: (Aw7iQjKAX2k:38baef54-e13f-4731-a8b5-0e50554cdd14)
+
+3) Deeper conceptual grounding: Graph Rag architecture and knowledge graphs
+- Start with: Video: 14poVuga4Qw, chunk: 196fcfc6-0253-4b02-9753-f4bc2a1072c3
+- Focus: four topics (Rag vs Knowledge Graph prerequisites; issues with Baseline Rag; how Graph Rag works; advantages of Graph Rag over naive graphs)
+- Why next: ties together the neural + graph aspects you’ll leverage for long documents
+- Citation: (14poVuga4Qw:196fcfc6-0253-4b02-9753-f4bc2a1072c3)
+
+4) Practical implementation angle: Graph Rag with LangChain vs standard Rag
+- Start with: Video: ijjtrII2C8o, chunk: 90564a19-45bc-40e7-973b-274a04c49538
+- Focus: Graph Rag implemented with LangChain vs a standard Rag approach; setup tips like LLM and embedding model with a free API key
+- Why next: you’ll know where to place your own embeddings and how Graph Rag tooling is wired
+- Citation: (ijjtrII2C8o:90564a19-45bc-40e7-973b-274a04c49538)
+
+5) Handling long documents and context window limits (the motivation for trunking)
+- Start with: Video: 14poVuga4Qw, chunk: f33d1713-e63b-4a29-9368-5c0b5ae2b9ac
+- Focus: Graph Rag repository/resources and practical pointers; but more importantly, keep in mind that large contexts require careful chunking and contextualization
+- Then anchor to the limit issue explicitly:
+- Start with: Video: W_CYk2ogcDI, chunk: f4201379-2d53-4b5c-b04c-39b0442137a8
+- Focus: long documents must be truncated to fit embedding context length; context windows (32k reality in some systems) drive trunking decisions
+- Why next: this directly informs how you set 500-token chunks with overlaps
+- Citations: (14poVuga4Qw:f33d1713-e63b-4a29-9368-5c0b5ae2b9ac), (W_CYk2ogcDI:f4201379-2d53-4b5c-b04c-39b0442137a8)
+
+6) Concrete, alternative strategies for long-text: preloading vs retrieval
+- Start with: Video: cnxp-DbZwyA, chunk: ddba7d6d-62c7-4c43-8de3-e28366ce3077
+- Focus: KV cache approach in RAG vs CAG (CAG caches key-value pairs; preloads information into the model rather than retrieving per query)
+- Why next: gives you a fast, memory-centric option when you have very long transcripts
+- Citation: (cnxp-DbZwyA:ddba7d6d-62c7-4c43-8de3-e28366ce3077)
+
+7) A complementary caching approach: preloading the knowledge base into the model (CAG)
+- Start with: Video: cnxp-DbZwyA, chunk: 6145d92b-a423-4f08-a25d-db108949f736
+- Focus: CAG concept—preload knowledge into the model context window for faster responses; not relying on re-querying a vector DB
+- Why next: pairs well with your long transcripts if you can afford the single-pass approach
+- Citation: (cnxp-DbZwyA:6145d92b-a423-4f08-a25d-db108949f736)
+
+8) Practical, code-oriented example: Graph Rag with CSV/JSON inputs
+- Start with: Video: 3B6VjDtbsbw, chunk: 82207946-3351-4a52-96d3-56eea999b0ed
+- Focus: implementing Graph Rag using CSV/JSON inputs; external documents can be text files or PDFs, and Graph Rag uses knowledge graphs for retrieval
+- Why next: helps you imagine how to apply your transcripts in real data formats beyond plain text
+- Citation: (3B6VjDtbsbw:82207946-3351-4a52-96d3-56eea999b0ed)
+
+9) Knowledge graph construction and graph-based retrieval (global/local search)
+- Start with: Video: C14DFAlaFIw, chunk: 555f036a-8cfc-47f4-9573-f9b2e793dc3e
+- Focus: building a knowledge graph from text via LM-driven entity/relationship extraction; retrieval via subgraph extraction; options for global vs local search
+- Why next: if you want to maximize recall and contextuality across many chunks, this is the end-state pattern
+- Citation: (C14DFAlaFIw:555f036a-8cfc-47f4-9573-f9b2e793dc3e)
+
+Optional additions if you want to compare and merge results across approaches
+- Hybrid vs single approach: See the idea of comparing context coverage between Graph Rag and standard Rag, and using a prompt to merge two contexts into a final answer
+- Start with: Video: ijjtrII2C8o, chunk: cb83538c-ca7a-4971-ab89-e942d65f8210
+- Focus: a prompt-based method to identify what information is missed by context one vs context two, and to fuse results from standard Rag and Graph Rag
+- Citation: (ijjtrII2C8o:cb83538c-ca7a-4971-ab89-e942d65f8210)
+
+How these steps map to your 500-token chunking with 75-token overlaps
+- Core idea: chunking strategies matter as much as overlap. Use trunking and contextual summaries to keep the essential context across chunks, and consider both retrieval-based (RAG) and memory/knowledge-graph approaches to preserve context across boundaries.
+- Practical guidance drawn from the material:
+  - Use trunking, recursive search, and contextual graph ideas to maintain context across chunks (see multi-layer RAG concepts)
+    - Citation: (W_CYk2ogcDI:26843b59-325e-489e-a412-28d35e2d0570)
+  - If your transcripts are extremely long, consider preloading key knowledge (CAG) or caching KV (KV-cache) to avoid re-processing every chunk
+    - Citations: (cnxp-DbZwyA:6145d92b-a423-4f08-a25d-db108949f736), (cnxp-DbZwyA:ddba7d6d-62c7-4c43-8de3-e28366ce3077)
+  - When feasible, leverage Graph Rag to connect related chunks via a Knowledge Graph for better recall and explainability
+    - Citations: (14poVuga4Qw:69df2757-50e2-4a0d-bec9-4f63404c7480), (XNneh6-eyPg:9bcf72ae-5c84-487d-9c74-4ab61ece2f80)
+  - If you’re evaluating multiple Rag variants, test context coverage and use prompts to merge results from different variants (Hybrid Rag vs Graph Rag vs Baseline Rag)
+    - Citation: (ijjtrII2C8o:cb83538c-ca7a-4971-ab89-e942d65f8210)
+  - Be aware of the context window limit and the rationale for truncation when dealing with very long documents; plan trunking around a practical window size
+    - Citation: (W_CYk2ogcDI:f4201379-2d53-4b5c-b04c-39b0442137a8)
+
+If you want, I can tailor this sequence further to your exact transcript topics (e.g., if your content is more technical or more business/enterprise oriented) and map each video to a quick “start here” time cue based on the chunk summaries.

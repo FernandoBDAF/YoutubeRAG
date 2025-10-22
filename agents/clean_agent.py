@@ -33,7 +33,7 @@ class TranscriptCleanAgent(BaseAgent):
             "Always use brackets and colons.\n"
             "4- Preserve all technical, code, and math expressions exactly as given — do not alter symbols, equations, or code blocks.\n"
             "5- Rebuild paragraphs for natural readability: group sentences by topic or idea. "
-            "Aim for 6–10 sentences per paragraph when possible; insert double newlines between paragraphs.\n"
+            "Aim for 6-10 sentences per paragraph when possible; insert double newlines between paragraphs.\n"
             "6- Keep the same language as the input. Do not translate.\n"
             "7- Output ONLY the final cleaned text — plain UTF-8 with no markdown, no JSON, and no comments.\n\n"
             "EXAMPLE OUTPUT (abbreviated):\n"

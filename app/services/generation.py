@@ -22,7 +22,7 @@ def answer_with_openai(contexts: List[Dict[str, Any]], question: str) -> str:
                 + question
                 + "\n\nContext:\n"
                 + "\n\n".join(
-                    f"({c.get('video_id')}:{c.get('chunk_id')})\n{c.get('text','')[:1200]}"
+                    f"({c.get('video_id')}:{c.get('chunk_id')})\n{c.get('embedding_text','')[:1200]}"
                     for c in contexts
                 ),
             },

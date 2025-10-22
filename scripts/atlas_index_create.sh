@@ -31,7 +31,7 @@ atlas clusters search indexes create \
       "dynamic": true,
       "fields": {
         "embedding": {
-          "type": "knnVector",
+          "type": "vector",
           "dimensions": 1024,
           "similarity": "cosine"
         }

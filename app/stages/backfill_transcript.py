@@ -21,12 +21,16 @@ except ModuleNotFoundError:
 @dataclass
 class BackfillTranscriptConfig(BaseStageConfig):
     languages: List[str] = field(default_factory=lambda: ["en", "en-US", "en-GB"])
+    channel_id: Optional[str] = None
+    channel_title: Optional[str] = None
 
     @classmethod
     def from_args_env(cls, args, env, default_db):
         base = BaseStageConfig.from_args_env(args, env, default_db)
         langs = getattr(args, "languages", None) or ["en", "en-US", "en-GB"]
-        return cls(**vars(base), languages=langs)
+        channel_id = getattr(args, "channel_id", None)
+        channel_title = getattr(args, "channel_title", None)
+        return cls(**vars(base), languages=langs, channel_id=channel_id, channel_title=channel_title)
 
 
 class BackfillTranscriptStage(BaseStage):
@@ -37,6 +41,8 @@ class BackfillTranscriptStage(BaseStage):
     def build_parser(self, p):
         super().build_parser(p)
         p.add_argument("--languages", nargs="*", default=["en", "en-US", "en-GB"])
+        p.add_argument("--channel_id", type=str)
+        p.add_argument("--channel_title", type=str)
 
     def iter_docs(self):
         # Read from configured read DB/collection (default raw_videos)
@@ -46,6 +52,10 @@ class BackfillTranscriptStage(BaseStage):
         )
         if self.config.video_id:
             q = {"video_id": self.config.video_id}
+        elif self.config.channel_id:
+            q = {"channel_id": self.config.channel_id}
+        elif self.config.channel_title:
+            q = {"channel_title": self.config.channel_title}
         else:
             q = {
                 "$or": [

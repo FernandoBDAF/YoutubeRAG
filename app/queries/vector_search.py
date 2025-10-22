@@ -24,17 +24,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--col", type=str, required=False)
     return parser.parse_args()
 
-def main() -> None:
+def similarity_search(query: str) -> None:
     load_dotenv()
     args = parse_args()
     client = get_mongo_client()
     db = client[DB_NAME]
     col = db[args.col or COLL_CHUNKS]
     setup_vector_search_index(col)
-    query = args.query if not query else query
-    qvec = embed_query(args.query)
+    qvec = embed_query(query)
     try:
-        hits = vector_search(col, qvec, 5)
+        hits = vector_search(col, qvec, 10)
     except Exception as e:
         print(f"Error: {e}")
         return
@@ -54,5 +53,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     query = os.getenv("QUERY")
-    print("query: ", query)
-    main()
+    if query:
+        print("query: ", query)
+        similarity_search(query)
+    else:
+        print("No query provided")

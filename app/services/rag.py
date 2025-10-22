@@ -11,7 +11,8 @@ from config.runtime import RAG_WEIGHT_VECTOR, RAG_WEIGHT_TRUST, RAG_WEIGHT_RECEN
 from app.services.retrieval import vector_search, rerank_hits
 from app.services.generation import answer_with_openai, stream_answer_with_openai
 from app.services.retrieval import hybrid_search as _hybrid_search
-
+import pandas as pd
+from app.services.indexes import setup_vector_search_index
 
 def embed_query(text: str) -> List[float]:
     api_key = os.getenv("VOYAGE_API_KEY")
@@ -67,15 +68,21 @@ def rag_answer(
     col = db[COLL_CHUNKS]
     logs = db[COLL_MEMORY_LOGS]
 
+    setup_vector_search_index(col)
+
     qvec = embed_query(query)
     hits = vector_search(col, qvec, k=k, filters=filters)
-    wv = (weights or {}).get("vector", RAG_WEIGHT_VECTOR)
-    wt = (weights or {}).get("trust", RAG_WEIGHT_TRUST)
-    wr = (weights or {}).get("recency", RAG_WEIGHT_RECENCY)
-    total = max(1e-8, float(wv + wt + wr))
-    hits = rerank_hits(
-        hits, w_vector=wv / total, w_trust=wt / total, w_recency=wr / total
-    )
+
+    hits_df = pd.DataFrame(hits)
+    print(hits_df)
+
+    # wv = (weights or {}).get("vector", RAG_WEIGHT_VECTOR)
+    # wt = (weights or {}).get("trust", RAG_WEIGHT_TRUST)
+    # wr = (weights or {}).get("recency", RAG_WEIGHT_RECENCY)
+    # total = max(1e-8, float(wv + wt + wr))
+    # hits = rerank_hits(
+    #     hits, w_vector=wv / total, w_trust=wt / total, w_recency=wr / total
+    # )
     if streaming:
         # For now, collect streamed tokens into a single string so UI remains simple
         buf: List[str] = []
@@ -86,23 +93,23 @@ def rag_answer(
         answer = answer_with_openai(hits, query)
 
     mode = "vector"  # base path for now; hybrid UI path remains separate
-    logs.insert_one(
-        {
-            "query": query,
-            "mode": mode,
-            "session_id": session_id,
-            "weights": {"vector": wv, "trust": wt, "recency": wr},
-            "retrieved": [
-                {
-                    "video_id": h.get("video_id"),
-                    "chunk_id": h.get("chunk_id"),
-                    "score": h.get("score"),
-                }
-                for h in hits
-            ],
-            "answer": answer,
-        }
-    )
+    # logs.insert_one(
+    #     {
+    #         "query": query,
+    #         "mode": mode,
+    #         "session_id": session_id,
+    #         "weights": {"vector": wv, "trust": wt, "recency": wr},
+    #         "retrieved": [
+    #             {
+    #                 "video_id": h.get("video_id"),
+    #                 "chunk_id": h.get("chunk_id"),
+    #                 "score": h.get("score"),
+    #             }
+    #             for h in hits
+    #         ],
+    #         "answer": answer,
+    #     }
+    # )
 
     return {"answer": answer, "hits": hits}
 

@@ -21,7 +21,7 @@ class TrustRankAgent(BaseAgent):
             "2) Recency: newer is generally better; apply a smooth advantage for recent content.\n"
             "3) Engagement: normalize likes/comments/views proxy if available.\n"
             "4) Code validity: prefer chunks mentioning valid or runnable code.\n"
-            '5) Output: VALID JSON ONLY: {"trust_score": float 0–1, "reason": "short evidence"}.\n\n'
+            '5) Output: VALID JSON ONLY: {"trust_score": float 0-1, "reason": "short evidence"}.\n\n'
             "GOOD EXAMPLE:\n"
             '{"trust_score": 0.62, "reason": "Recent chunk with matching explanations across videos; simple code example"}\n\n'
             "BAD EXAMPLES:\n"

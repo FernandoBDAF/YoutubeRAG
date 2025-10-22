@@ -1,4 +1,5 @@
 import os
+import logging
 from typing import Any, Dict, List, Optional
 
 from config.runtime import (
@@ -8,6 +9,15 @@ from config.runtime import (
 )
 
 from pymongo.collection import Collection
+from pymongo.errors import OperationFailure
+
+# Mongo Documentation on Vector Search: https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Default index name from environment
+DEFAULT_VECTOR_INDEX = os.getenv("VECTOR_INDEX_NAME", "vector_index_text")
 
 
 def hybrid_search(
@@ -17,8 +27,9 @@ def hybrid_search(
     top_k: int = 8,
     filters: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
-    """Run a hybrid Atlas Search query (text + knnBeta) with graceful fallback.
+    """Run a hybrid Atlas Search query (text + vector) with graceful fallback.
 
+    Uses modern $search syntax with vectorSearch operator instead of deprecated knnBeta.
     If $search is unavailable or fails, falls back to vector-only search via $vectorSearch.
     """
     compound_should: List[Dict[str, Any]] = []
@@ -29,10 +40,11 @@ def hybrid_search(
     if query_vector:
         compound_should.append(
             {
-                "knnBeta": {
+                "vectorSearch": {
                     "vector": query_vector,
                     "path": "embedding",
                     "k": max(1, int(top_k)),
+                    "similarity": "cosine",
                 }
             }
         )
@@ -90,20 +102,30 @@ def hybrid_search(
         {"$limit": int(top_k)},
     ]
     try:
+        logger.info(f"Executing hybrid search with {len(compound_should)} operators")
         return list(col.aggregate(pipeline))
-    except Exception:
+    except Exception as e:
+        logger.warning(
+            f"Hybrid search failed: {e}. Falling back to vector-only search."
+        )
         # Fallback to vectorSearch only
+        vs_stage: Dict[str, Any] = {
+            "$vectorSearch": {
+                "index": DEFAULT_VECTOR_INDEX,
+                "path": "embedding",
+                "queryVector": query_vector,
+                "numCandidates": max(500, top_k * 10),
+                "limit": top_k,
+            }
+        }
+        if filters:
+            try:
+                if isinstance(filters, dict) and len(filters) > 0:
+                    vs_stage["$vectorSearch"]["filter"] = filters
+            except Exception:
+                pass
         vs_pipeline = [
-            {
-                "$vectorSearch": {
-                    "index": os.getenv("VECTOR_INDEX_NAME", "embedding_index"),
-                    "path": "embedding",
-                    "queryVector": query_vector,
-                    "numCandidates": max(50, top_k * 10),
-                    "limit": top_k,
-                    "filter": filters or {},
-                }
-            },
+            vs_stage,
             {
                 "$project": {
                     "video_id": 1,
@@ -117,7 +139,11 @@ def hybrid_search(
                 }
             },
         ]
-        return list(col.aggregate(vs_pipeline))
+        try:
+            return list(col.aggregate(vs_pipeline))
+        except Exception as fallback_error:
+            logger.error(f"Vector search fallback also failed: {fallback_error}")
+            return []
 
 
 def keyword_search(
@@ -153,8 +179,10 @@ def keyword_search(
         {"$limit": int(top_k)},
     ]
     try:
+        logger.info(f"Executing keyword search for: '{query_text[:50]}...'")
         return list(col.aggregate(pipeline))
-    except Exception:
+    except Exception as e:
+        logger.error(f"Keyword search failed: {e}")
         return []
 
 
@@ -174,6 +202,7 @@ def structured_search(
         )
     )
     try:
+        logger.info(f"Executing structured search with query: {query}")
         if query:
             cur = col.find(query, projection)
         else:
@@ -182,38 +211,59 @@ def structured_search(
             cur = cur.sort(list(sort_by.items()))
         if top_k:
             cur = cur.limit(int(top_k))
-        return list(cur)
+        results = list(cur)
+        logger.info(f"Structured search returned {len(results)} results")
+        return results
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Structured search failed: {e}")
         return []
 
 
 def vector_search(
-    col, query_vector: List[float], k: int = 8, filters: Optional[Dict[str, Any]] = None
-):
+    col: Collection,
+    query_vector: List[float],
+    k: int = 8,
+    filters: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """Execute vector similarity search using $vectorSearch."""
+    vs_stage: Dict[str, Any] = {
+        "$vectorSearch": {
+            "index": DEFAULT_VECTOR_INDEX,
+            "path": "embedding",
+            "queryVector": query_vector,
+            "numCandidates": max(500, k * 10),  # Dynamic numCandidates
+            "limit": k,
+        }
+    }
+    if filters:
+        try:
+            if isinstance(filters, Dict) and len(filters) > 0:
+                vs_stage["$vectorSearch"]["filter"] = filters
+        except Exception:
+            pass
     pipeline = [
-        {
-            "$vectorSearch": {
-                "index": "vector_index_text",
-                "path": "embedding",
-                "queryVector": query_vector,
-                "numCandidates": 200,
-                "limit": k,
-                "filter": filters or {},
-            }
-        },
+        vs_stage,
         {
             "$project": {
                 "video_id": 1,
                 "chunk_id": 1,
-                "text": 1,
+                "embedding_text": 1,
                 "metadata": 1,
                 "trust_score": 1,
                 "score": {"$meta": "vectorSearchScore"},
             }
         },
     ]
-    return list(col.aggregate(pipeline))
+    try:
+        logger.info(
+            f"Executing vector search with k={k}, vector_dim={len(query_vector)}"
+        )
+        results = list(col.aggregate(pipeline))
+        logger.info(f"Vector search returned {len(results)} results")
+        return results
+    except Exception as e:
+        logger.error(f"Vector search failed: {e}")
+        return []
 
 
 def rerank_hits(
@@ -222,6 +272,15 @@ def rerank_hits(
     w_trust: float = RAG_WEIGHT_TRUST,
     w_recency: float = RAG_WEIGHT_RECENCY,
 ) -> List[Dict[str, Any]]:
+    """Rerank search hits using weighted scoring."""
+    if not hits:
+        logger.warning("No hits provided for reranking")
+        return []
+
+    logger.info(
+        f"Reranking {len(hits)} hits with weights: vector={w_vector}, trust={w_trust}, recency={w_recency}"
+    )
+
     ranked: List[Dict[str, Any]] = []
     for h in hits:
         meta = h.get("metadata", {})
@@ -231,6 +290,20 @@ def rerank_hits(
         recency = 1.0 / (1.0 + age_days / 180.0)
         final = w_vector * score + w_trust * trust + w_recency * recency
         h["final_score"] = final
+        h["score_breakdown"] = {
+            "vector_score": score,
+            "trust_score": trust,
+            "recency_score": recency,
+            "weighted_vector": w_vector * score,
+            "weighted_trust": w_trust * trust,
+            "weighted_recency": w_recency * recency,
+        }
         ranked.append(h)
+
     ranked.sort(key=lambda x: x.get("final_score", 0.0), reverse=True)
+    logger.info(
+        f"Reranking completed. Top score: {ranked[0].get('final_score', 0):.3f}"
+        if ranked
+        else "No results after reranking"
+    )
     return ranked
