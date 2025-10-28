@@ -12,7 +12,8 @@ from app.services.retrieval import vector_search, rerank_hits
 from app.services.generation import answer_with_openai, stream_answer_with_openai
 from app.services.retrieval import hybrid_search as _hybrid_search
 import pandas as pd
-from app.services.indexes import setup_vector_search_index
+from app.services.indexes import ensure_vector_search_index, ensure_hybrid_search_index
+
 
 def embed_query(text: str) -> List[float]:
     api_key = os.getenv("VOYAGE_API_KEY")
@@ -68,7 +69,12 @@ def rag_answer(
     col = db[COLL_CHUNKS]
     logs = db[COLL_MEMORY_LOGS]
 
-    setup_vector_search_index(col)
+    ensure_vector_search_index(col)
+    # Hybrid index is useful for $search paths
+    try:
+        ensure_hybrid_search_index(col)
+    except Exception:
+        pass
 
     qvec = embed_query(query)
     hits = vector_search(col, qvec, k=k, filters=filters)

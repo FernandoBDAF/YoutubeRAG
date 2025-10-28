@@ -11,13 +11,60 @@ from config.runtime import (
 from pymongo.collection import Collection
 from pymongo.errors import OperationFailure
 
+
 # Mongo Documentation on Vector Search: https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Default index name from environment
-DEFAULT_VECTOR_INDEX = os.getenv("VECTOR_INDEX_NAME", "vector_index_text")
+from app.services.indexes import get_vector_index_name, SEARCH_INDEX_NAME
+
+DEFAULT_VECTOR_INDEX = get_vector_index_name()
+
+
+def mmr_diversify(
+    hits: List[Dict[str, Any]],
+    lambda_: float = 0.7,
+    top_k: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """Simple MMR-like diversification.
+
+    Uses vector/keyword score and tag overlap as a crude diversity signal.
+    """
+    if not hits:
+        return []
+    k = min(len(hits), int(top_k) if top_k else len(hits))
+
+    def base_score(h: Dict[str, Any]) -> float:
+        s = h.get("score") or h.get("search_score") or 0.0
+        try:
+            return float(s)
+        except Exception:
+            return 0.0
+
+    selected: List[Dict[str, Any]] = []
+    candidates = hits[:]
+    while candidates and len(selected) < k:
+        best = None
+        best_val = -1e9
+        for h in candidates:
+            s = base_score(h)
+            penalty = 0.0
+            tags = set(((h.get("metadata") or {}).get("tags") or [])[:6])
+            for selt in selected:
+                stags = set(((selt.get("metadata") or {}).get("tags") or [])[:6])
+                if tags and stags:
+                    overlap = len(tags & stags) / max(1, len(tags | stags))
+                    penalty = max(penalty, overlap)
+            val = lambda_ * s - (1 - lambda_) * penalty
+            if val > best_val:
+                best_val = val
+                best = h
+        if best is None:
+            break
+        selected.append(best)
+        candidates.remove(best)
+    return selected
 
 
 def hybrid_search(
@@ -27,34 +74,38 @@ def hybrid_search(
     top_k: int = 8,
     filters: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
-    """Run a hybrid Atlas Search query (text + vector) with graceful fallback.
+    """Run a hybrid Atlas Search query (text + vector).
 
-    Uses modern $search syntax with vectorSearch operator instead of deprecated knnBeta.
-    If $search is unavailable or fails, falls back to vector-only search via $vectorSearch.
+    Per Atlas docs, knnBeta must be a top-level operator under $search, not nested
+    inside compound.should. We therefore place knnBeta at the top level and, when
+    a lexical query is present, add a compound.should text operator alongside it.
+
+    Note: $search filters use Search operators (equals/in/range). Since our app
+    builds filters for $vectorSearch, we ignore filters here to avoid invalid
+    mapping errors and rely on vector-only search when filters are present.
     """
-    compound_should: List[Dict[str, Any]] = []
-    if query_text and query_text.strip():
-        compound_should.append(
-            {"text": {"query": query_text, "path": ["text", "display_text"]}}
-        )
-    if query_vector:
-        compound_should.append(
-            {
-                "vectorSearch": {
-                    "vector": query_vector,
-                    "path": "embedding",
-                    "k": max(1, int(top_k)),
-                    "similarity": "cosine",
-                }
-            }
-        )
-    if not compound_should:
+    if not query_vector:
         return []
-    search_stage: Dict[str, Any] = {
-        "$search": {"compound": {"should": compound_should}}
+
+    search_spec: Dict[str, Any] = {
+        "index": SEARCH_INDEX_NAME,
+        "knnBeta": {
+            "vector": query_vector,
+            "path": "embedding",
+            "k": max(1, int(top_k)),
+        },
     }
+    if query_text and query_text.strip():
+        search_spec["compound"] = {
+            "should": [
+                {"text": {"query": query_text, "path": ["text", "display_text"]}}
+            ]
+        }
     if filters:
-        search_stage["$search"]["filter"] = filters
+        logger.info(
+            "hybrid: ignoring filters for $search; using vector path when filters are required"
+        )
+    search_stage: Dict[str, Any] = {"$search": search_spec}
 
     # Include scoreDetails to approximate per-operator contributions when available
     pipeline = [
@@ -63,8 +114,13 @@ def hybrid_search(
             "$project": {
                 "video_id": 1,
                 "chunk_id": 1,
+                "embedding_text": 1,
                 "text": {"$ifNull": ["$display_text", "$text"]},
                 "metadata": 1,
+                "context": 1,
+                "entities": 1,
+                "concepts": 1,
+                "relations": 1,
                 "trust_score": 1,
                 "search_score": {"$meta": "searchScore"},
                 "_sd": {"$meta": "searchScoreDetails"},
@@ -102,7 +158,7 @@ def hybrid_search(
         {"$limit": int(top_k)},
     ]
     try:
-        logger.info(f"Executing hybrid search with {len(compound_should)} operators")
+        logger.info(f"Executing hybrid search with knnBeta + text operators")
         return list(col.aggregate(pipeline))
     except Exception as e:
         logger.warning(
@@ -130,8 +186,13 @@ def hybrid_search(
                 "$project": {
                     "video_id": 1,
                     "chunk_id": 1,
+                    "embedding_text": 1,
                     "text": {"$ifNull": ["$display_text", "$text"]},
                     "metadata": 1,
+                    "context": 1,
+                    "entities": 1,
+                    "concepts": 1,
+                    "relations": 1,
                     "trust_score": 1,
                     "search_score": {"$meta": "vectorSearchScore"},
                     "vector_score": {"$meta": "vectorSearchScore"},
@@ -248,7 +309,12 @@ def vector_search(
                 "video_id": 1,
                 "chunk_id": 1,
                 "embedding_text": 1,
+                "text": 1,
                 "metadata": 1,
+                "context": 1,
+                "entities": 1,
+                "concepts": 1,
+                "relations": 1,
                 "trust_score": 1,
                 "score": {"$meta": "vectorSearchScore"},
             }

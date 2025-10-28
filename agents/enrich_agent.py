@@ -1,3 +1,15 @@
+"""EnrichmentAgent: extracts structured annotations from transcript chunks.
+
+Future Improvements:
+- Video-level tags: Currently context.tags are chunk-level (generated per chunk).
+  For better retrieval filtering, consider:
+  1. Backfilling metadata.tags from raw_videos.keywords (YouTube video tags)
+  2. Generating video-level topic tags via LLM summarization of full transcript
+  3. Propagating video-level tags to all chunks during ETL
+- Cross-chunk entity resolution: Link entities across chunks for better relation graphs
+- Hierarchical concepts: Group concepts into broader categories for filter organization
+"""
+
 from typing import Optional, List, Dict, Any
 import json
 import re

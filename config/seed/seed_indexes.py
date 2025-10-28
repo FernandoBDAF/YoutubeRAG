@@ -1,9 +1,5 @@
-import os
-import json
-import shutil
-import subprocess
-from pathlib import Path
 from typing import List
+from app.services.indexes import ensure_vector_search_index
 
 
 REQUIRED_COLLECTIONS: List[str] = [
@@ -49,115 +45,14 @@ def ensure_collections_and_indexes(db) -> None:
     except Exception:
         pass
 
-    # Vector index: try Atlas CLI if present
-    atlas = shutil.which("atlas")
-    project_id = os.getenv("PROJECT_ID")
-    cluster_name = os.getenv("CLUSTER_NAME")
-    db_name = os.getenv("MONGODB_DB", "mongo_hack")
-
-    if atlas and project_id and cluster_name:
-        # Check existing indexes
-        try:
-            list_cmd = [
-                atlas,
-                "clusters",
-                "search",
-                "indexes",
-                "list",
-                "--projectId",
-                project_id,
-                "--clusterName",
-                cluster_name,
-                "--db",
-                db_name,
-                "--collection",
-                "video_chunks",
-            ]
-            result = subprocess.run(
-                list_cmd, capture_output=True, text=True, check=False
-            )
-            if result.returncode != 0:
-                # Fall through to create; some atlas versions return 0 only on READY
-                pass
-            if "embedding_index" not in result.stdout:
-                definition = (Path(__file__).parent / "vector_index.json").resolve()
-                # Load and override database/collection to match env/db
-                try:
-                    with open(definition, "r", encoding="utf-8") as f:
-                        defn = json.load(f)
-                except Exception:
-                    defn = {}
-                defn["database"] = db_name
-                defn["collectionName"] = "video_chunks"
-                effective = (
-                    Path(__file__).parent / "vector_index.effective.json"
-                ).resolve()
-                with open(effective, "w", encoding="utf-8") as f:
-                    json.dump(defn, f)
-                create_cmd = [
-                    atlas,
-                    "clusters",
-                    "search",
-                    "indexes",
-                    "create",
-                    "--projectId",
-                    project_id,
-                    "--clusterName",
-                    cluster_name,
-                    "--file",
-                    str(effective),
-                ]
-                subprocess.run(create_cmd, check=True)
-                # Optionally wait for index readiness
-                try:
-                    wait_for_index_ready("embedding_index")
-                except Exception:
-                    pass
-        except Exception:
-            # Non-fatal: user can create via UI
-            pass
-    else:
-        # CLI missing; print a friendly hint once
-        print(
-            "Atlas CLI not detected or env PROJECT_ID/CLUSTER_NAME missing. "
-            "You can create the vector index via UI or set envs and Atlas CLI to enable auto-seed."
-        )
+    # Ensure Vector Search index in code (single source of truth)
+    try:
+        ensure_vector_search_index(db["video_chunks"])
+    except Exception as e:
+        print(f"Warning: could not ensure vector index via code: {e}")
 
 
 def wait_for_index_ready(
     index_name: str, timeout_s: int = 300, poll_s: int = 5
 ) -> None:
-    atlas = shutil.which("atlas")
-    project_id = os.getenv("PROJECT_ID")
-    cluster_name = os.getenv("CLUSTER_NAME")
-    db_name = os.getenv("MONGODB_DB", "mongo_hack")
-    if not (atlas and project_id and cluster_name):
-        return
-    import time
-
-    deadline = time.time() + timeout_s
-    while time.time() < deadline:
-        try:
-            cmd = [
-                atlas,
-                "clusters",
-                "search",
-                "indexes",
-                "list",
-                "--projectId",
-                project_id,
-                "--clusterName",
-                cluster_name,
-                "--db",
-                db_name,
-                "--collection",
-                "video_chunks",
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-            out = result.stdout or ""
-            if index_name in out and "READY" in out:
-                return
-        except Exception:
-            pass
-        time.sleep(poll_s)
-    print(f"Index '{index_name}' did not become READY within {timeout_s}s")
+    return

@@ -71,6 +71,8 @@ class BaseAgent(ABC):
                 "model": self.config.model_name,
                 "temperature": kwargs.get("temperature", self.config.temperature),
                 "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
+                "system_chars": len(system_prompt or ""),
+                "user_chars": len(prompt or ""),
             }
         )
 
@@ -88,14 +90,29 @@ class BaseAgent(ABC):
                     ],
                     max_completion_tokens=max_completion_tokens,
                     timeout=timeout,
+                    **kwargs,
                 )
                 out = response.choices[0].message.content.strip()
+                usage = getattr(response, "usage", None)
                 self._log_event(
                     {
                         "type": "model_call:done",
                         "model": self.config.model_name,
                         "ok": True,
                         "output_preview": out[:120],
+                        "usage": {
+                            "prompt_tokens": (
+                                getattr(usage, "prompt_tokens", None) if usage else None
+                            ),
+                            "completion_tokens": (
+                                getattr(usage, "completion_tokens", None)
+                                if usage
+                                else None
+                            ),
+                            "total_tokens": (
+                                getattr(usage, "total_tokens", None) if usage else None
+                            ),
+                        },
                     }
                 )
                 return out

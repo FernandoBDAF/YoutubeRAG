@@ -355,6 +355,7 @@ class IngestStage(BaseStage):
                 print(f"[ingest] Error creating stub for {vid}: {e}")
             return
         try:
+            
             transcript_text, transcript_lang = fetch_transcript_text(vid)
         except Exception as e:
             print(f"[ingest] Error fetching transcript for {vid}: {e}")

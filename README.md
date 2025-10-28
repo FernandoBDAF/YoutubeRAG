@@ -1,6 +1,8 @@
-## Mongo Hack — Persistent Context RAG on YouTube
+## YoutubeRAG — Persistent Context RAG on YouTube
 
-An independent, self-contained prototype that ingests YouTube videos and builds persistent, layered context in MongoDB. Agents clean and enrich transcripts, add visual context, chunk content, and embed it into Atlas Vector Search. A simple UI and retriever generate context-aware answers while logging interactions for long-term memory.
+A production-ready system that ingests YouTube videos and builds persistent, semantically-enriched context in MongoDB. Multi-agent pipelines clean, enrich, chunk, and embed transcripts into Atlas Vector Search. An intelligent CLI chat system with conversation memory provides context-aware answers using adaptive retrieval planning and code-enforced continuity.
+
+**New: Multi-Agent CLI Chat** - Memory-aware conversations with PlannerAgent, specialized answer agents, catalog-driven retrieval, and 85% continuity success rate. See `documentation/CHAT.md`.
 
 ### Architecture Diagram
 
@@ -63,35 +65,56 @@ flowchart TD
    - OPENAI_API_KEY (optional, for LLM)
    - YOUTUBE_API_KEY (optional, for metadata)
 
-### Folder Layout (self-contained)
+### Folder Layout
 
 ```
-Mongo_Hack/
+YoutubeRAG/
   README.md
   mongodb_schema.json
-  docs/
+  chat.py                     # NEW: Multi-agent CLI chat orchestrator
+  documentation/
+    CHAT.md                   # NEW: CLI chat architecture & usage
     PROJECT.md
     USE-CASE.md
     PROMPTS.md
     EXECUTION.md
     DEMO.md
     ORCHESTRACTION-INTERFACE.md
+    TECHNICAL-CONCEPTS.md
+    HYBRID-RETRIEVAL.md
+    REDUNDANCY.md
+    BACKLOG.md
   agents/
+    planner_agent.py          # NEW: Adaptive retrieval planning
+    reference_answer_agent.py # NEW: Concise Q&A answers
+    topic_reference_agent.py  # NEW: Multi-topic guides
+    enrich_agent.py
+    clean_agent.py
+    trust_agent.py
+    dedup_agent.py
+    summarizer_agent.py
   app/
     stages/
     services/
-      filters.py          # shared filter builder for Mongo/Atlas
-      ui_utils.py         # shared table/CSV helpers
-      persona_utils.py    # infer top tags from feedback
-      generation.py       # LLM answer helpers (non-UI)
-      retrieval.py        # vector/hybrid/keyword/structured + rerank
-    ui/
-      tabs/               # split Streamlit tabs (in progress)
+      indexes.py              # NEW: Centralized Vector/Search index config
+      metadata.py             # NEW: Catalog building & pruning
+      retrieval.py            # Enhanced with MMR, filter expansion
+      generation.py
+      filters.py
+      ui_utils.py
+      log_utils.py            # NEW: Timer utility
+    queries/
+    pipelines/
   core/
-    enrich_utils.py       # enrich text packing/normalization helpers
+    enrich_utils.py
+    base_agent.py
+    base_pipeline.py
   pipelines/
+    video_pipeline.py
   config/
-  scripts/
+    seed/
+      seed_indexes.py         # Uses app/services/indexes.py
+  chat_logs/                  # NEW: Per-session log files
   main.py
   streamlit_app.py
 ```
@@ -267,15 +290,36 @@ New options overview:
 - Enrich: conceptual relations prompt, confidence levels, `quality_score`, always sets `embedding_text`.
 - Embed: hybrid `embedding_text` by default, `vector_norm`, optional multi-vector outputs; flags `--use_hybrid_embedding_text/--no_use_hybrid_embedding_text`, `--unit_normalize_embeddings/--no_unit_normalize_embeddings`, `--emit_multi_vectors`.
 
-Utilities:
+### CLI Chat (NEW)
 
-```
-# Indexes
-python Mongo_Hack/scripts/create_indexes.py "$MONGODB_URI"
+**Multi-agent, memory-aware chat system** with adaptive retrieval:
 
-# Schema validator
-python Mongo_Hack/scripts/validate_chunks.py "$MONGODB_URI" mongo_hack video_chunks
+```bash
+python chat.py --top_k 200 --mode auto
 ```
+
+Features:
+
+- **Conversation continuity**: Detects follow-ups, auto-expands queries with memory context
+- **Smart planning**: PlannerAgent chooses route/mode/k/filters based on query + catalog + history
+- **Specialized agents**: TopicReferenceAgent (guides) vs ReferenceAnswerAgent (focused Q&A)
+- **Quality-first**: Query-aware catalog pruning (36K→80 values), filter expansion, MMR diversification
+- **Dev logging**: Per-session logs with agent prompts, decisions, chunk dumps
+
+In-chat commands: `:exit`, `:new`, `:history`, `:id`, `:export json|txt|md`
+
+See `documentation/CHAT.md` for full details.
+
+---
+
+### Index Management
+
+MongoDB Atlas Vector Search indexes are auto-created by the chat system:
+
+- Vector Search index (type: `vectorSearch`): For $vectorSearch with filters
+- Hybrid Search index (type: `search`): For knnBeta + text search
+
+Configuration centralized in `app/services/indexes.py`.
 
 ### Chunking strategies
 

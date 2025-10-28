@@ -205,9 +205,9 @@ Notes: For small datasets, answers may look similar across queries; increase Top
   - Run `python Mongo_Hack/main.py pipeline --playlist_id <ID> --max 5 --llm`.
   - Open UI and test Q&A (topic/channel/age/trust filters), Compare, Unique, Summaries, Memory.
   - Test the new Hybrid Search tab and CSV export; compare with Vector Search; verify per-operator scores appear.
-  - Q&A: enable streaming; try the “Use Hybrid Retrieval for Q&A” toggle; confirm memory_logs include `mode`, `weights`, and `session_id`.
-  - Run `python Mongo_Hack/scripts/audit_enrich_gaps.py` to confirm enrich coverage and inspect gaps.
+  - Q&A: enable streaming; try the "Use Hybrid Retrieval for Q&A" toggle; confirm memory_logs include `mode`, `weights`, and `session_id`.
+  - **CLI Chat**: Run `python chat.py --top_k 200` and test multi-turn conversations with memory continuity.
   - Note: code refactor split retrieval/generation/helpers and enrich utils; see README Folder Layout.
-  - Review `docs/ORCHESTRACTION-INTERFACE.md` for orchestrator-driven demo flow.
+  - Review `docs/CHAT.md` for CLI chat architecture and `docs/ORCHESTRACTION-INTERFACE.md` for orchestrator patterns.
   - Assess answer quality; tune `RAG_WEIGHT_*` via env; consider expanding the seed set for more diverse answers.
   - Capture screenshots and rehearse `docs/DEMO.md` sequence.

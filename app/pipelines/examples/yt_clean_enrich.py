@@ -48,7 +48,7 @@ specs = [
             llm_retries=4,
             llm_backoff_s=10.0,
             llm_qps=None,
-            model_name="gpt-5-nano",
+            model_name="gpt-4o-mini",  # Changed from gpt-5-nano for reliability
         ),
     ),
     # 2) Compress
@@ -96,8 +96,8 @@ specs = [
             concurrency=None,
             # Chunk specific
             chunk_strategy="recursive",
-            token_size=500,
-            overlap_pct=0.15,
+            token_size=1200,  # Increased from 500 for coherent passages
+            overlap_pct=0.20,  # Increased from 0.15 for better context preservation
             split_chars=[".", "?", "!"],
             semantic_model=None,
         ),
@@ -124,7 +124,7 @@ specs = [
             llm_retries=4,
             llm_backoff_s=10.0,
             llm_qps=None,
-            model_name="gpt-5-nano",
+            model_name="gpt-4o-mini",  # Changed from gpt-5-nano for reliable extraction
         ),
     ),
     # 5) Embed

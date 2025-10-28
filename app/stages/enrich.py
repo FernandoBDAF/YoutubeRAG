@@ -37,7 +37,17 @@ from core.enrich_utils import normalize_enrich_payload_for_chunk
 from app.stages.clean import build_embedding_text
 
 
-"""LLM-only enrichment stage: no heuristic fallback paths."""
+"""LLM-only enrichment stage: no heuristic fallback paths.
+
+Future Enhancements for Video-Level Tagging:
+- Currently chunks inherit context.tags from chunk-level LLM extraction
+- For improved filtering and topic discovery:
+  1. Extract video-level topics from raw_videos metadata or full transcript summary
+  2. Backfill metadata.tags to all chunks belonging to that video
+  3. Update chunk creation pipeline to propagate video tags automatically
+- This would enable better planner filter selection (e.g., "machine learning", "RAG", "embeddings")
+  instead of relying on granular chunk-level tags that may miss the big picture
+"""
 
 
 @dataclass
