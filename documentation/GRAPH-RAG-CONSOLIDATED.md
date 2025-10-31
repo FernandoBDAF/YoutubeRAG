@@ -141,19 +141,19 @@ Graph Extraction → Entity Resolution → Graph Construction → Community Dete
 
 ### Core Components
 
-**1. GraphRAG Models** (`core/graphrag_models.py`):
+**1. GraphRAG Models** (`core/models/graphrag.py`):
 
 - Pydantic models for structured data (EntityModel, RelationshipModel, etc.)
 - Validation and type safety
 - ID generation (MD5 hashing for consistency)
 
-**2. GraphRAG Configuration** (`config/graphrag_config.py`):
+**2. GraphRAG Configuration** (`core/config/graphrag.py`):
 
 - Configuration classes for each stage
 - Environment variable integration
 - Adaptive defaults based on testing
 
-**3. GraphRAG Agents** (`agents/`):
+**3. GraphRAG Agents** (`business/agents/graphrag/`):
 
 - GraphExtractionAgent: LLM-powered entity/relationship extraction
 - EntityResolutionAgent: Multi-strategy entity canonicalization
@@ -161,14 +161,14 @@ Graph Extraction → Entity Resolution → Graph Construction → Community Dete
 - CommunityDetectionAgent: Graph clustering and summarization
 - GraphLinkPredictionAgent: Predict missing relationships
 
-**4. GraphRAG Stages** (`app/stages/`):
+**4. GraphRAG Stages** (`business/stages/graphrag/`):
 
 - graph_extraction: Extract from chunks
 - entity_resolution: Canonicalize entities
 - graph_construction: Build graph + post-processing
 - community_detection: Detect communities and summarize
 
-**5. GraphRAG Services** (`app/services/`):
+**5. GraphRAG Services** (`business/services/graphrag/`):
 
 - graphrag_indexes: Collection and index management
 - graphrag_query: Query processing (future)
@@ -811,7 +811,7 @@ Result: Massive overlap, near-complete graph
 - ≤60 chunks: window=3 (was ≤50)
 - > 60 chunks: window=5
 
-**Implementation**: `app/stages/graph_construction.py` lines 673-695
+**Implementation**: `business/stages/graphrag/graph_construction.py` lines 673-695
 
 **Lesson**: Adaptive > Fixed for mixed-length datasets.
 
@@ -1352,28 +1352,28 @@ Louvain: 6 communities (sizes: 22, 20, 15, 12, 9, 6) ✅
 
 **Core**:
 
-- `core/graphrag_models.py` - Pydantic models
-- `config/graphrag_config.py` - Configuration classes
+- `core/models/graphrag.py` - Pydantic models
+- `core/config/graphrag.py` - Configuration classes
 
 **Agents**:
 
-- `agents/graph_extraction_agent.py`
-- `agents/entity_resolution_agent.py`
-- `agents/relationship_resolution_agent.py`
-- `agents/community_detection_agent.py`
-- `agents/community_summarization_agent.py`
-- `agents/graph_link_prediction_agent.py`
+- `business/agents/graphrag/extraction.py`
+- `business/agents/graphrag/entity_resolution.py`
+- `business/agents/graphrag/relationship_resolution.py`
+- `business/agents/graphrag/community_detection.py`
+- `business/agents/graphrag/community_summarization.py`
+- `business/agents/graphrag/link_prediction.py`
 
 **Stages**:
 
-- `app/stages/graph_extraction.py`
-- `app/stages/entity_resolution.py`
-- `app/stages/graph_construction.py`
-- `app/stages/community_detection.py`
+- `business/stages/graphrag/extraction.py`
+- `business/stages/graphrag/entity_resolution.py`
+- `business/stages/graphrag/graph_construction.py`
+- `business/stages/graphrag/community_detection.py`
 
 **Services**:
 
-- `app/services/graphrag_indexes.py`
+- `business/services/graphrag/indexes.py`
 
 ### Related Documentation
 

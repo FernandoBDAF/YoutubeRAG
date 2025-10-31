@@ -1,5 +1,5 @@
 from typing import List
-from app.services.indexes import ensure_vector_search_index
+from business.services.rag.indexes import ensure_vector_search_index
 
 
 REQUIRED_COLLECTIONS: List[str] = [

@@ -1157,24 +1157,584 @@ git revert <commit-hash>
 
 ---
 
-## Timeline Estimate
+---
+
+## Chat Feature Extraction Plan
+
+### Current State Analysis
+
+**File**: `chat.py` (1,370 lines)
+
+**What it does**:
+
+- Memory-aware CLI chat interface
+- Query rewriting with conversation context
+- Multi-modal retrieval (vector, hybrid, keyword)
+- Reference and topic answer agents
+- Session management and export
+
+**Current location**: Root (entry point)
+
+### Target Structure
+
+**Entry Point** → `app/cli/chat.py`
+
+- CLI orchestration only
+- Command parsing
+- Session management
+
+**Business Logic** → `business/chat/`
+
+```
+business/chat/
+├── __init__.py
+├── memory.py              # Session & memory management
+├── query_rewriter.py      # Query rewriting agent
+├── planner.py             # Route/mode/filter planning (uses PlannerAgent)
+├── retrieval.py           # Retrieval orchestration
+└── answering.py           # Answer generation (uses ReferenceAnswerAgent, TopicReferenceAgent)
+```
+
+**Services** → `business/services/chat/`
+
+```
+business/services/chat/
+├── __init__.py
+├── filters.py             # Filter sanitization & expansion
+├── citations.py           # Citation formatting
+└── export.py              # Export helpers (JSON, TXT, MD)
+```
+
+### Migration Strategy
+
+**Phase 5.5: Extract Chat Feature** (2-3 hours)
+
+**5.5.1. Extract Business Logic**:
+
+```bash
+# New files to create:
+business/chat/memory.py              # load_long_term_memory, session management
+business/chat/query_rewriter.py      # rewrite_query function
+business/chat/planner.py             # Planning orchestration
+business/chat/retrieval.py           # run_retrieval, normalize_context_blocks
+business/chat/answering.py           # answer_with_context, build_reference_bundles
+
+business/services/chat/filters.py   # sanitize_filters, expand_filter_values
+business/services/chat/citations.py # format_citations
+business/services/chat/export.py    # export_last_turn
+```
+
+**5.5.2. Slim Down CLI**:
+
+```python
+# app/cli/chat.py (new, ~200 lines)
+from business.chat.memory import SessionManager
+from business.chat.planner import ChatPlanner
+from business.chat.retrieval import ChatRetrieval
+from business.chat.answering import ChatAnswering
+
+def run_cli():
+    session = SessionManager(session_id)
+    planner = ChatPlanner(session)
+    retrieval = ChatRetrieval()
+    answering = ChatAnswering()
+
+    while True:
+        user_input = input("> ")
+
+        # Orchestrate
+        plan = planner.plan(user_input)
+        hits = retrieval.retrieve(plan)
+        answer = answering.answer(plan, hits)
+
+        # Display and persist
+        session.add_turn(user_input, answer, hits)
+```
+
+**Key Benefit**: Clean separation of CLI (APP) from chat logic (BUSINESS)
+
+---
+
+## Improvement TODO Tracking
+
+### HARD RESTRICTION ⚠️
+
+**Do NOT change working code during migration!**
+
+Instead, create `REFACTOR-TODO.md` to track improvements identified during migration.
+
+### Categories of TODOs
+
+**1. Code Repetition** 🔁
+
+- Agent initialization patterns (LLM client, retries)
+- Stage setup patterns (collection access, DB connections)
+- Pipeline orchestration patterns (stage registry, error handling)
+
+**2. Architecture Improvements** 🏗️
+
+- Dependency injection opportunities
+- Factory patterns for agents/stages
+- Configuration management consolidation
+
+**3. Performance Optimizations** ⚡
+
+- Lazy loading opportunities
+- Caching strategies
+- Batch processing patterns
+
+**4. Code Quality** ✨
+
+- Type hints completion
+- Docstring standardization
+- Error message improvements
+
+### Example TODO Format
+
+````markdown
+# REFACTOR-TODO.md
+
+## Code Repetition Issues
+
+### Agent Initialization Pattern
+
+**Location**: All agents (graph_extraction_agent.py, entity_resolution_agent.py, etc.)
+
+**Current Problem**:
+
+```python
+# Repeated in every agent
+def __init__(self, llm_client, model_name="gpt-4o-mini", temperature=0.1):
+    self.llm_client = llm_client
+    self.model_name = model_name
+    self.temperature = temperature
+```
+````
+
+**Proposed Solution**:
+
+```python
+# Create BaseAgent with common initialization
+class BaseAgent:
+    def __init__(self, llm_client, model_name="gpt-4o-mini", temperature=0.1, **kwargs):
+        self.llm_client = llm_client
+        self.model_name = model_name
+        self.temperature = temperature
+        self._setup(**kwargs)
+
+    def _setup(self, **kwargs):
+        """Override in subclasses for specific setup"""
+        pass
+```
+
+**Files Affected**: 10+ agent files
+**Estimated Effort**: 2-3 hours
+**Priority**: Medium
+**Breaking Changes**: None (backward compatible)
+
+````
+
+### Phase 0.5: Create TODO Tracking (30 min)
+
+**0.5.1. Create REFACTOR-TODO.md**:
+```markdown
+# Refactoring TODO List
+
+**Purpose**: Track code improvements identified during folder structure migration
+
+**Status**: Documentation only - no changes implemented yet
+
+**Categories**:
+- [ ] Code Repetition
+- [ ] Architecture Improvements
+- [ ] Performance Optimizations
+- [ ] Code Quality
+
+## Instructions
+During migration, when you identify repetitive code or improvement opportunities:
+1. Document it here
+2. Categorize it
+3. Estimate effort
+4. Note priority
+5. Continue migration (don't fix now!)
+````
+
+**0.5.2. During Each Phase**:
+
+- Add identified improvements to TODO
+- Include file locations
+- Include code snippets
+- Estimate refactor effort
+
+**0.5.3. Post-Migration**:
+
+- Review TODO list
+- Prioritize items
+- Plan refactor sprints
+- Execute improvements safely
+
+---
+
+## LinkedIn Article: "Refactoring to Clean Architecture"
+
+### Article Plan
+
+**Target**: LinkedIn audience (developers, architects, technical leads)
+
+**Hook**: "We rewrote 18,000 lines across 100+ files without breaking a single test. Here's how."
+
+### Article Outline
+
+#### Article: "Refactoring 18k Lines Without Breaking Production: A Clean Architecture Journey"
+
+**Part 1: The Problem** (Hook)
+
+_The Setup_:
+
+- Project grew organically (agents → stages → pipelines → GraphRAG)
+- Files scattered across folders
+- Import chains becoming tangled
+- New developers confused about where code belongs
+- "Where does this go?" became daily question
+
+_The Symptoms_:
+
+```
+agents/graph_extraction_agent.py
+app/stages/graph_extraction.py
+app/services/graphrag_indexes.py
+config/graphrag_config.py
+core/graphrag_models.py
+# All GraphRAG, but 5 different folders!
+```
+
+_The Metrics_:
+
+- 100+ Python files
+- 18,000+ lines of code
+- 6 root-level folders
+- No clear architecture pattern
+- 30-second "where is this file?" searches
+
+**Part 2: The Vision** (Journey Begins)
+
+_The Realization_:
+"We need layers, not chaos."
+
+_The Principles_:
+
+```
+APP          → External interface (CLIs, UIs, Scripts)
+BUSINESS     → Implementation (Agents, Stages, Services)
+CORE         → Definitions (Models, Base classes, Config)
+DEPENDENCIES → Infrastructure (DB, LLM, External APIs)
+```
+
+_The Rule_:
+**Dependency flows downward only**
+
+- APP can import BUSINESS, CORE, DEPENDENCIES
+- BUSINESS can import CORE, DEPENDENCIES
+- CORE can import DEPENDENCIES
+- DEPENDENCIES imports nothing (except external libs)
+
+_The Constraint_:
+**Zero breakage allowed** - Production system keeps running
+
+**Part 3: The Strategy** (Breakthrough)
+
+_Type-First Organization_:
+
+```
+business/
+├── agents/           # What they are
+│   ├── graphrag/     # What they do
+│   └── ingestion/
+├── stages/
+│   ├── graphrag/
+│   └── ingestion/
+└── services/
+    ├── graphrag/
+    ├── rag/
+    └── ingestion/
+```
+
+_Migration Order_ (Critical Decision):
+
+```
+1. CORE first       # Foundation
+2. DEPENDENCIES     # Infrastructure
+3. BUSINESS         # Logic
+4. APP last         # Entry points
+```
+
+**Why this order**:
+
+- Core has no dependencies → safe to move first
+- Business depends on Core → move after Core stable
+- APP depends on everything → move last
+
+_The Safety Net_:
+
+```bash
+git tag pre-refactor-backup
+# Every phase: Test imports before proceeding
+python -c "from core.models.graphrag import EntityModel; print('OK')"
+```
+
+**Part 4: The Execution** (Action)
+
+_Phase-by-Phase Breakdown_:
+
+**Phase 1: Core Layer** (3 hours)
+
+- Moved 15 files
+- Updated 200+ import statements
+- Zero runtime errors
+
+**Discovery #1**: Import cycles hidden by deep nesting
+
+```python
+# Before (hidden cycle)
+config/graphrag_config.py → core/graphrag_models.py → config/paths.py
+
+# After (cycle broken)
+core/config/graphrag.py → core/models/graphrag.py → core/config/paths.py
+```
+
+**Phase 2: Dependencies Layer** (3 hours)
+
+- Extracted infrastructure code
+- Created adapters for MongoDB, LLM clients
+- Centralized all external dependencies
+
+**Discovery #2**: Same DB connection logic copy-pasted 8 times
+
+```python
+# Before: Repeated everywhere
+client = MongoClient(os.getenv("MONGODB_URI"))
+
+# After: One place
+from dependencies.database.mongodb import MongoDBClient
+client = MongoDBClient.get_instance()
+```
+
+**Phase 3-5: Business Layer** (8 hours)
+
+- Moved 60+ files
+- Organized by type (agents/, stages/, services/)
+- Then by feature (graphrag/, ingestion/)
+
+**Discovery #3**: Agent initialization pattern repeated 12 times
+→ Added to REFACTOR-TODO.md (not fixed yet!)
+
+**Phase 6-7: APP Layer** (2 hours)
+
+- Moved CLIs, UIs, Scripts
+- All entry points in one place
+- Clear "this is runnable" signal
+
+**Part 5: The Results** (Victory)
+
+_Metrics_:
+
+- **100% success rate** - Zero broken imports
+- **18 hours total** - Spread over 4 days
+- **0 regressions** - All pipelines run
+- **30 → 5 seconds** - File finding time
+
+_Structure Now_:
+
+```
+app/cli/graphrag.py                          # "I want to run this"
+  ↓
+business/pipelines/graphrag.py               # "I orchestrate"
+  ↓
+business/stages/graphrag/extraction.py       # "I process"
+  ↓
+business/agents/graphrag/extraction.py       # "I'm intelligent"
+  ↓
+core/models/graphrag.py                      # "I define structure"
+  ↓
+dependencies/database/mongodb.py             # "I talk to MongoDB"
+```
+
+_Developer Experience_:
+
+- **Before**: "Where does this go?" → 30 seconds searching
+- **After**: "Is it runnable? → APP. Business logic? → BUSINESS."
+
+_New Feature Time_:
+
+- **Before**: "Let me check 5 different folders..."
+- **After**: "MCP server? `app/api/`. Done."
+
+**Part 6: The Lessons** (Key Learnings)
+
+**Lesson 1: Don't mix layers**
+
+```python
+# BAD: CLI has business logic
+# app/cli/main.py
+answer = llm_client.chat.completions.create(...)  # ❌
+
+# GOOD: CLI calls business
+# app/cli/chat.py
+answer = answering.answer(plan, hits)  # ✅
+```
+
+**Lesson 2: Move bottom-up, test top-down**
+
+- Move: Core → Dependencies → Business → APP
+- Test: APP → Business → Dependencies → Core
+
+**Lesson 3: Document, don't fix (yet)**
+
+- Found 20+ refactor opportunities
+- Tracked in REFACTOR-TODO.md
+- Addressed later, safely
+
+**Lesson 4: Alphabetical ordering is underrated**
+
+```
+app/
+business/
+core/
+dependencies/
+# Immediate visual hierarchy!
+```
+
+**Part 7: The Bonus** (Future)
+
+_What We Unlocked_:
+
+**LLM Context Files**:
+
+```
+documentation/context/
+├── app-layer.md          # "I'm APP layer, I handle entry points"
+├── business-layer.md     # "I'm BUSINESS, I execute logic"
+├── core-layer.md         # "I'm CORE, I define contracts"
+└── dependencies-layer.md # "I'm DEPENDENCIES, I adapt external world"
+```
+
+**Easy Testing**:
+
+```python
+# Mock entire dependency layer
+mock_db = MockMongoDBClient()
+# Business logic runs unchanged
+```
+
+**Clear Growth Path**:
+
+- New pipeline? → `business/pipelines/`
+- New agent? → `business/agents/`
+- New external API? → `dependencies/external/`
+
+**Part 8: The Code** (Technical Deep-Dive)
+
+**Example: GraphRAG Stage Before/After**
+
+_Before_:
+
+```python
+# app/stages/graph_extraction.py
+from core.base_stage import BaseStage
+from agents.graph_extraction_agent import GraphExtractionAgent
+from config.graphrag_config import GraphExtractionConfig
+from app.services.utils import get_mongo_client  # ⚠️ Cross-cutting
+
+class GraphExtractionStage(BaseStage):
+    def setup(self):
+        self.client = get_mongo_client()  # Infrastructure in business logic
+        self.agent = GraphExtractionAgent(...)
+```
+
+_After_:
+
+```python
+# business/stages/graphrag/extraction.py
+from core.base.stage import BaseStage
+from business.agents.graphrag.extraction import GraphExtractionAgent
+from core.config.graphrag import GraphExtractionConfig
+from dependencies.database.mongodb import MongoDBClient  # ✅ Clear layer
+
+class GraphExtractionStage(BaseStage):
+    def setup(self):
+        self.client = MongoDBClient.get_instance()  # Infrastructure abstracted
+        self.agent = GraphExtractionAgent(...)
+```
+
+**What Changed**:
+
+- Imports from correct layers
+- Infrastructure in DEPENDENCIES
+- Clear file location
+- Feature grouping (`graphrag/`)
+
+**Part 9: Call to Action**
+
+"Refactoring tip: If you're struggling to explain where code should go, you need better layers.
+
+Start with 4 questions:
+
+1. Does it run or talk to users? → APP
+2. Does it implement logic? → BUSINESS
+3. Does it define structure? → CORE
+4. Does it adapt external systems? → DEPENDENCIES
+
+Your imports will tell you if you got it right."
+
+---
+
+### Article Metadata
+
+**Title**: "Refactoring 18k Lines Without Breaking Production: A Clean Architecture Journey"
+
+**Subtitle**: "How we reorganized 100+ files into a 4-layer architecture in 18 hours with zero regressions"
+
+**Tags**: #SoftwareArchitecture #CleanArchitecture #Refactoring #Python #BestPractices
+
+**Estimated Reading Time**: 12 minutes
+
+**Code Examples**: 8 (Before/After comparisons)
+
+**Diagrams**: 2 (Layer dependency, File organization)
+
+**Target Audience**: Mid to Senior developers, Technical leads, Architects
+
+**Key Takeaways**:
+
+1. Layer your codebase by dependency direction
+2. Move bottom-up (Core first), test top-down (APP first)
+3. Document improvements, don't fix during migration
+4. Type-first organization beats feature-first for discoverability
+5. Alphabetical layer names create visual hierarchy
+
+---
+
+## Timeline Estimate (Updated)
 
 | Phase     | Description                        | Time             |
 | --------- | ---------------------------------- | ---------------- |
 | 0         | Preparation                        | 1 hour           |
+| 0.5       | Create TODO Tracking               | 30 min           |
 | 1         | Move CORE                          | 2-3 hours        |
 | 2         | Extract DEPENDENCIES               | 2-3 hours        |
 | 3         | Move BUSINESS - Agents             | 1-2 hours        |
 | 4         | Move BUSINESS - Stages             | 2-3 hours        |
 | 5         | Move BUSINESS - Pipelines/Services | 2-3 hours        |
+| 5.5       | Extract Chat Feature               | 2-3 hours        |
 | 6         | Move APP - CLIs                    | 1 hour           |
 | 7         | Move APP - UI/Scripts              | 1-2 hours        |
 | 8         | Reorganize Documentation           | 1-2 hours        |
 | 9         | Update All Documentation           | 2-3 hours        |
 | 10        | Final Cleanup & Testing            | 2-3 hours        |
-| **Total** | **Complete Migration**             | **~18-27 hours** |
+| 11        | Write LinkedIn Article             | 2-3 hours        |
+| **Total** | **Complete Migration**             | **~22-32 hours** |
 
-**Recommended**: Spread over 3-4 days, 4-8 hours per day
+**Recommended**: Spread over 4-5 days, 4-8 hours per day
 
 ---
 

@@ -1,7 +1,7 @@
 """Configuration module for YoutubeRAG."""
 
 # Database and collection constants
-from config.paths import (
+from core.config.paths import (
     DB_NAME,
     COLL_RAW_VIDEOS,
     COLL_CLEANED,
@@ -22,7 +22,7 @@ from config.paths import (
 )
 
 # Runtime configuration
-from config.runtime import (
+from core.config.runtime import (
     MAX_RETRIES,
     WORDS_PER_MINUTE,
     RAG_WEIGHT_VECTOR,
@@ -31,10 +31,10 @@ from config.runtime import (
 )
 
 # Stage configuration
-from config.stage_config import BaseStageConfig
+from core.models.config import BaseStageConfig
 
 # GraphRAG configuration
-from config.graphrag_config import (
+from core.config.graphrag import (
     GraphExtractionConfig,
     EntityResolutionConfig,
     GraphConstructionConfig,
