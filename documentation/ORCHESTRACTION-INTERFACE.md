@@ -1,6 +1,6 @@
-## 🎛️ Streamlit-Controlled Agentic Flow System
+## 🎛️ Pipeline Orchestration and MCP Server Interface
 
-This document describes how the Mongo_Hack project orchestrates the end‑to‑end pipeline via CLI and Streamlit, which env vars control behavior, and how state is persisted and reused.
+This document describes how the GraphRAG Knowledge Manager MCP Server orchestrates the end‑to‑end pipelines via CLI and Streamlit, which env vars control behavior, and how state is persisted and reused. It also covers MCP server orchestration patterns.
 
 ### Components
 
@@ -10,7 +10,15 @@ This document describes how the Mongo_Hack project orchestrates the end‑to‑e
 
 ### Pipeline order
 
-1. Ingest → 2) Clean → 3) Enrich → 4) Chunk+Embed → 5) Redundancy → 6) Trust
+**Ingestion Pipeline:**
+
+1. Ingest → 2) Clean → 3) Enrich → 4) Chunk → 5) Embed → 6) Redundancy → 7) Trust
+
+**GraphRAG Pipeline:**
+
+1. Graph Extraction → 2) Entity Resolution → 3) Graph Construction → 4) Community Detection
+
+**See**: `documentation/PIPELINE.md` for comprehensive pipeline documentation.
 
 ### CLI usage
 
@@ -26,6 +34,17 @@ python Mongo_Hack/main.py chunk --llm
 python Mongo_Hack/main.py redundancy --llm
 python Mongo_Hack/main.py trust --llm
 
+# Ingestion pipeline (NEW - includes redundancy and trust)
+python main.py pipeline --playlist_id <ID> --max 10 --llm
+python app/pipelines/ingestion_pipeline.py --playlist_id <ID> --max 10 --llm
+python app/pipelines/ingestion_pipeline.py --stage clean --llm
+
+# GraphRAG pipeline
+python run_graphrag_pipeline.py --max 100 --model gpt-4o-mini
+python run_graphrag_pipeline.py --stage graph_extraction --video-id VIDEO_ID
+python run_graphrag_pipeline.py --status  # Check pipeline status
+python run_graphrag_pipeline.py --cleanup  # Clean up failed stages
+
 # Launch UI
 streamlit run Mongo_Hack/streamlit_app.py
 ```
@@ -38,12 +57,21 @@ streamlit run Mongo_Hack/streamlit_app.py
 
 ### Collections (state)
 
+**Traditional Collections:**
+
 - `raw_videos`: metadata + transcript_raw.
 - `cleaned_transcripts`: cleaned_text, optional paragraphs.
 - `enriched_transcripts`: segments with tags/entities/code.
 - `video_chunks`: chunk text, metadata, embedding, trust/redundancy flags.
 - `memory_logs`: query, retrieved citations, answer for auditability.
 - `video_feedback`, `chunk_feedback`: per-session feedback (rating/tags/note).
+
+**GraphRAG Collections:**
+
+- `entities`: resolved entities with canonical names, types, descriptions, trust scores.
+- `relations`: entity relationships with confidence scores and weights.
+- `communities`: detected entity communities with summaries and coherence scores.
+- `entity_mentions`: entity mentions in chunks with context and confidence.
 
 ### Environment variables
 

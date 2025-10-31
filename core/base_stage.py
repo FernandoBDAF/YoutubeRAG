@@ -16,7 +16,7 @@ except ModuleNotFoundError:
     from app.services.utils import get_mongo_client
 
 from config.paths import DB_NAME as DEFAULT_DB
-from core.stage_config import BaseStageConfig
+from config.stage_config import BaseStageConfig
 
 
 class BaseStage:
@@ -113,16 +113,40 @@ class BaseStage:
             self.config = config
         self.setup()
         try:
-            for i, d in enumerate(self.iter_docs()):
+            docs = list(self.iter_docs())
+            total_docs = len(docs)
+            if self.config.max:
+                total_docs = min(total_docs, int(self.config.max))
+
+            if total_docs > 0:
+                self.logger.info(
+                    f"[{self.name}] Processing {total_docs} document(s) "
+                    f"(max={self.config.max if self.config.max else 'unlimited'})"
+                )
+
+            for i, d in enumerate(docs):
                 if self.config.max and i >= int(self.config.max):
                     break
                 try:
+                    # Log progress for batches (every 10% or every 10 items, whichever is more frequent)
+                    if total_docs > 10 and (i + 1) % max(1, total_docs // 10) == 0:
+                        progress_pct = int((i + 1) / total_docs * 100)
+                        self.logger.info(
+                            f"[{self.name}] Progress: {i + 1}/{total_docs} ({progress_pct}%) "
+                            f"processed={self.stats['processed']} "
+                            f"updated={self.stats['updated']} "
+                            f"skipped={self.stats['skipped']} "
+                            f"failed={self.stats['failed']}"
+                        )
                     self.handle_doc(d)
                     self.stats["processed"] += 1
                 except Exception as e:
                     self.stats["failed"] += 1
                     self.log(f"Error: {e}")
-                    print(f"Error executing {self.name} for document {d}: {e}")
+                    self.logger.error(
+                        f"[{self.name}] Error executing for document: {e}",
+                        exc_info=False,
+                    )
             self.finalize()
             return 0
         except Exception as e:

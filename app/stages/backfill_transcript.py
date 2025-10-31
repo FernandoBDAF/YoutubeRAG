@@ -5,7 +5,7 @@ try:
     from app.services.transcripts import get_transcript
     from config.paths import COLL_RAW_VIDEOS
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
@@ -15,7 +15,7 @@ except ModuleNotFoundError:
     from app.services.transcripts import get_transcript
     from config.paths import COLL_RAW_VIDEOS
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
 
 
 @dataclass
@@ -30,7 +30,12 @@ class BackfillTranscriptConfig(BaseStageConfig):
         langs = getattr(args, "languages", None) or ["en", "en-US", "en-GB"]
         channel_id = getattr(args, "channel_id", None)
         channel_title = getattr(args, "channel_title", None)
-        return cls(**vars(base), languages=langs, channel_id=channel_id, channel_title=channel_title)
+        return cls(
+            **vars(base),
+            languages=langs,
+            channel_id=channel_id,
+            channel_title=channel_title,
+        )
 
 
 class BackfillTranscriptStage(BaseStage):

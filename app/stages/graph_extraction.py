@@ -1,0 +1,397 @@
+"""
+Graph Extraction Stage
+
+This stage extracts entities and relationships from video chunks using LLM-based extraction.
+Extends the BaseStage to integrate with the existing pipeline architecture.
+"""
+
+import logging
+import time
+from typing import Dict, List, Any, Optional, Iterator
+from pymongo.collection import Collection
+from pymongo.database import Database
+from core.base_stage import BaseStage
+from config.graphrag_config import GraphExtractionConfig
+from agents.graph_extraction_agent import GraphExtractionAgent
+from core.graphrag_models import KnowledgeModel
+from config.paths import COLL_CHUNKS
+import json
+
+logger = logging.getLogger(__name__)
+
+
+class GraphExtractionStage(BaseStage):
+    """
+    Stage for extracting entities and relationships from video chunks.
+    """
+
+    name = "graph_extraction"
+    description = "Extract entities and relationships from text chunks"
+    ConfigCls = GraphExtractionConfig
+
+    def __init__(self):
+        """Initialize the Graph Extraction Stage."""
+        super().__init__()
+        # Don't initialize agent here - will be done in setup()
+
+    def setup(self):
+        """Setup the stage with config-dependent initialization."""
+        super().setup()
+
+        # Initialize OpenAI client for LLM operations
+        import os
+        from openai import OpenAI
+
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "OPENAI_API_KEY is required for GraphRAG stages. Set it in .env file."
+            )
+        self.llm_client = OpenAI(api_key=api_key, timeout=60)
+
+        # Initialize the extraction agent now that we have access to self.config
+        self.extraction_agent = GraphExtractionAgent(
+            llm_client=self.llm_client,
+            model_name=self.config.model_name,
+            temperature=self.config.temperature,
+            max_retries=self.config.llm_retries,
+            retry_delay=self.config.llm_backoff_s,
+        )
+
+        logger.info(f"Initialized {self.name} with model {self.config.model_name}")
+
+    def iter_docs(self) -> Iterator[Dict[str, Any]]:
+        """
+        Iterate over chunks that need entity extraction.
+
+        Yields:
+            Chunk documents that need processing
+        """
+        src_db = self.config.read_db_name or self.config.db_name
+        src_coll_name = self.config.read_coll or COLL_CHUNKS
+        collection = self.get_collection(src_coll_name, io="read", db_name=src_db)
+
+        # Query for chunks that haven't been processed for entity extraction
+        query = {
+            "chunk_text": {"$exists": True, "$ne": ""},
+            "$or": [
+                {"graphrag_extraction": {"$exists": False}},
+                {"graphrag_extraction.status": {"$ne": "completed"}},
+            ],
+        }
+
+        # Skip chunks marked for exclusion (used in random chunk testing)
+        query["_test_exclude"] = {"$exists": False}
+
+        if self.config.video_id:
+            query["video_id"] = self.config.video_id
+
+        logger.info(f"Querying chunks for entity extraction: {query}")
+
+        cursor = collection.find(query).limit(self.config.max or float("inf"))
+
+        for doc in cursor:
+            yield doc
+
+    def handle_doc(self, doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Extract entities and relationships from a single chunk and write to database.
+
+        Args:
+            doc: Chunk document to process
+
+        Returns:
+            None (writes directly to database via update_one)
+        """
+        chunk_id = doc.get("chunk_id", "unknown")
+        video_id = doc.get("video_id", "unknown")
+
+        logger.debug(f"Processing chunk {chunk_id} from video {video_id}")
+
+        try:
+            # Extract entities and relationships
+            knowledge_model = self.extraction_agent.extract_from_chunk(doc)
+
+            if knowledge_model is None:
+                logger.warning(f"Failed to extract entities from chunk {chunk_id}")
+                return self._mark_extraction_failed(doc, "extraction_failed")
+
+            # Convert to serializable format
+            extraction_data = {
+                "entities": [
+                    {
+                        "name": entity.name,
+                        "type": entity.type.value,
+                        "description": entity.description,
+                        "confidence": entity.confidence,
+                    }
+                    for entity in knowledge_model.entities
+                ],
+                "relationships": [
+                    {
+                        "source_entity": {
+                            "name": rel.source_entity.name,
+                            "type": rel.source_entity.type.value,
+                            "description": rel.source_entity.description,
+                            "confidence": rel.source_entity.confidence,
+                        },
+                        "target_entity": {
+                            "name": rel.target_entity.name,
+                            "type": rel.target_entity.type.value,
+                            "description": rel.target_entity.description,
+                            "confidence": rel.target_entity.confidence,
+                        },
+                        "relation": rel.relation,
+                        "description": rel.description,
+                        "confidence": rel.confidence,
+                    }
+                    for rel in knowledge_model.relationships
+                ],
+                "extraction_stats": {
+                    "entity_count": len(knowledge_model.entities),
+                    "relationship_count": len(knowledge_model.relationships),
+                    "extraction_timestamp": time.time(),
+                },
+            }
+
+            # Prepare extraction payload
+            extraction_payload = {
+                "graphrag_extraction": {
+                    "status": "completed",
+                    "data": extraction_data,
+                    "processed_at": time.time(),
+                    "model_used": self.config.model_name,
+                }
+            }
+
+            # Write to database
+            dst_db = self.config.write_db_name or self.config.db_name
+            dst_coll_name = self.config.write_coll or COLL_CHUNKS
+            collection = self.get_collection(dst_coll_name, io="write", db_name=dst_db)
+
+            # Check if already processed (unless upsert_existing is True)
+            if not self.config.upsert_existing:
+                existing = collection.find_one(
+                    {"video_id": video_id, "chunk_id": chunk_id},
+                    {"graphrag_extraction.status": 1},
+                )
+                if (
+                    existing
+                    and existing.get("graphrag_extraction", {}).get("status")
+                    == "completed"
+                ):
+                    logger.debug(
+                        f"Skipping chunk {chunk_id} - already has completed extraction"
+                    )
+                    self.stats["skipped"] += 1
+                    return None
+
+            # Update the chunk with extraction results
+            collection.update_one(
+                {"video_id": video_id, "chunk_id": chunk_id},
+                {"$set": extraction_payload},
+                upsert=False,
+            )
+
+            self.stats["updated"] += 1
+            logger.debug(
+                f"Successfully extracted {len(knowledge_model.entities)} entities "
+                f"and {len(knowledge_model.relationships)} relationships from chunk {chunk_id}"
+            )
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error processing chunk {chunk_id}: {e}")
+            return self._mark_extraction_failed(doc, str(e))
+
+    def _mark_extraction_failed(self, doc: Dict[str, Any], error_message: str) -> None:
+        """
+        Mark extraction as failed for a document.
+
+        Args:
+            doc: Document to mark as failed
+            error_message: Error message describing the failure
+        """
+        chunk_id = doc.get("chunk_id", "unknown")
+        video_id = doc.get("video_id", "unknown")
+
+        extraction_payload = {
+            "graphrag_extraction": {
+                "status": "failed",
+                "error": error_message,
+                "processed_at": time.time(),
+                "model_used": self.config.model_name,
+            }
+        }
+
+        # Write failure status to database
+        dst_db = self.config.write_db_name or self.config.db_name
+        dst_coll_name = self.config.write_coll or COLL_CHUNKS
+        collection = self.get_collection(dst_coll_name, io="write", db_name=dst_db)
+
+        collection.update_one(
+            {"video_id": video_id, "chunk_id": chunk_id},
+            {"$set": extraction_payload},
+            upsert=False,
+        )
+
+        self.stats["failed"] += 1
+        logger.warning(f"Marked chunk {chunk_id} as failed: {error_message}")
+
+        return None
+
+    def process_batch(
+        self, docs: List[Dict[str, Any]]
+    ) -> List[Optional[Dict[str, Any]]]:
+        """
+        Process a batch of documents with concurrent extraction.
+
+        Args:
+            docs: List of documents to process
+
+        Returns:
+            List of processed documents (or None for failed processing)
+        """
+        logger.info(f"Processing batch of {len(docs)} chunks for entity extraction")
+
+        results = []
+        for i, doc in enumerate(docs):
+            logger.debug(f"Processing document {i + 1}/{len(docs)}")
+
+            try:
+                result = self.handle_doc(doc)
+                results.append(result)
+
+                # Add small delay to avoid rate limiting
+                if i < len(docs) - 1:  # Don't delay after the last document
+                    time.sleep(0.1)
+
+            except Exception as e:
+                logger.error(f"Error processing document {i + 1}: {e}")
+                results.append(None)
+
+        successful_count = sum(1 for r in results if r is not None)
+        logger.info(
+            f"Batch processing completed: {successful_count}/{len(docs)} successful"
+        )
+
+        return results
+
+    def get_processing_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about the processing stage.
+
+        Returns:
+            Dictionary containing processing statistics
+        """
+        src_db = self.config.read_db_name or self.config.db_name
+        src_coll_name = self.config.read_coll or COLL_CHUNKS
+        collection = self.get_collection(src_coll_name, io="read", db_name=src_db)
+
+        # Count total chunks
+        total_chunks = collection.count_documents(
+            {"chunk_text": {"$exists": True, "$ne": ""}}
+        )
+
+        # Count processed chunks
+        processed_chunks = collection.count_documents(
+            {"graphrag_extraction.status": "completed"}
+        )
+
+        # Count failed chunks
+        failed_chunks = collection.count_documents(
+            {"graphrag_extraction.status": "failed"}
+        )
+
+        # Count pending chunks
+        pending_chunks = total_chunks - processed_chunks - failed_chunks
+
+        return {
+            "total_chunks": total_chunks,
+            "processed_chunks": processed_chunks,
+            "failed_chunks": failed_chunks,
+            "pending_chunks": pending_chunks,
+            "completion_rate": (
+                processed_chunks / total_chunks if total_chunks > 0 else 0
+            ),
+            "failure_rate": failed_chunks / total_chunks if total_chunks > 0 else 0,
+        }
+
+    def cleanup_failed_extractions(self) -> int:
+        """
+        Clean up failed extraction records to allow retry.
+
+        Returns:
+            Number of failed extractions cleaned up
+        """
+        src_db = self.config.read_db_name or self.config.db_name
+        src_coll_name = self.config.read_coll or COLL_CHUNKS
+        collection = self.get_collection(src_coll_name, io="read", db_name=src_db)
+
+        result = collection.update_many(
+            {"graphrag_extraction.status": "failed"},
+            {"$unset": {"graphrag_extraction": 1}},
+        )
+
+        logger.info(f"Cleaned up {result.modified_count} failed extractions")
+        return result.modified_count
+
+    def get_extraction_summary(self, video_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get a summary of extraction results for a specific video or all videos.
+
+        Args:
+            video_id: Optional video ID to filter by
+
+        Returns:
+            Dictionary containing extraction summary
+        """
+        src_db = self.config.read_db_name or self.config.db_name
+        src_coll_name = self.config.read_coll or COLL_CHUNKS
+        collection = self.get_collection(src_coll_name, io="read", db_name=src_db)
+
+        query = {"graphrag_extraction.status": "completed"}
+        if video_id:
+            query["video_id"] = video_id
+
+        pipeline = [
+            {"$match": query},
+            {
+                "$project": {
+                    "entity_count": {"$size": "$graphrag_extraction.data.entities"},
+                    "relationship_count": {
+                        "$size": "$graphrag_extraction.data.relationships"
+                    },
+                    "video_id": 1,
+                    "chunk_id": 1,
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$video_id" if not video_id else None,
+                    "total_chunks": {"$sum": 1},
+                    "total_entities": {"$sum": "$entity_count"},
+                    "total_relationships": {"$sum": "$relationship_count"},
+                    "avg_entities_per_chunk": {"$avg": "$entity_count"},
+                    "avg_relationships_per_chunk": {"$avg": "$relationship_count"},
+                }
+            },
+        ]
+
+        results = list(collection.aggregate(pipeline))
+
+        if video_id:
+            return (
+                results[0]
+                if results
+                else {
+                    "total_chunks": 0,
+                    "total_entities": 0,
+                    "total_relationships": 0,
+                    "avg_entities_per_chunk": 0,
+                    "avg_relationships_per_chunk": 0,
+                }
+            )
+        else:
+            return {"videos": results, "total_videos": len(results)}

@@ -1,4 +1,6 @@
 import os
+import logging
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -8,7 +10,7 @@ from pymongo import MongoClient
 try:
     from app.services.utils import get_mongo_client
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
@@ -17,9 +19,11 @@ except ModuleNotFoundError:
     )
     from app.services.utils import get_mongo_client
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
 from config.paths import DB_NAME, COLL_CHUNKS
 import os
+
+logger = logging.getLogger(__name__)
 
 
 def cosine(a: List[float], b: List[float]) -> float:
@@ -105,9 +109,32 @@ class RedundancyStage(BaseStage):
         by_video: Dict[str, List[Dict[str, Any]]] = {}
         for c in chunks:
             by_video.setdefault(c.get("video_id"), []).append(c)
+
+        video_count = len(by_video)
+        total_chunks = len(chunks)
+        if self.config.verbose:
+            logger.info(
+                f"Selected {total_chunks} chunk(s) across {video_count} video(s) for redundancy analysis"
+            )
+        else:
+            logger.debug(
+                f"Processing {total_chunks} chunks across {video_count} videos"
+            )
+
         return [{"video_id": vid, "items": items} for vid, items in by_video.items()]
 
     def handle_doc(self, group):
+        video_id = group.get("video_id")
+        items = group.get("items", [])
+        if not items:
+            return
+
+        # Get collection once for all chunk processing
+        src_db = self.config.read_db_name or self.config.db_name
+        coll = self.get_collection(
+            self.config.read_coll or COLL_CHUNKS, io="write", db_name=src_db
+        )
+
         for i, ci in enumerate(items):
             vi = ci.get("embedding", [])
             best_score = -1.0
@@ -239,10 +266,11 @@ class RedundancyStage(BaseStage):
                 except Exception:
                     primary_chunk_id = best.get("chunk_id") if best else None
 
+            chunk_id = ci.get("chunk_id")
             if not self.config.upsert_existing:
                 # Only update when fields are missing
                 existing = coll.find_one(
-                    {"video_id": ci.get("video_id"), "chunk_id": ci.get("chunk_id")},
+                    {"video_id": ci.get("video_id"), "chunk_id": chunk_id},
                     {"is_redundant": 1, "redundancy_score": 1},
                 )
                 if (
@@ -250,9 +278,28 @@ class RedundancyStage(BaseStage):
                     and "is_redundant" in existing
                     and "redundancy_score" in existing
                 ):
+                    logger.info(
+                        f"[redundancy] Skipping {chunk_id} (video={video_id}): "
+                        f"already has is_redundant={existing.get('is_redundant')}, "
+                        f"score={existing.get('redundancy_score', 0):.3f}"
+                    )
+                    self.stats["skipped"] += 1
                     continue
+
+            # Log update details
+            duplicate_info = (
+                f"duplicate_of={primary_chunk_id}"
+                if (is_dup and primary_chunk_id and primary_chunk_id != chunk_id)
+                else ""
+            )
+            logger.info(
+                f"[redundancy] Updating {chunk_id} (video={video_id}): "
+                f"is_redundant={is_dup}, score={best_score:.3f}, method={method}"
+                + (f", {duplicate_info}" if duplicate_info else "")
+            )
+
             coll.update_one(
-                {"video_id": ci.get("video_id"), "chunk_id": ci.get("chunk_id")},
+                {"video_id": ci.get("video_id"), "chunk_id": chunk_id},
                 {
                     "$set": {
                         "is_redundant": bool(is_dup),
@@ -262,7 +309,7 @@ class RedundancyStage(BaseStage):
                             if (
                                 is_dup
                                 and primary_chunk_id
-                                and primary_chunk_id != ci.get("chunk_id")
+                                and primary_chunk_id != chunk_id
                             )
                             else None
                         ),
@@ -273,7 +320,199 @@ class RedundancyStage(BaseStage):
                 },
                 upsert=False,
             )
-        print(f"Redundancy pass done for video {video_id} (llm={self.config.use_llm})")
+            self.stats["updated"] += 1
+
+        # Only log if verbose mode, otherwise use debug level
+        if self.config.verbose:
+            logger.info(
+                f"Redundancy pass done for video {video_id} (llm={self.config.use_llm}, chunks={len(items)})"
+            )
+        else:
+            logger.debug(
+                f"Redundancy pass done for video {video_id} (llm={self.config.use_llm}, chunks={len(items)})"
+            )
+
+    def get_entity_canonicalization_signals(
+        self, video_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Export entity canonicalization signals for GraphRAG.
+
+        This method provides similarity scores and grouping hints that can be used
+        by the GraphRAG entity resolution process to improve entity canonicalization.
+
+        Args:
+            video_id: Optional video ID to filter by
+
+        Returns:
+            Dictionary containing canonicalization signals
+        """
+        try:
+            src_db = self.config.read_db_name or self.config.db_name
+            coll = self.get_collection(
+                self.config.read_coll or COLL_CHUNKS, io="read", db_name=src_db
+            )
+
+            # Query for chunks with redundancy information
+            query = {
+                "redundancy_score": {"$exists": True},
+                "is_redundant": {"$exists": True},
+            }
+            if video_id:
+                query["video_id"] = video_id
+
+            chunks = list(
+                coll.find(
+                    query,
+                    {
+                        "video_id": 1,
+                        "chunk_id": 1,
+                        "redundancy_score": 1,
+                        "is_redundant": 1,
+                        "duplicate_of": 1,
+                        "redundancy_method": 1,
+                    },
+                )
+            )
+
+            # Group chunks by similarity clusters
+            similarity_clusters = {}
+            entity_grouping_hints = {}
+
+            for chunk in chunks:
+                chunk_id = chunk.get("chunk_id")
+                video_id = chunk.get("video_id")
+                redundancy_score = chunk.get("redundancy_score", 0.0)
+                is_redundant = chunk.get("is_redundant", False)
+                duplicate_of = chunk.get("duplicate_of")
+
+                # Create similarity cluster based on redundancy information
+                if redundancy_score >= self.config.threshold:
+                    cluster_key = f"{video_id}:similar"
+                    if cluster_key not in similarity_clusters:
+                        similarity_clusters[cluster_key] = []
+
+                    similarity_clusters[cluster_key].append(
+                        {
+                            "chunk_id": chunk_id,
+                            "video_id": video_id,
+                            "similarity_score": redundancy_score,
+                            "is_primary": not is_redundant,
+                            "duplicate_of": duplicate_of,
+                        }
+                    )
+
+                # Create entity grouping hints based on high similarity
+                if (
+                    redundancy_score >= 0.8
+                ):  # High similarity threshold for entity grouping
+                    entity_grouping_hints[chunk_id] = {
+                        "high_similarity_chunks": (
+                            [duplicate_of] if duplicate_of else []
+                        ),
+                        "similarity_score": redundancy_score,
+                        "grouping_confidence": min(redundancy_score, 1.0),
+                    }
+
+            logger.info(f"Generated canonicalization signals for {len(chunks)} chunks")
+
+            return {
+                "similarity_clusters": similarity_clusters,
+                "entity_grouping_hints": entity_grouping_hints,
+                "total_chunks_analyzed": len(chunks),
+                "high_similarity_pairs": len(
+                    [c for c in chunks if c.get("redundancy_score", 0) >= 0.8]
+                ),
+                "redundancy_threshold": self.config.threshold,
+                "generated_at": time.time(),
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to generate entity canonicalization signals: {e}")
+            return {
+                "similarity_clusters": {},
+                "entity_grouping_hints": {},
+                "total_chunks_analyzed": 0,
+                "high_similarity_pairs": 0,
+                "redundancy_threshold": self.config.threshold,
+                "error": str(e),
+                "generated_at": time.time(),
+            }
+
+    def get_chunk_similarity_matrix(
+        self, video_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get chunk similarity matrix for GraphRAG entity resolution.
+
+        Args:
+            video_id: Optional video ID to filter by
+
+        Returns:
+            Dictionary containing similarity matrix information
+        """
+        try:
+            src_db = self.config.read_db_name or self.config.db_name
+            coll = self.get_collection(
+                self.config.read_coll or COLL_CHUNKS, io="read", db_name=src_db
+            )
+
+            # Get chunks with embeddings
+            query = {"embedding": {"$exists": True}}
+            if video_id:
+                query["video_id"] = video_id
+
+            chunks = list(
+                coll.find(
+                    query, {"video_id": 1, "chunk_id": 1, "embedding": 1, "text": 1}
+                )
+            )
+
+            similarity_matrix = {}
+
+            for i, chunk_i in enumerate(chunks):
+                chunk_id_i = chunk_i.get("chunk_id")
+                embedding_i = chunk_i.get("embedding", [])
+
+                if not embedding_i:
+                    continue
+
+                similarity_matrix[chunk_id_i] = {}
+
+                for j, chunk_j in enumerate(chunks):
+                    if i == j:
+                        continue
+
+                    chunk_id_j = chunk_j.get("chunk_id")
+                    embedding_j = chunk_j.get("embedding", [])
+
+                    if not embedding_j:
+                        continue
+
+                    similarity_score = cosine(embedding_i, embedding_j)
+
+                    # Only store high similarity scores to reduce memory usage
+                    if similarity_score >= 0.7:
+                        similarity_matrix[chunk_id_i][chunk_id_j] = similarity_score
+
+            logger.info(f"Generated similarity matrix for {len(chunks)} chunks")
+
+            return {
+                "similarity_matrix": similarity_matrix,
+                "total_chunks": len(chunks),
+                "high_similarity_threshold": 0.7,
+                "generated_at": time.time(),
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to generate similarity matrix: {e}")
+            return {
+                "similarity_matrix": {},
+                "total_chunks": 0,
+                "high_similarity_threshold": 0.7,
+                "error": str(e),
+                "generated_at": time.time(),
+            }
 
 
 if __name__ == "__main__":

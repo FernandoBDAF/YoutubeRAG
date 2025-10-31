@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 
 try:
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
     from core.compression import compress_text, postprocess_compressed_text
     from config.paths import COLL_CLEANED, COLL_ENRICHED
 except ModuleNotFoundError:
@@ -14,7 +14,7 @@ except ModuleNotFoundError:
         _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", ".."))
     )
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
     from core.compression import compress_text, postprocess_compressed_text
     from config.paths import COLL_CLEANED, COLL_ENRICHED
 

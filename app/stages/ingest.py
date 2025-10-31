@@ -12,7 +12,7 @@ from googleapiclient.errors import HttpError
 try:
     from app.services.utils import get_mongo_client
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
@@ -21,7 +21,7 @@ except ModuleNotFoundError:
     )
     from app.services.utils import get_mongo_client
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
 from config.paths import (
     DB_NAME,
     COLL_RAW_VIDEOS,
@@ -355,7 +355,7 @@ class IngestStage(BaseStage):
                 print(f"[ingest] Error creating stub for {vid}: {e}")
             return
         try:
-            
+
             transcript_text, transcript_lang = fetch_transcript_text(vid)
         except Exception as e:
             print(f"[ingest] Error fetching transcript for {vid}: {e}")

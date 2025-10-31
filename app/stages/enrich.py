@@ -8,7 +8,7 @@ from pymongo import MongoClient
 try:
     from app.services.utils import get_mongo_client
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
 
     # Ensure these are available in the normal import path as well
     from core.text_utils import normalize_newlines
@@ -21,7 +21,7 @@ except ModuleNotFoundError:
     )
     from app.services.utils import get_mongo_client
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
     from core.text_utils import normalize_newlines
     from core.concurrency import run_llm_concurrent
 from config.paths import (

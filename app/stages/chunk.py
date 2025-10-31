@@ -7,7 +7,7 @@ import re
 try:
     from app.services.utils import get_mongo_client
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
@@ -16,7 +16,7 @@ except ModuleNotFoundError:
     )
     from app.services.utils import get_mongo_client
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
 
 from config.paths import (
     DB_NAME,
@@ -122,8 +122,8 @@ class ChunkStage(BaseStage):
         if not self.config.upsert_existing:
             existing_any = chunks_coll.find_one({"video_id": video_id}, {"_id": 1})
             if existing_any:
-                print(
-                    f"[chunk] Skip existing chunks {video_id} (upsert_existing=False)"
+                self.logger.info(
+                    f"[chunk] Skip existing chunks {video_id} (upsert_existing={self.config.upsert_existing})"
                 )
                 self.stats["skipped"] += 1
                 return

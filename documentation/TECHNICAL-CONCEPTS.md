@@ -163,7 +163,82 @@ Use cases:
 - Chunk/Embed: `CHUNK_UPSERT_EXISTING`, `EMBEDDER=voyage|hashing`, `VECTOR_DIM`, `VOYAGE_*`.
 - Concurrency/Rate: `VOYAGE_RPM`, backoff bases, retries.
 
-### 12) Recommended Presets
+### 12) GraphRAG Pipeline Architecture
+
+The GraphRAG pipeline extends traditional RAG with knowledge graph construction:
+
+- **Graph Extraction**: Extract entities and relationships from video chunks using LLM
+- **Entity Resolution**: Canonicalize and resolve entity references across chunks
+- **Graph Construction**: Build knowledge graph from resolved entities and relationships
+- **Community Detection**: Identify entity communities and generate summaries
+
+Key improvements:
+
+- **Fixed Critical Bugs**: `setup()`, `get_pipeline_status()`, and `cleanup_failed_stages()` methods now work correctly
+- **Stage Registry Integration**: Uses unified `PipelineRunner` pattern for consistency
+- **Error Handling**: Robust error handling and recovery mechanisms
+- **Status Monitoring**: Real-time pipeline status and cleanup capabilities
+
+### 13) MCP Server Architecture
+
+**Model Context Protocol (MCP)** is a standard protocol for AI assistants to interact with external systems. This project implements an MCP server that exposes knowledge graph operations.
+
+**Key Concepts**:
+
+- **MCP Tools**: Functions that AI assistants can call (e.g., query knowledge graph, ingest documents)
+- **MCP Resources**: Data that AI assistants can read (e.g., entity schemas, community summaries)
+- **MCP Prompts**: Pre-defined prompt templates for common operations
+
+**Architecture**:
+
+- MCP server layer sits above GraphRAG and ingestion pipelines
+- Exposes GraphRAG operations as MCP tools
+- Provides knowledge graph schemas as MCP resources
+- Enables AI assistants to interact with the knowledge graph seamlessly
+
+**See**: `documentation/MCP-SERVER.md` for detailed MCP server implementation.
+
+### 14) Document Type Extensibility
+
+**Current Architecture**:
+
+- Source-specific raw collections: `raw_videos`, future `raw_pdfs`, `raw_html`
+- Unified chunks collection: `video_chunks` with `source_type` field
+- Configurable processing: Different chunk sizes, strategies per document type
+
+**Adding New Document Types**:
+
+1. Create source-specific raw collection (e.g., `raw_pdfs`)
+2. Implement ingestor stage (e.g., `PDFIngestStage`)
+3. Ensure chunks include `source_type="pdf"` field
+4. Configure type-specific settings (chunk size, strategy)
+5. Optionally create type-specific pipeline
+
+**Benefits**:
+
+- Clear separation of document sources in database
+- Type-specific optimizations possible
+- Unified processing pipeline for all types
+- Easy to extend without breaking existing functionality
+
+### 15) Testing Strategy
+
+Comprehensive testing approach covering all project components:
+
+- **Unit Tests (70%)**: Individual functions and classes with 80%+ coverage
+- **Integration Tests (20%)**: Component interactions and database operations
+- **End-to-End Tests (10%)**: Complete pipeline workflows and user scenarios
+- **Performance Testing**: Load, stress, and benchmark testing
+- **Mock Services**: OpenAI, MongoDB, and YouTube API mocking for isolated testing
+
+Testing infrastructure:
+
+- **Framework**: pytest with comprehensive dependencies and utilities
+- **Test Data**: Synthetic, sample, and mock data management
+- **CI/CD**: Automated testing pipeline with quality gates
+- **Monitoring**: Test performance and reliability tracking
+
+### 16) Recommended Presets
 
 Demo (internet available, best quality)
 
@@ -176,3 +251,12 @@ Offline/low‑cost
 Fast iteration
 
 - Disable expensive stages via upsert flags; run redundancy/trust with narrow scopes; enable batch upserts.
+
+GraphRAG development
+
+- Use `python run_graphrag_pipeline.py --status` to monitor pipeline health, `--cleanup` to recover from failures.
+
+Pipeline development
+
+- Use `app/pipelines/ingestion_pipeline.py` for complete ingestion with redundancy and trust stages.
+- See `documentation/PIPELINE.md` for comprehensive pipeline documentation and patterns.

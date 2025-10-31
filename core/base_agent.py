@@ -1,12 +1,15 @@
 import os
 import uuid
 import json
+import logging
 from datetime import datetime
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 import openai
+
+logger = logging.getLogger(__name__)
 
 
 class BaseAgentConfig(BaseModel):
@@ -140,6 +143,7 @@ class BaseAgent(ABC):
 
     # ---- Logging ----
     def log(self, prompt: str, output: str):
+        """Log agent interaction (called explicitly, not automatically)."""
         log_entry = {
             "agent_id": self.id,
             "agent_name": self.name,
@@ -147,12 +151,28 @@ class BaseAgent(ABC):
             "prompt_preview": prompt[:100],
             "output_preview": output[:100],
         }
-        print(json.dumps(log_entry, indent=2))
+        # Only log if explicitly called (not auto-logged)
+        logger.debug(
+            f"[{self.name}] Agent interaction: {json.dumps(log_entry, ensure_ascii=False)}"
+        )
 
     def _log_event(self, event: Dict[str, Any]):
+        """Internal event logging - uses DEBUG level to avoid terminal flooding."""
         payload = {"agent": self.name, "ts": self.timestamp}
         payload.update(event)
-        print(json.dumps(payload, ensure_ascii=False))
+
+        # Use DEBUG level for detailed events (model_call:start/done)
+        # Only log errors at INFO/WARNING level
+        event_type = event.get("type", "unknown")
+        if "error" in event_type.lower() or event_type == "model_call:error":
+            logger.warning(
+                f"[{self.name}] {event_type}: {payload.get('error', 'unknown error')}"
+            )
+        else:
+            # Model call start/done, retry attempts - all at DEBUG level
+            logger.debug(
+                f"[{self.name}] {event_type}: {json.dumps(payload, ensure_ascii=False)}"
+            )
 
     # ---- Generic retry-with-feedback executor ----
     def execute_with_retries(self, max_retries: int, step_fn):

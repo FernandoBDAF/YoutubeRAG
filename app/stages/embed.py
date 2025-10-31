@@ -8,7 +8,7 @@ import requests
 try:
     from app.services.utils import get_mongo_client
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
@@ -17,7 +17,7 @@ except ModuleNotFoundError:
     )
     from app.services.utils import get_mongo_client
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
 
 from app.services.rate_limit import RateLimiter
 from config.paths import COLL_CHUNKS, VECTOR_DIM

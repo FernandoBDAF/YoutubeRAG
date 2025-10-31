@@ -9,7 +9,7 @@ from pymongo import MongoClient
 try:
     from app.services.utils import get_mongo_client
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
@@ -18,7 +18,7 @@ except ModuleNotFoundError:
     )
     from app.services.utils import get_mongo_client
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
 from config.paths import DB_NAME, COLL_RAW_VIDEOS, COLL_CLEANED
 from core.text_utils import normalize_newlines
 from core.concurrency import run_llm_concurrent
@@ -72,6 +72,7 @@ def _llm_clean_text(
     retries: int = 1,
     backoff_s: float = 0.5,
     qps: Optional[float] = None,
+    logger=None,
 ) -> dict:
     # Remove common single-word interjections/fillers before splitting
     fillers_re = re.compile(
@@ -83,9 +84,23 @@ def _llm_clean_text(
     if not chunks:
         return {"video_id": video_id, "cleaned_text": "", "paragraphs": []}
 
+    # Log progress for large operations
+    num_chunks = len(chunks)
+    if logger:
+        if num_chunks > 5:
+            logger.info(
+                f"[clean] Processing {video_id}: {num_chunks} chunks "
+                f"with {max_workers} workers (this may take a while)..."
+            )
+        else:
+            logger.debug(f"[clean] Processing {video_id}: {num_chunks} chunks")
+
     def _on_error(e, ch):
         return ch
 
+    import time
+
+    llm_start = time.time()
     cleaned_parts = run_llm_concurrent(
         chunks,
         agent_factory,
@@ -98,13 +113,26 @@ def _llm_clean_text(
         on_error=_on_error,
         preserve_order=True,
     )
+    llm_elapsed = time.time() - llm_start
+    if logger:
+        if num_chunks > 5:
+            logger.info(
+                f"[clean] Completed LLM calls for {video_id}: "
+                f"{num_chunks} chunks in {llm_elapsed:.1f}s "
+                f"(avg {llm_elapsed/num_chunks:.2f}s/chunk)"
+            )
+        else:
+            logger.debug(
+                f"[clean] Completed LLM calls for {video_id}: "
+                f"{num_chunks} chunks in {llm_elapsed:.1f}s"
+            )
     cleaned_chunks: List[str] = []
     for i, out in enumerate(cleaned_parts, start=1):
         out = out or ""
         if not out.strip():
             out = chunks[i - 1]
         cleaned_chunks.append(normalize_newlines(out))
-        print(f"Clean chunk {i}/{len(chunks)} for {video_id} (len={len(chunks[i-1])})")
+        # Chunk cleaning progress logged via handle_doc
 
     post_processed_chunks = []
     # Post-processing: strip stage cues and artifacts, standardize dashes/whitespace
@@ -214,11 +242,24 @@ class CleanStage(BaseStage):
             if existing and (existing.get("cleaned_text") or "").strip():
                 self.stats["skipped"] += 1
                 self.log(f"Skip existing cleaned {video_id}")
-                print(f"Skip existing cleaned {video_id}")
                 return
 
-        payload = {}
+        # Log start of cleaning operation with LLM
+        import time
+
+        start_time = time.time()
         from agents.clean_agent import TranscriptCleanAgent
+
+        # Estimate chunks for progress logging
+        text_len = len(text)
+        estimated_chunks = max(
+            1, text_len // 8000
+        )  # Rough estimate based on typical chunk size
+        self.logger.info(
+            f"[clean] Starting LLM cleaning for {video_id} "
+            f"(text_len={text_len}, est_chunks={estimated_chunks}, "
+            f"workers={self.config.concurrency or 10})"
+        )
 
         agent_factory = lambda: TranscriptCleanAgent(self.config.model_name)
         payload = _llm_clean_text(
@@ -229,20 +270,24 @@ class CleanStage(BaseStage):
             retries=int(self.config.llm_retries or 1),
             backoff_s=float(self.config.llm_backoff_s or 0.5),
             qps=self.config.llm_qps,
+            logger=self.logger,
         )
+
+        elapsed = time.time() - start_time
 
         if (
             payload.get("cleaned_text")
             and not (payload.get("cleaned_text") or "").strip()
         ):
             self.log(f"No cleaned text for {video_id}")
-            print(f"No cleaned text for {video_id}")
             return
         if not self.config.dry_run:
             cleaned.update_one({"video_id": video_id}, {"$set": payload}, upsert=True)
         self.stats["updated"] += 1
-        self.log(f"Cleaned {video_id} → {dst_coll_name} (llm={self.config.use_llm})")
-        print(f"Cleaned {video_id} → {dst_coll_name} (llm={self.config.use_llm})")
+        self.logger.info(
+            f"[clean] Completed {video_id} → {dst_coll_name} "
+            f"(llm={self.config.use_llm}, time={elapsed:.1f}s)"
+        )
 
 
 if __name__ == "__main__":

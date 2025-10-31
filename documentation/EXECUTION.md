@@ -83,7 +83,11 @@ This is the single source of truth for scope, order of work, and status. Keep it
   - Q&A: Full Retrieval Context view and download
 - Redundancy/Trust: DONE
 - Agents: IN PROGRESS (Clean + Enrich wired; LLM flags + heuristic fallbacks)
-- Pipelines: IN PROGRESS (pipelines/video_pipeline.py; optional UI orchestrator per ORCHESTRACTION-INTERFACE.md)
+- Pipelines: DONE (unified on PipelineRunner pattern; GraphRAG pipeline integrated and fixed)
+- Ingestion Pipeline: DONE (complete pipeline with all stages including redundancy and trust)
+- GraphRAG Pipeline: DONE (critical bugs fixed: setup(), get_pipeline_status(), cleanup_failed_stages())
+- Testing Strategy: DONE (comprehensive TESTING.md documentation created)
+- Documentation: DONE (updated for MCP server vision; PIPELINE.md created)
 
 ### Definitions of Done (per stage)
 
@@ -158,7 +162,10 @@ Notes: For small datasets, answers may look similar across queries; increase Top
 - Seed demo (playlist): `python Mongo_Hack/app/stages/seed_demo.py` (edit playlist ID first)
 - Run UI: `streamlit run Mongo_Hack/streamlit_app.py`
 - Orchestrator: `python Mongo_Hack/main.py <stage>` (see README)
-  - Pipeline runner (typed configs): `python Mongo_Hack/app/pipelines/examples/yt_clean_enrich.py`
+  - **Ingestion pipeline**: `python main.py pipeline --playlist_id <ID> --max 10 --llm` (uses `app/pipelines/ingestion_pipeline.py`)
+  - **GraphRAG pipeline**: `python run_graphrag_pipeline.py [--stage <stage_name>] [--status] [--cleanup]`
+  - **Legacy example**: `python Mongo_Hack/app/pipelines/examples/yt_clean_enrich.py` (for reference, will be removed)
+  - **Pipeline documentation**: See `documentation/PIPELINE.md` for comprehensive pipeline usage
   - Atlas index helper: `Mongo_Hack/scripts/atlas_index_create.sh <PROJECT_ID> <CLUSTER_NAME>`
 
 ### Data Contracts (key fields)
@@ -166,8 +173,13 @@ Notes: For small datasets, answers may look similar across queries; increase Top
 - `raw_videos`: video_id, title, channel_id, published_at, duration_seconds, stats{viewCount,likeCount,commentCount}, keywords[], transcript_raw?, transcript_language?, thumbnail_url
 - `cleaned_transcripts`: video_id, language?, cleaned_text, paragraphs[{start,end,text}]
 - `enriched_transcripts`: video_id, segments[{start,end,text,tags[],entities[],keyphrases[],code_blocks[],difficulty?}]
-- `video_chunks`: video_id, chunk_id, text, metadata{start_ms?,end_ms?,tags[],speakers?,visuals?,keywords[]}, embedding[], embedding_model, embedding_dim
+- `video_chunks`: video_id, chunk_id, text, source_type (e.g., "youtube", "pdf", "html"), metadata{start_ms?,end_ms?,tags[],speakers?,visuals?,keywords[]}, embedding[], embedding_model, embedding_dim, redundancy_score, trust_score, is_redundant, duplicate_of
 - `memory_logs`: query, retrieved[{video_id,chunk_id,score}], answer, created_at
+- **GraphRAG Collections:**
+  - `entities`: name, type, description, confidence, canonical_name, trust_score, centrality_score
+  - `relations`: subject_id, object_id, relation_type, description, confidence, weight
+  - `communities`: entities[], level, coherence_score, summary, keywords[]
+  - `entity_mentions`: entity_id, chunk_id, video_id, mention_text, context, confidence
 
 ### Risks and Mitigations
 
@@ -195,6 +207,10 @@ Notes: For small datasets, answers may look similar across queries; increase Top
 - 2025-10-10: New envs for redundancy/trust documented in `env.example` (`DEDUP_THRESHOLD`, `DEDUP_LLM_MARGIN`, `DEDUP_SKIP_ADJACENT`, `DEDUP_NONADJ_FALLBACK`, `DEDUP_ADJ_OVERRIDE`, `TRUST_LLM_AUTO`, `TRUST_LLM_BAND_LOW/HIGH`, `TRUST_LLM_NEIGHBORS`, `TRUST_UPSERT_EXISTING`).
 - 2025-10-10: Chunking/embedding hygiene: strip stage cues before embedding and persist `display_text` for UI.
 - 2025-10-10: Documentation added: `documentation/REDUNDANCY.md` (redundancy + trust linkage) and `documentation/TECHNICAL-CONCEPTS.md` (embeddings, hybrid search, chunking, concurrency, env presets).
+- 2025-01-27: GraphRAG Pipeline fixes: Fixed critical bugs in `setup()`, `get_pipeline_status()`, and `cleanup_failed_stages()` methods. Removed unused functions and added comprehensive TODO comments for future enhancements.
+- 2025-01-27: Testing Strategy: Created comprehensive `documentation/TESTING.md` with detailed testing plans for all project components, including unit tests, integration tests, and end-to-end testing strategies.
+- 2025-01-27: Ingestion Pipeline: Created `app/pipelines/ingestion_pipeline.py` with all stages (ingest → clean → enrich → chunk → embed → redundancy → trust). Updated `main.py` to use implemented pipelines instead of artificial stage calling.
+- 2025-01-27: Documentation Update: Updated all documentation to reflect "GraphRAG Knowledge Manager MCP Server" vision. Created `documentation/PIPELINE.md` for comprehensive pipeline documentation.
 
 ### Next Up (active)
 

@@ -1,6 +1,13 @@
-## YoutubeRAG — Persistent Context RAG on YouTube
+## GraphRAG Knowledge Manager MCP Server
 
-A production-ready system that ingests YouTube videos and builds persistent, semantically-enriched context in MongoDB. Multi-agent pipelines clean, enrich, chunk, and embed transcripts into Atlas Vector Search. An intelligent CLI chat system with conversation memory provides context-aware answers using adaptive retrieval planning and code-enforced continuity.
+A production-ready Model Context Protocol (MCP) server that manages knowledge graphs from multiple document sources. The system ingests documents (YouTube videos, PDFs, web pages, etc.), processes them through intelligent pipelines, and builds persistent knowledge graphs using GraphRAG technology. Multi-agent pipelines clean, enrich, chunk, and embed content into MongoDB Atlas Vector Search, while GraphRAG constructs entity-relationship graphs for enhanced query understanding.
+
+**Core Capabilities**:
+
+- **Document Ingestion**: Support for YouTube videos, with extensible architecture for PDFs, HTML, and more
+- **GraphRAG Knowledge Graphs**: Entity extraction, resolution, and community detection
+- **Multi-Agent Pipelines**: Intelligent processing with LLM-powered agents
+- **MCP Server**: Exposes tools, resources, and prompts via Model Context Protocol
 
 **New: Multi-Agent CLI Chat** - Memory-aware conversations with PlannerAgent, specialized answer agents, catalog-driven retrieval, and 85% continuity success rate. See `documentation/CHAT.md`.
 
@@ -8,45 +15,107 @@ A production-ready system that ingests YouTube videos and builds persistent, sem
 
 ```mermaid
 flowchart TD
-  Y[YouTube API] --> I[Ingestion Agent]
-  I --> RV[(raw_videos)]
-  I -->|transcript| TC[TranscriptCleaner]
-  TC --> CT[(cleaned_transcripts)]
-  TC --> ST[SpeakerTagger]
-  ST --> ET[(enriched_transcripts)]
-  I --> VA[VisualAnnotator]
-  VA --> MS[(multimodal_segments)]
-  TC --> C[Chunk]
-  C --> E1[Enrich (per-chunk)]
-  E1 --> EB[Embed]
-  EB --> VC[(video_chunks + embeddings)]
+  subgraph "MCP Server Layer"
+    MCP[MCP Server]
+    MCP_TOOLS[MCP Tools]
+    MCP_RESOURCES[MCP Resources]
+    MCP_PROMPTS[MCP Prompts]
+  end
 
-  Q[User Query] --> RET[Retriever + Generator]
-  RET <--> VS[(Atlas Vector Search)]
-  VS --> VC
-  RET --> ML[(memory_logs)]
-  UI[Streamlit UI] --> RET
-  UI --> VS
+  subgraph "Document Sources"
+    Y[YouTube API]
+    PDF[PDF Documents]
+    HTML[Web Pages]
+  end
+
+  subgraph "Ingestion Pipeline"
+    I[Ingestion]
+    TC[Clean]
+    E[Enrich]
+    C[Chunk]
+    EMB[Embed]
+    R[Redundancy]
+    T[Trust]
+  end
+
+  subgraph "GraphRAG Pipeline"
+    GE[Graph Extraction]
+    ER[Entity Resolution]
+    GC[Graph Construction]
+    CD[Community Detection]
+  end
+
+  subgraph "Storage Layer"
+    RV[(raw_videos)]
+    CT[(cleaned_transcripts)]
+    ET[(enriched_transcripts)]
+    VC[(video_chunks)]
+    ENT[(entities)]
+    REL[(relations)]
+    COM[(communities)]
+  end
+
+  Y --> I
+  PDF --> I
+  HTML --> I
+  I --> RV
+  RV --> TC --> CT
+  CT --> E --> ET
+  ET --> C --> VC
+  VC --> EMB --> VC
+  VC --> R --> VC
+  VC --> T --> VC
+
+  VC --> GE --> ER --> GC --> CD
+  ER --> ENT
+  GC --> REL
+  CD --> COM
+
+  MCP --> MCP_TOOLS
+  MCP --> MCP_RESOURCES
+  MCP --> MCP_PROMPTS
+  MCP_TOOLS --> VC
+  MCP_TOOLS --> ENT
+  MCP_TOOLS --> REL
+  MCP_RESOURCES --> VC
+  MCP_RESOURCES --> ENT
 ```
 
 ### Collections Overview
 
-- raw_videos: raw metadata, transcript, thumbnails, derived stats.
-- cleaned_transcripts: LLM-cleaned transcript text + paragraphs.
-- enriched_transcripts: diarization and speaker role inference.
-- multimodal_segments: vision-derived context for key frames.
-- video_chunks: per-chunk schema (chunk_text, summary, annotations, embedding).
-- memory_logs: query, retrieved context, and generated answer.
+**Raw Document Collections** (source-specific):
+
+- `raw_videos`: YouTube video metadata, transcripts, thumbnails, stats
+- Future: `raw_pdfs`, `raw_html` for other document types
+
+**Processing Collections**:
+
+- `cleaned_transcripts`: LLM-cleaned transcript text + paragraphs
+- `enriched_transcripts`: Entities, concepts, tags, code blocks
+- `video_chunks`: Per-chunk schema with embeddings, quality scores, and `source_type` field
+
+**GraphRAG Collections**:
+
+- `entities`: Canonicalized entities with descriptions and trust scores
+- `relations`: Entity relationships with confidence scores
+- `communities`: Entity communities with hierarchical summaries
+- `entity_mentions`: Entity mentions linked to source chunks
+
+**Application Collections**:
+
+- `memory_logs`: Query, retrieved context, and generated answers
 
 ### Getting Started
 
 ### Documentation Map (who should read what)
 
-| Audience        | Start Here            | Deep Dive                          | Operations                  |
-| --------------- | --------------------- | ---------------------------------- | --------------------------- |
-| Reviewer / Demo | DEMO.md               | HYBRID-RETRIEVAL.md                | EXECUTION.md                |
-| Developer       | TECHNICAL-CONCEPTS.md | HYBRID-RETRIEVAL.md, REDUNDANCY.md | EXECUTION.md                |
-| Prompt/Agents   | PROMPTS.md            | —                                  | ORCHESTRACTION-INTERFACE.md |
+| Audience        | Start Here    | Deep Dive                           | Operations                  |
+| --------------- | ------------- | ----------------------------------- | --------------------------- |
+| Reviewer / Demo | DEMO.md       | HYBRID-RETRIEVAL.md                 | EXECUTION.md                |
+| Developer       | PIPELINE.md   | TECHNICAL-CONCEPTS.md, GRAPH-RAG.md | EXECUTION.md                |
+| Pipeline Dev    | PIPELINE.md   | ORCHESTRACTION-INTERFACE.md         | EXECUTION.md                |
+| MCP Integration | MCP-SERVER.md | PIPELINE.md, GRAPH-RAG.md           | ORCHESTRACTION-INTERFACE.md |
+| Prompt/Agents   | PROMPTS.md    | —                                   | ORCHESTRACTION-INTERFACE.md |
 
 ### Run the Demo
 
@@ -168,7 +237,29 @@ specs = [
 PipelineRunner(specs, stop_on_error=True).run()
 ```
 
-CLI example: `python Mongo_Hack/app/pipelines/examples/yt_clean_enrich.py`.
+**GraphRAG Pipeline Example** (entity extraction → resolution → graph construction → community detection):
+
+```python
+from app.pipelines.graphrag_pipeline import GraphRAGPipeline
+from config.graphrag_config import GraphRAGPipelineConfig
+
+# Create pipeline configuration
+config = GraphRAGPipelineConfig()
+config.extraction_config.max = 100  # Process 100 chunks
+config.extraction_config.model_name = "gpt-4o-mini"
+
+# Create and run pipeline
+pipeline = GraphRAGPipeline(config)
+exit_code = pipeline.run_full_pipeline()
+
+# Or run individual stages
+exit_code = pipeline.run_stage("graph_extraction")
+```
+
+CLI examples:
+
+- Traditional pipeline: `python Mongo_Hack/app/pipelines/examples/yt_clean_enrich.py`
+- GraphRAG pipeline: `python run_graphrag_pipeline.py --stage graph_extraction`
 
 Notes:
 

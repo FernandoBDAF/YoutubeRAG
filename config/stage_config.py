@@ -20,13 +20,38 @@ class BaseStageConfig:
 
     @classmethod
     def from_args_env(
-        cls, args: Any, env: Dict[str, str], default_db: str
+        cls,
+        args: Any,
+        env: Dict[str, str],
+        default_db: str,
+        default_read_coll: Optional[str] = None,
+        default_write_coll: Optional[str] = None,
     ) -> "BaseStageConfig":
-        # Pull IO overrides from args or env if present; remain optional for backward compatibility
+        # Import paths.py which already handles env vars with defaults
+        from config.paths import DB_NAME
+
+        # Retrieval order: args → default_db param → paths.py constant
+        # paths.py constants already check env vars, so we just use them as fallback
+        db_name = (
+            getattr(args, "db_name", None)
+            or env.get("DB_NAME")
+            or default_db
+            or DB_NAME
+        )
         read_db = getattr(args, "read_db_name", None) or env.get("READ_DB_NAME")
         write_db = getattr(args, "write_db_name", None) or env.get("WRITE_DB_NAME")
-        read_coll = getattr(args, "read_coll", None) or env.get("READ_COLL")
-        write_coll = getattr(args, "write_coll", None) or env.get("WRITE_COLL")
+
+        # For collections: args → env → default_*_coll param
+        read_coll = (
+            getattr(args, "read_coll", None)
+            or env.get("READ_COLL")
+            or default_read_coll
+        )
+        write_coll = (
+            getattr(args, "write_coll", None)
+            or env.get("WRITE_COLL")
+            or default_write_coll
+        )
 
         return cls(
             max=getattr(args, "max", None),
@@ -34,7 +59,7 @@ class BaseStageConfig:
             llm=bool(getattr(args, "llm", False)),
             verbose=bool(getattr(args, "verbose", False)),
             dry_run=bool(getattr(args, "dry_run", False)),
-            db_name=getattr(args, "db_name", None) or env.get("DB_NAME") or default_db,
+            db_name=db_name,
             read_db_name=read_db,
             write_db_name=write_db,
             read_coll=read_coll,

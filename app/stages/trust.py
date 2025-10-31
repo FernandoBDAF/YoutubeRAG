@@ -1,6 +1,9 @@
 import math
+import logging
+import time
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Set
+from collections import defaultdict
 
 from dotenv import load_dotenv
 from pymongo import MongoClient
@@ -9,7 +12,7 @@ import os
 try:
     from app.services.utils import get_mongo_client
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
@@ -18,8 +21,10 @@ except ModuleNotFoundError:
     )
     from app.services.utils import get_mongo_client
     from core.base_stage import BaseStage
-    from core.stage_config import BaseStageConfig
+    from config.stage_config import BaseStageConfig
 from config.paths import DB_NAME, COLL_CHUNKS
+
+logger = logging.getLogger(__name__)
 
 
 def sigmoid(x: float) -> float:
@@ -90,7 +95,7 @@ class TrustConfig(BaseStageConfig):
             auto_llm=auto_llm,
             band_low=band_low,
             band_high=band_high,
-            neighbors=neighbors
+            neighbors=neighbors,
         )
 
 
@@ -197,14 +202,302 @@ class TrustStage(BaseStage):
         else:
             score = compute_trust_score(c)
             method = "heuristic"
+        chunk_id = c.get("chunk_id")
+        video_id = c.get("video_id")
+
         if not self.config.upsert_existing:
             existing = coll.find_one({"_id": c["_id"]}, {"trust_score": 1})
             if existing and "trust_score" in existing:
+                logger.info(
+                    f"[trust] Skipping {chunk_id} (video={video_id}): "
+                    f"already has trust_score={existing.get('trust_score'):.3f}"
+                )
+                self.stats["skipped"] += 1
                 return
+
+        logger.info(
+            f"[trust] Updating {chunk_id} (video={video_id}): "
+            f"trust_score={score:.3f}, method={method}"
+        )
+
         coll.update_one(
             {"_id": c["_id"]},
             {"$set": {"trust_score": float(score), "trust_method": method}},
         )
+        self.stats["updated"] += 1
+
+    def get_entity_trust_scores(self, video_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Export entity trust scores for GraphRAG.
+
+        This method provides trust scores for entities based on their source chunks
+        and can be used by the GraphRAG pipeline to weight entity importance.
+
+        Args:
+            video_id: Optional video ID to filter by
+
+        Returns:
+            Dictionary containing entity trust scores
+        """
+        try:
+            src_db = self.config.read_db_name or self.config.db_name
+            coll = self.get_collection(
+                self.config.read_coll or COLL_CHUNKS, io="read", db_name=src_db
+            )
+
+            # Query for chunks with trust scores
+            query = {
+                "trust_score": {"$exists": True},
+                "graphrag_resolution.status": "completed",
+            }
+            if video_id:
+                query["video_id"] = video_id
+
+            chunks = list(
+                coll.find(
+                    query,
+                    {
+                        "video_id": 1,
+                        "chunk_id": 1,
+                        "trust_score": 1,
+                        "trust_method": 1,
+                        "graphrag_resolution.resolved_entities": 1,
+                    },
+                )
+            )
+
+            # Calculate entity trust scores
+            entity_trust_scores = defaultdict(list)
+            entity_source_counts = defaultdict(int)
+
+            for chunk in chunks:
+                chunk_trust_score = chunk.get("trust_score", 0.0)
+                chunk_method = chunk.get("trust_method", "heuristic")
+                resolved_entities = chunk.get("graphrag_resolution", {}).get(
+                    "resolved_entities", 0
+                )
+
+                # If chunk has resolved entities, distribute trust score
+                if resolved_entities > 0:
+                    # For now, we'll use a simple approach - in a real implementation,
+                    # you might want to track which specific entities are in each chunk
+                    chunk_id = chunk.get("chunk_id")
+
+                    # Store chunk-level trust information
+                    entity_trust_scores[chunk_id] = {
+                        "trust_score": chunk_trust_score,
+                        "trust_method": chunk_method,
+                        "resolved_entities": resolved_entities,
+                        "video_id": chunk.get("video_id"),
+                    }
+
+                    entity_source_counts[chunk_id] += 1
+
+            # Calculate aggregated entity trust scores
+            aggregated_scores = {}
+            for chunk_id, trust_info in entity_trust_scores.items():
+                source_count = entity_source_counts[chunk_id]
+                avg_trust_score = trust_info["trust_score"]
+
+                # Weight by source count and trust score
+                weighted_score = (
+                    avg_trust_score * min(source_count, 5) / 5.0
+                )  # Cap at 5 sources
+
+                aggregated_scores[chunk_id] = {
+                    "trust_score": weighted_score,
+                    "source_count": source_count,
+                    "trust_method": trust_info["trust_method"],
+                    "video_id": trust_info["video_id"],
+                }
+
+            logger.info(
+                f"Generated entity trust scores for {len(aggregated_scores)} entities"
+            )
+
+            return {
+                "entity_trust_scores": aggregated_scores,
+                "total_entities": len(aggregated_scores),
+                "avg_trust_score": (
+                    sum(s["trust_score"] for s in aggregated_scores.values())
+                    / len(aggregated_scores)
+                    if aggregated_scores
+                    else 0
+                ),
+                "high_trust_entities": len(
+                    [s for s in aggregated_scores.values() if s["trust_score"] >= 0.7]
+                ),
+                "generated_at": time.time(),
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to generate entity trust scores: {e}")
+            return {
+                "entity_trust_scores": {},
+                "total_entities": 0,
+                "avg_trust_score": 0,
+                "high_trust_entities": 0,
+                "error": str(e),
+                "generated_at": time.time(),
+            }
+
+    def propagate_trust_to_entities(
+        self, video_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Propagate trust scores from chunks to entities in the GraphRAG collections.
+
+        Args:
+            video_id: Optional video ID to filter by
+
+        Returns:
+            Dictionary containing propagation results
+        """
+        try:
+            # Get entity trust scores
+            trust_data = self.get_entity_trust_scores(video_id)
+            entity_trust_scores = trust_data.get("entity_trust_scores", {})
+
+            if not entity_trust_scores:
+                logger.warning("No entity trust scores available for propagation")
+                return {"propagated_entities": 0, "error": "no_trust_scores"}
+
+            # Get GraphRAG collections
+            from app.services.graphrag_indexes import get_graphrag_collections
+
+            graphrag_collections = get_graphrag_collections(self.db)
+            entities_collection = graphrag_collections["entities"]
+            entity_mentions_collection = graphrag_collections["entity_mentions"]
+
+            propagated_count = 0
+
+            # Update entities with trust scores based on their source chunks
+            for entity_doc in entities_collection.find({}):
+                entity_id = entity_doc.get("entity_id")
+                source_chunks = entity_doc.get("source_chunks", [])
+
+                if not source_chunks:
+                    continue
+
+                # Calculate entity trust score from source chunks
+                chunk_trust_scores = []
+                for chunk_id in source_chunks:
+                    if chunk_id in entity_trust_scores:
+                        chunk_trust_scores.append(
+                            entity_trust_scores[chunk_id]["trust_score"]
+                        )
+
+                if chunk_trust_scores:
+                    # Use average trust score from source chunks
+                    avg_trust_score = sum(chunk_trust_scores) / len(chunk_trust_scores)
+
+                    # Update entity with trust score
+                    entities_collection.update_one(
+                        {"entity_id": entity_id},
+                        {
+                            "$set": {
+                                "trust_score": avg_trust_score,
+                                "trust_source_count": len(chunk_trust_scores),
+                                "trust_updated_at": time.time(),
+                            }
+                        },
+                    )
+
+                    propagated_count += 1
+
+            logger.info(f"Propagated trust scores to {propagated_count} entities")
+
+            return {
+                "propagated_entities": propagated_count,
+                "total_entities": len(entity_trust_scores),
+                "propagation_rate": (
+                    propagated_count / len(entity_trust_scores)
+                    if entity_trust_scores
+                    else 0
+                ),
+                "propagated_at": time.time(),
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to propagate trust scores to entities: {e}")
+            return {
+                "propagated_entities": 0,
+                "error": str(e),
+                "propagated_at": time.time(),
+            }
+
+    def get_trust_statistics(self, video_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get comprehensive trust statistics for GraphRAG.
+
+        Args:
+            video_id: Optional video ID to filter by
+
+        Returns:
+            Dictionary containing trust statistics
+        """
+        try:
+            src_db = self.config.read_db_name or self.config.db_name
+            coll = self.get_collection(
+                self.config.read_coll or COLL_CHUNKS, io="read", db_name=src_db
+            )
+
+            # Query for chunks with trust scores
+            query = {"trust_score": {"$exists": True}}
+            if video_id:
+                query["video_id"] = video_id
+
+            chunks = list(
+                coll.find(
+                    query,
+                    {"trust_score": 1, "trust_method": 1, "video_id": 1, "chunk_id": 1},
+                )
+            )
+
+            if not chunks:
+                return {
+                    "total_chunks": 0,
+                    "avg_trust_score": 0,
+                    "trust_method_distribution": {},
+                    "high_trust_chunks": 0,
+                    "low_trust_chunks": 0,
+                }
+
+            # Calculate statistics
+            trust_scores = [chunk["trust_score"] for chunk in chunks]
+            avg_trust_score = sum(trust_scores) / len(trust_scores)
+
+            # Trust method distribution
+            trust_methods = defaultdict(int)
+            for chunk in chunks:
+                method = chunk.get("trust_method", "unknown")
+                trust_methods[method] += 1
+
+            # High/low trust chunks
+            high_trust_chunks = len([s for s in trust_scores if s >= 0.7])
+            low_trust_chunks = len([s for s in trust_scores if s <= 0.3])
+
+            return {
+                "total_chunks": len(chunks),
+                "avg_trust_score": avg_trust_score,
+                "min_trust_score": min(trust_scores),
+                "max_trust_score": max(trust_scores),
+                "trust_method_distribution": dict(trust_methods),
+                "high_trust_chunks": high_trust_chunks,
+                "low_trust_chunks": low_trust_chunks,
+                "high_trust_percentage": high_trust_chunks / len(chunks) * 100,
+                "low_trust_percentage": low_trust_chunks / len(chunks) * 100,
+                "generated_at": time.time(),
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to generate trust statistics: {e}")
+            return {
+                "total_chunks": 0,
+                "avg_trust_score": 0,
+                "error": str(e),
+                "generated_at": time.time(),
+            }
 
 
 if __name__ == "__main__":

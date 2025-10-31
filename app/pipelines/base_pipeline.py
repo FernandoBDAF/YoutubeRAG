@@ -17,7 +17,13 @@ from app.stages.backfill_transcript import (
     BackfillTranscriptStage,
     BackfillTranscriptConfig,
 )
-from core.stage_config import BaseStageConfig
+
+# GraphRAG stage imports
+from app.stages.graph_extraction import GraphExtractionStage
+from app.stages.entity_resolution import EntityResolutionStage
+from app.stages.graph_construction import GraphConstructionStage
+from app.stages.community_detection import CommunityDetectionStage
+from config.stage_config import BaseStageConfig
 
 
 StageClass = Union[
@@ -30,6 +36,10 @@ StageClass = Union[
     Type[TrustStage],
     Type[CompressStage],
     Type[BackfillTranscriptStage],
+    Type[GraphExtractionStage],
+    Type[EntityResolutionStage],
+    Type[GraphConstructionStage],
+    Type[CommunityDetectionStage],
 ]
 
 
@@ -43,6 +53,10 @@ STAGE_REGISTRY: Dict[str, StageClass] = {
     "trust": TrustStage,
     "compress": CompressStage,
     "backfill_transcript": BackfillTranscriptStage,
+    "graph_extraction": GraphExtractionStage,
+    "entity_resolution": EntityResolutionStage,
+    "graph_construction": GraphConstructionStage,
+    "community_detection": CommunityDetectionStage,
 }
 
 
