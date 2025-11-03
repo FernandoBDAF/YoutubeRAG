@@ -371,7 +371,7 @@ class GraphExtractionConfig(BaseStageConfig):
 
     @classmethod
     def from_args_env(cls, args, env, default_db):
-        from config.paths import COLL_CHUNKS
+        from core.config.paths import COLL_CHUNKS
 
         # Get base config with default collections
         base = BaseStageConfig.from_args_env(
@@ -449,7 +449,7 @@ class EntityResolutionConfig(BaseStageConfig):
 
     @classmethod
     def from_args_env(cls, args, env, default_db):
-        from config.paths import COLL_CHUNKS
+        from core.config.paths import COLL_CHUNKS
 
         # Get base config with default collections
         base = BaseStageConfig.from_args_env(
@@ -531,7 +531,7 @@ class GraphConstructionConfig(BaseStageConfig):
 
     @classmethod
     def from_args_env(cls, args, env, default_db):
-        from config.paths import COLL_CHUNKS
+        from core.config.paths import COLL_CHUNKS
 
         # Get base config with default collections
         base = BaseStageConfig.from_args_env(
@@ -611,7 +611,7 @@ class CommunityDetectionConfig(BaseStageConfig):
 
     @classmethod
     def from_args_env(cls, args, env, default_db):
-        from config.paths import COLL_CHUNKS
+        from core.config.paths import COLL_CHUNKS
 
         # Get base config with default collections
         base = BaseStageConfig.from_args_env(

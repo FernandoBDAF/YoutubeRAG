@@ -22,6 +22,8 @@ from business.services.graphrag.indexes import (
     create_graphrag_indexes,
     ensure_graphrag_collections,
 )
+from core.libraries.error_handling.context import error_context
+from core.libraries.error_handling.decorators import handle_errors
 
 logger = logging.getLogger(__name__)
 
@@ -125,22 +127,31 @@ class GraphRAGPipeline:
 
         raise ValueError(f"Unknown stage: {stage_name}")
 
+    @handle_errors(log_traceback=True, capture_context=True, reraise=True)
     def run_full_pipeline(self) -> int:
-        """Run the complete GraphRAG pipeline."""
+        """Run the complete GraphRAG pipeline with comprehensive error handling."""
         logger.info("Starting full GraphRAG pipeline execution")
 
-        # Setup (create indexes, etc.)
-        self.setup()
+        with error_context(
+            "graphrag_pipeline_execution",
+            pipeline="graphrag",
+            stages=len(self.specs),
+        ):
+            # Setup (create indexes, etc.)
+            logger.info("[PIPELINE] Running setup (collections, indexes)")
+            self.setup()
+            logger.info("[PIPELINE] Setup complete")
 
-        # Run pipeline using PipelineRunner
-        exit_code = self.runner.run()
+            # Run pipeline using PipelineRunner
+            logger.info(f"[PIPELINE] Starting {len(self.specs)} stages")
+            exit_code = self.runner.run()
 
-        if exit_code == 0:
-            logger.info("GraphRAG pipeline completed successfully")
-        else:
-            logger.error("GraphRAG pipeline failed")
+            if exit_code == 0:
+                logger.info("GraphRAG pipeline completed successfully")
+            else:
+                logger.error(f"GraphRAG pipeline failed with exit code {exit_code}")
 
-        return exit_code
+            return exit_code
 
     # TODO: Implement retry logic in PipelineRunner for production reliability
     # Desired behavior:

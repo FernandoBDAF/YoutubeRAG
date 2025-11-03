@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import os
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Type, Union
+
+from core.libraries.error_handling.decorators import handle_errors
+from core.libraries.error_handling.exceptions import PipelineError
+
+logger = logging.getLogger(__name__)
 
 # Stage imports (registry)
 from business.stages.ingestion.clean import CleanStage, CleanConfig
@@ -93,42 +99,93 @@ class PipelineRunner:
             return STAGE_REGISTRY[key]
         return ref
 
+    @handle_errors(log_traceback=True, capture_context=True, reraise=True)
     def run(self) -> int:
+        """Run all pipeline stages with comprehensive error handling."""
         exit_codes: List[int] = []
         totals = {"stages": 0, "failed": 0}
+
         for i, spec in enumerate(self.specs, start=1):
-            stage_cls = self._resolve_stage_class(spec.stage)
-            stage = stage_cls()
+            try:
+                stage_cls = self._resolve_stage_class(spec.stage)
+                stage = stage_cls()
 
-            # Build config object from the stage's ConfigCls
-            cfg_cls = getattr(stage, "ConfigCls", None)
-            if cfg_cls is None:
-                raise RuntimeError(f"Stage {stage_cls.__name__} missing ConfigCls")
+                # Build config object from the stage's ConfigCls
+                cfg_cls = getattr(stage, "ConfigCls", None)
+                if cfg_cls is None:
+                    raise RuntimeError(f"Stage {stage_cls.__name__} missing ConfigCls")
 
-            if spec.config is None:
-                config = cfg_cls()  # type: ignore
-            else:
-                if not isinstance(spec.config, cfg_cls):  # type: ignore
-                    raise TypeError(
-                        f"Config type mismatch for stage {stage_cls.__name__}: "
-                        f"expected {cfg_cls.__name__}, got {type(spec.config).__name__}"
+                if spec.config is None:
+                    config = cfg_cls()  # type: ignore
+                else:
+                    if not isinstance(spec.config, cfg_cls):  # type: ignore
+                        raise TypeError(
+                            f"Config type mismatch for stage {stage_cls.__name__}: "
+                            f"expected {cfg_cls.__name__}, got {type(spec.config).__name__}"
+                        )
+                    config = spec.config
+
+                logger.info(
+                    f"[PIPELINE] Starting stage {i}/{len(self.specs)}: {stage.name}"
+                )
+                print(
+                    f"[pipeline] ({i}/{len(self.specs)}) Running {stage.name} with read_db={config.read_db_name or config.db_name} write_db={config.write_db_name or config.db_name}"
+                )
+
+                # Run stage with error context
+                code = stage.run(config)
+
+                exit_codes.append(code)
+                totals["stages"] += 1
+
+                if code != 0:
+                    totals["failed"] += 1
+                    logger.error(
+                        f"[PIPELINE] Stage {stage.name} failed with exit code {code}"
                     )
-                config = spec.config
+                    print(f"[pipeline] Stage {stage.name} failed with code {code}")
+                    if self.stop_on_error:
+                        print("[pipeline] stop_on_error=True → stopping")
+                        return code
+                else:
+                    logger.info(f"[PIPELINE] Stage {stage.name} completed successfully")
 
-            print(
-                f"[pipeline] ({i}/{len(self.specs)}) Running {stage.name} with read_db={config.read_db_name or config.db_name} write_db={config.write_db_name or config.db_name}"
-            )
-            code = stage.run(config)
-            exit_codes.append(code)
-            totals["stages"] += 1
-            if code != 0:
+            except Exception as e:
+                # Capture stage execution errors with full context
                 totals["failed"] += 1
-                print(f"[pipeline] Stage {stage.name} failed with code {code}")
+                stage_name = (
+                    spec.stage
+                    if isinstance(spec.stage, str)
+                    else getattr(stage, "name", "unknown")
+                )
+
+                logger.error(
+                    f"[PIPELINE] Stage {stage_name} crashed: {type(e).__name__}: {e}",
+                    exc_info=True,
+                )
+
                 if self.stop_on_error:
-                    print("[pipeline] stop_on_error=True → stopping")
-                    return code
+                    raise PipelineError(
+                        f"Pipeline failed at stage {stage_name}",
+                        context={
+                            "stage": stage_name,
+                            "stage_index": i,
+                            "total_stages": len(self.specs),
+                            "stages_completed": totals["stages"],
+                        },
+                        cause=e,
+                    )
+                else:
+                    # Continue to next stage
+                    logger.warning(
+                        f"[PIPELINE] Continuing to next stage despite failure"
+                    )
+                    exit_codes.append(1)
 
         succeeded = totals["stages"] - totals["failed"]
+        logger.info(
+            f"[PIPELINE] Completed: {succeeded}/{totals['stages']} stages succeeded, {totals['failed']} failed"
+        )
         print(
             f"[pipeline] Completed stages: {succeeded}/{totals['stages']}; failures: {totals['failed']}"
         )

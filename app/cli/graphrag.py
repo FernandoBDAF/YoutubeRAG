@@ -20,6 +20,9 @@ sys.path.append(
 from business.pipelines.graphrag import create_graphrag_pipeline
 from core.config.graphrag import GraphRAGPipelineConfig
 from business.pipelines.graphrag import GraphRAGPipeline
+from core.libraries.error_handling.context import error_context
+from core.libraries.error_handling.decorators import handle_errors
+from core.libraries.logging import log_exception
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -147,17 +150,18 @@ def run_single_stage(pipeline: GraphRAGPipeline, stage_name: str) -> None:
             sys.exit(exit_code)
 
     except Exception as e:
-        logger.error(f"Error running stage {stage_name}: {e}")
+        log_exception(logger, f"Error running stage {stage_name}", e)
         sys.exit(1)
 
 
+@handle_errors(log_traceback=True, capture_context=True, reraise=True)
 def run_full_pipeline(pipeline: GraphRAGPipeline) -> None:
-    """Run the complete GraphRAG pipeline."""
+    """Run the complete GraphRAG pipeline with comprehensive error handling."""
     logger = logging.getLogger(__name__)
 
     logger.info("Starting full GraphRAG pipeline execution")
 
-    try:
+    with error_context("graphrag_full_pipeline", stages=4):
         exit_code = pipeline.run_full_pipeline()
 
         if exit_code == 0:
@@ -165,10 +169,6 @@ def run_full_pipeline(pipeline: GraphRAGPipeline) -> None:
         else:
             logger.error(f"GraphRAG pipeline failed with exit code {exit_code}")
             sys.exit(exit_code)
-
-    except Exception as e:
-        logger.error(f"Error running GraphRAG pipeline: {e}")
-        sys.exit(1)
 
 
 def show_pipeline_status(pipeline: GraphRAGPipeline) -> None:
@@ -350,7 +350,7 @@ def main():
         logger.info("Pipeline execution interrupted by user")
         sys.exit(1)
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
+        log_exception(logger, "Unexpected error", e)
         sys.exit(1)
 
 

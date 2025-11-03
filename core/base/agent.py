@@ -9,6 +9,11 @@ from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 import openai
 
+from core.libraries.error_handling.decorators import handle_errors
+from core.libraries.error_handling.context import agent_context
+from core.libraries.error_handling.exceptions import format_exception_message
+from core.libraries.logging import log_exception
+
 logger = logging.getLogger(__name__)
 
 
@@ -120,13 +125,17 @@ class BaseAgent(ABC):
                 )
                 return out
             except Exception as e:
+                # Enhanced error logging using library helper
+                error_formatted = format_exception_message(e)
                 self._log_event(
                     {
                         "type": "model_call:error",
                         "model": self.config.model_name,
-                        "error": str(e),
+                        "error": error_formatted,
                     }
                 )
+                # Log with full traceback
+                log_exception(logger, f"[{self.name}] LLM call failed", e)
                 return ""
 
         elif callable(self.model):

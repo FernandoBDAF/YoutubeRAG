@@ -41,6 +41,18 @@ from core.libraries.logging.formatters import (
     CompactFormatter,
 )
 
+from core.libraries.logging.operations import (
+    log_operation_start,
+    log_operation_context,
+    log_operation_complete,
+    log_operation_progress,
+)
+
+from core.libraries.logging.exceptions import (
+    log_exception,
+    format_exception_for_log,
+)
+
 
 __all__ = [
     # Setup
@@ -62,4 +74,12 @@ __all__ = [
     "JSONFormatter",
     "ColoredFormatter",
     "CompactFormatter",
+    # Operations
+    "log_operation_start",
+    "log_operation_context",
+    "log_operation_complete",
+    "log_operation_progress",
+    # Exceptions
+    "log_exception",
+    "format_exception_for_log",
 ]

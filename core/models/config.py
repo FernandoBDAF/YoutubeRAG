@@ -28,7 +28,7 @@ class BaseStageConfig:
         default_write_coll: Optional[str] = None,
     ) -> "BaseStageConfig":
         # Import paths.py which already handles env vars with defaults
-        from config.paths import DB_NAME
+        from core.config.paths import DB_NAME
 
         # Retrieval order: args → default_db param → paths.py constant
         # paths.py constants already check env vars, so we just use them as fallback

@@ -7,6 +7,14 @@ from typing import Any, Dict, Iterable, Optional
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
+from core.libraries.error_handling.decorators import handle_errors
+from core.libraries.error_handling.context import stage_context
+from core.libraries.logging import (
+    log_operation_context,
+    log_operation_complete,
+    log_exception,
+)
+
 try:
     from dependencies.database.mongodb import get_mongo_client
 except ModuleNotFoundError:
@@ -105,14 +113,25 @@ class BaseStage:
             f"skipped={self.stats['skipped']} failed={self.stats['failed']} in {dur:.1f}s"
         )
 
+    @handle_errors(log_traceback=True, capture_context=True, reraise=False)
     def run(self, config: Optional[BaseStageConfig] = None) -> int:
+        """Run stage with comprehensive error handling."""
         if config is None:
             self.parse_args()
             self.config = self.build_config_from_args_env()
         else:
             self.config = config
-        self.setup()
+
+        # Log stage start
+        log_operation_context(
+            f"stage_{self.name}",
+            stage=self.name,
+            max_docs=self.config.max if self.config.max else "unlimited",
+        )
+
         try:
+            self.setup()
+
             docs = list(self.iter_docs())
             total_docs = len(docs)
             if self.config.max:
@@ -124,31 +143,44 @@ class BaseStage:
                     f"(max={self.config.max if self.config.max else 'unlimited'})"
                 )
 
-            for i, d in enumerate(docs):
-                if self.config.max and i >= int(self.config.max):
-                    break
-                try:
-                    # Log progress for batches (every 10% or every 10 items, whichever is more frequent)
-                    if total_docs > 10 and (i + 1) % max(1, total_docs // 10) == 0:
-                        progress_pct = int((i + 1) / total_docs * 100)
-                        self.logger.info(
-                            f"[{self.name}] Progress: {i + 1}/{total_docs} ({progress_pct}%) "
-                            f"processed={self.stats['processed']} "
-                            f"updated={self.stats['updated']} "
-                            f"skipped={self.stats['skipped']} "
-                            f"failed={self.stats['failed']}"
+            with stage_context(self.name, total_docs=total_docs):
+                for i, d in enumerate(docs):
+                    if self.config.max and i >= int(self.config.max):
+                        break
+                    try:
+                        # Log progress for batches (every 10% or every 10 items, whichever is more frequent)
+                        if total_docs > 10 and (i + 1) % max(1, total_docs // 10) == 0:
+                            progress_pct = int((i + 1) / total_docs * 100)
+                            self.logger.info(
+                                f"[{self.name}] Progress: {i + 1}/{total_docs} ({progress_pct}%) "
+                                f"processed={self.stats['processed']} "
+                                f"updated={self.stats['updated']} "
+                                f"skipped={self.stats['skipped']} "
+                                f"failed={self.stats['failed']}"
+                            )
+                        self.handle_doc(d)
+                        self.stats["processed"] += 1
+                    except Exception as e:
+                        self.stats["failed"] += 1
+                        log_exception(
+                            self.logger, f"[{self.name}] Error processing document", e
                         )
-                    self.handle_doc(d)
-                    self.stats["processed"] += 1
-                except Exception as e:
-                    self.stats["failed"] += 1
-                    self.log(f"Error: {e}")
-                    self.logger.error(
-                        f"[{self.name}] Error executing for document: {e}",
-                        exc_info=False,
-                    )
-            self.finalize()
-            return 0
+
+                self.finalize()
+
+                # Log stage completion
+                duration = time.time() - self.start_ts
+                log_operation_complete(
+                    f"stage_{self.name}",
+                    duration=duration,
+                    processed=self.stats["processed"],
+                    updated=self.stats["updated"],
+                    failed=self.stats["failed"],
+                )
+
+                return 0
+
         except Exception as e:
-            self.log(f"Fatal: {e}")
+            # Fatal stage error
+            log_exception(self.logger, f"[{self.name}] Fatal error", e)
             return 1
