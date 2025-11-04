@@ -1,0 +1,46 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Ship all logs from logs/ directory
+  - job_name: youtuberag
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: youtuberag
+          service: youtuberag
+          __path__: /var/log/app/**/*.log
+
+    pipeline_stages:
+      # Parse JSON logs if they're in JSON format
+      - json:
+          expressions:
+            level: level
+            timestamp: timestamp
+            component: stream.component
+            stage: stream.stage
+            agent: stream.agent
+
+      # Extract labels from JSON
+      - labels:
+          level:
+          component:
+          stage:
+          agent:
+
+      # Use timestamp from log if available
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+
+      # Extract message
+      - output:
+          source: message

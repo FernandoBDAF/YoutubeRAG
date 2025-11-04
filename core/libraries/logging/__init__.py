@@ -41,6 +41,10 @@ from core.libraries.logging.formatters import (
     CompactFormatter,
 )
 
+from core.libraries.logging.loki_formatter import (
+    LokiFormatter,
+)
+
 from core.libraries.logging.operations import (
     log_operation_start,
     log_operation_context,
@@ -74,6 +78,7 @@ __all__ = [
     "JSONFormatter",
     "ColoredFormatter",
     "CompactFormatter",
+    "LokiFormatter",
     # Operations
     "log_operation_start",
     "log_operation_context",

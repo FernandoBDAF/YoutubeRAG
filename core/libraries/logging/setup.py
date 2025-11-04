@@ -18,6 +18,9 @@ def setup_logging(
     verbose: bool = False,
     silence_third_party: bool = True,
     json_format: bool = False,
+    rotate_logs: bool = True,
+    max_bytes: int = 10_000_000,
+    backup_count: int = 5,
 ) -> logging.Logger:
     """Setup application logging with console and optional file handlers.
 
@@ -70,12 +73,29 @@ def setup_logging(
             log_path = Path(log_file)
             log_path.parent.mkdir(parents=True, exist_ok=True)
 
-            file_handler = logging.FileHandler(log_path, encoding="utf-8")
+            # Use rotating file handler for production
+            if rotate_logs:
+                from logging.handlers import RotatingFileHandler
+
+                file_handler = RotatingFileHandler(
+                    str(log_path),
+                    maxBytes=max_bytes,
+                    backupCount=backup_count,
+                    encoding="utf-8",
+                )
+            else:
+                file_handler = logging.FileHandler(log_path, encoding="utf-8")
+
             file_handler.setLevel(logging.DEBUG)  # Always DEBUG in file
             file_handler.setFormatter(file_formatter)
             root_logger.addHandler(file_handler)
 
-            root_logger.info(f"Logging to file: {log_path.absolute()}")
+            rotation_info = (
+                f" (rotating: {max_bytes/1_000_000:.0f}MB, {backup_count} backups)"
+                if rotate_logs
+                else ""
+            )
+            root_logger.info(f"Logging to file: {log_path.absolute()}{rotation_info}")
         except Exception as e:
             root_logger.warning(f"Failed to create log file {log_file}: {e}")
 
