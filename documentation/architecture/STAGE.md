@@ -1,6 +1,24 @@
 # Stage Architecture and Implementation Guide
 
-**Purpose**: Document all pipeline stages, focusing on GraphRAG stages and their integration with the ingestion pipeline.
+**Purpose**: Document all pipeline stages, focusing on GraphRAG stages and their integration with the ingestion pipeline and observability libraries.
+
+**Last Updated**: November 3, 2025
+
+---
+
+## Observability Integration
+
+**BaseStage Enhanced With**:
+
+- `@handle_errors` - Comprehensive error handling
+- `stage_context` - Exception enrichment
+- `log_operation_context/complete` - Operation lifecycle
+- **6 Metrics Tracked Automatically**:
+  - stage_started, stage_completed, stage_failed
+  - stage_duration_seconds (histogram)
+  - documents_processed, documents_failed
+
+**See**: technical/OBSERVABILITY.md for complete library documentation
 
 ---
 

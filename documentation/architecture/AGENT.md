@@ -1,6 +1,26 @@
 # Agent Architecture and Implementation Guide
 
-**Purpose**: Document all LLM-powered agents, focusing on GraphRAG agents and their prompts, algorithms, and design decisions.
+**Purpose**: Document all LLM-powered agents, focusing on GraphRAG agents and their prompts, algorithms, design decisions, and observability integration.
+
+**Last Updated**: November 3, 2025
+
+---
+
+## Observability Integration
+
+**BaseAgent Enhanced With**:
+
+- `@retry_llm_call` - Automatic retry with exponential backoff (3 attempts)
+- `log_exception` - Comprehensive error logging
+- **5 Metrics Tracked Automatically**:
+  - agent_llm_calls, agent_llm_errors
+  - agent_llm_duration_seconds (histogram)
+  - agent_tokens_used (prompt/completion/total)
+  - agent_llm_cost_usd (cost per agent/model)
+
+**Cost Tracking**: 6 OpenAI models + extensible for others
+
+**See**: technical/OBSERVABILITY.md for complete library documentation
 
 ---
 

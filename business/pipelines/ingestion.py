@@ -242,7 +242,7 @@ class IngestionPipeline:
         try:
             # Ensure collections exist (they should be created by seed/index scripts)
             # This is a placeholder for any pipeline-specific setup
-            from config.seed.seed_indexes import ensure_collections_and_indexes
+            from app.scripts.utilities.seed.seed_indexes import ensure_collections_and_indexes
 
             ensure_collections_and_indexes(self.db)
 

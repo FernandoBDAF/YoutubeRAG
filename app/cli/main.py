@@ -31,7 +31,7 @@ logging.getLogger("httpx").setLevel(logging.INFO)
 
 from dependencies.database.mongodb import get_mongo_client, read_collection
 from core.config.paths import DB_NAME
-from config.seed.seed_indexes import (
+from app.scripts.utilities.seed.seed_indexes import (
     ensure_collections_and_indexes,
     wait_for_index_ready,
 )

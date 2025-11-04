@@ -8,9 +8,9 @@
 
 ## 📚 Quick Navigation
 
-### For LLMs: Layer Context Files
+### For LLMs: Start Here (5-Minute Onboarding)
 
-Start here to understand the project structure:
+**Layer Context Files** - Understand project structure instantly:
 
 - **[APP Layer](context/app-layer.md)** - External interface (CLIs, UIs, Scripts)
 - **[BUSINESS Layer](context/business-layer.md)** - Implementation (Agents, Stages, Services)
@@ -19,6 +19,17 @@ Start here to understand the project structure:
 
 **Dependency Rule**: APP → BUSINESS → CORE → DEPENDENCIES  
 (Each layer only depends on layers below)
+
+---
+
+### For Developers: Technical Documentation
+
+**Core Systems**:
+
+- **[GraphRAG](technical/GRAPH-RAG.md)** - Knowledge graph system (complete guide)
+- **[Observability](technical/OBSERVABILITY.md)** - Error handling, metrics, retry, logging
+- **[Architecture](technical/ARCHITECTURE.md)** - 4-layer + domains + libraries (TODO)
+- **[Libraries](technical/LIBRARIES.md)** - All 18 cross-cutting libraries (TODO)
 
 ---
 
@@ -46,21 +57,28 @@ How to use and deploy:
 
 ---
 
-## 🎯 Main Technical Documentation
+## 📖 Main Documentation
 
-### GraphRAG Implementation
+### Technical Guides:
 
-**Primary Guide**: [GRAPH-RAG-CONSOLIDATED.md](GRAPH-RAG-CONSOLIDATED.md)  
-**Length**: 1,447 lines  
-**Sections**: 11 complete (Theoretical Foundation, Architecture, Data Model, Pipeline Stages, Post-Processing, Critical Design Decisions, Configuration, Testing, Performance, Utilities, References)
+- **[GraphRAG](technical/GRAPH-RAG.md)** - Complete knowledge graph system
+- **[Observability](technical/OBSERVABILITY.md)** - 4 libraries + stack
 
-**LinkedIn Articles**: [GRAPHRAG-ARTICLE-GUIDE.md](GRAPHRAG-ARTICLE-GUIDE.md)  
-**Length**: 965 lines  
-**Articles**: 4 complete (Why GraphRAG, Complete Graph Problem, Random Chunk Testing, Community Detection)
+### Reference:
 
-**Configuration Reference**: [GRAPHRAG-CONFIG-REFERENCE.md](GRAPHRAG-CONFIG-REFERENCE.md)  
-**Length**: 247 lines  
-**Content**: All configuration options documented
+- **[GraphRAG Config](reference/GRAPHRAG-CONFIG-REFERENCE.md)** - All config options
+- **[API Reference](reference/API-REFERENCE.md)** - Library APIs (TODO)
+- **[Metrics Reference](reference/METRICS-REFERENCE.md)** - All metrics (TODO)
+
+### Planning:
+
+- **[Master Plan](planning/MASTER-PLAN.md)** - Current objectives
+- **[Refactor Guide](planning/REFACTOR-GUIDE.md)** - Code cleanup guide
+- **[Roadmap](planning/ROADMAP.md)** - 3-month strategy
+
+### Posts:
+
+- **[LinkedIn Posts](posts/README.md)** - 10 posts on LLM development & agents
 
 ---
 
