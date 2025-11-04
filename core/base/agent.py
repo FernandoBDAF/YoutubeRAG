@@ -13,8 +13,34 @@ from core.libraries.error_handling.decorators import handle_errors
 from core.libraries.error_handling.context import agent_context
 from core.libraries.error_handling.exceptions import format_exception_message
 from core.libraries.logging import log_exception
+from core.libraries.metrics import Counter, Histogram, MetricRegistry
 
 logger = logging.getLogger(__name__)
+
+# Initialize agent metrics (shared across all agents)
+_agent_llm_calls = Counter(
+    "agent_llm_calls", "Number of LLM calls", labels=["agent", "model"]
+)
+_agent_llm_errors = Counter(
+    "agent_llm_errors", "Number of LLM errors", labels=["agent", "model"]
+)
+_agent_llm_duration = Histogram(
+    "agent_llm_duration_seconds", "LLM call duration", labels=["agent", "model"]
+)
+_agent_tokens_used = Counter(
+    "agent_tokens_used", "Total tokens used", labels=["agent", "model", "token_type"]
+)
+_agent_llm_cost = Counter(
+    "agent_llm_cost_usd", "Estimated LLM cost in USD", labels=["agent", "model"]
+)
+
+# Register metrics
+_registry = MetricRegistry.get_instance()
+_registry.register(_agent_llm_calls)
+_registry.register(_agent_llm_errors)
+_registry.register(_agent_llm_duration)
+_registry.register(_agent_tokens_used)
+_registry.register(_agent_llm_cost)
 
 
 class BaseAgentConfig(BaseModel):
@@ -72,7 +98,13 @@ class BaseAgent(ABC):
         return result
 
     def call_model(self, system_prompt: str, prompt: str, **kwargs) -> str:
-        """Unified model call."""
+        """Unified model call with metrics tracking."""
+        from core.libraries.metrics import Timer
+
+        model_name = self.config.model_name
+        agent_labels = {"agent": self.name, "model": model_name}
+        _agent_llm_calls.inc(labels=agent_labels)
+
         self._log_event(
             {
                 "type": "model_call:start",
@@ -89,54 +121,95 @@ class BaseAgent(ABC):
         timeout = kwargs.get("timeout", 60)
 
         if hasattr(self.model, "chat"):
-            try:
-                response = self.model.chat.completions.create(
-                    model=self.config.model_name,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_completion_tokens=max_completion_tokens,
-                    timeout=timeout,
-                    **kwargs,
-                )
-                out = response.choices[0].message.content.strip()
-                usage = getattr(response, "usage", None)
-                self._log_event(
-                    {
-                        "type": "model_call:done",
-                        "model": self.config.model_name,
-                        "ok": True,
-                        "output_preview": out[:120],
-                        "usage": {
-                            "prompt_tokens": (
-                                getattr(usage, "prompt_tokens", None) if usage else None
-                            ),
-                            "completion_tokens": (
-                                getattr(usage, "completion_tokens", None)
-                                if usage
-                                else None
-                            ),
-                            "total_tokens": (
-                                getattr(usage, "total_tokens", None) if usage else None
-                            ),
-                        },
-                    }
-                )
-                return out
-            except Exception as e:
-                # Enhanced error logging using library helper
-                error_formatted = format_exception_message(e)
-                self._log_event(
-                    {
-                        "type": "model_call:error",
-                        "model": self.config.model_name,
-                        "error": error_formatted,
-                    }
-                )
-                # Log with full traceback
-                log_exception(logger, f"[{self.name}] LLM call failed", e)
-                return ""
+            with Timer() as timer:
+                try:
+                    response = self.model.chat.completions.create(
+                        model=self.config.model_name,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": prompt},
+                        ],
+                        max_completion_tokens=max_completion_tokens,
+                        timeout=timeout,
+                        **kwargs,
+                    )
+                    out = response.choices[0].message.content.strip()
+                    usage = getattr(response, "usage", None)
+
+                    # Track successful LLM call duration
+                    _agent_llm_duration.observe(timer.elapsed(), labels=agent_labels)
+
+                    # Track token usage and cost
+                    if usage:
+                        from core.libraries.metrics.cost_models import estimate_llm_cost
+
+                        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+                        completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+                        total_tokens = prompt_tokens + completion_tokens
+
+                        # Track tokens by type (prompt/completion) and total
+                        _agent_tokens_used.inc(
+                            amount=prompt_tokens,
+                            labels={**agent_labels, "token_type": "prompt"},
+                        )
+                        _agent_tokens_used.inc(
+                            amount=completion_tokens,
+                            labels={**agent_labels, "token_type": "completion"},
+                        )
+                        _agent_tokens_used.inc(
+                            amount=total_tokens,
+                            labels={**agent_labels, "token_type": "total"},
+                        )
+
+                        # Estimate cost using robust cost model
+                        cost = estimate_llm_cost(
+                            model_name, prompt_tokens, completion_tokens
+                        )
+                        _agent_llm_cost.inc(amount=cost, labels=agent_labels)
+
+                    self._log_event(
+                        {
+                            "type": "model_call:done",
+                            "model": self.config.model_name,
+                            "ok": True,
+                            "output_preview": out[:120],
+                            "usage": {
+                                "prompt_tokens": (
+                                    getattr(usage, "prompt_tokens", None)
+                                    if usage
+                                    else None
+                                ),
+                                "completion_tokens": (
+                                    getattr(usage, "completion_tokens", None)
+                                    if usage
+                                    else None
+                                ),
+                                "total_tokens": (
+                                    getattr(usage, "total_tokens", None)
+                                    if usage
+                                    else None
+                                ),
+                            },
+                        }
+                    )
+                    return out
+                except Exception as e:
+                    # Track LLM error
+                    _agent_llm_errors.inc(labels=agent_labels)
+                    _agent_llm_duration.observe(timer.elapsed(), labels=agent_labels)
+
+                    # Enhanced error logging using library helper
+                    error_formatted = format_exception_message(e)
+                    self._log_event(
+                        {
+                            "type": "model_call:error",
+                            "model": self.config.model_name,
+                            "error": error_formatted,
+                        }
+                    )
+                    # Log with full traceback
+                    log_exception(logger, f"[{self.name}] LLM call failed", e)
+                    return ""
 
         elif callable(self.model):
             return self.model(prompt, **kwargs)

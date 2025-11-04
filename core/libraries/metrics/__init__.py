@@ -1,32 +1,52 @@
 """
 Metrics Library - Cross-Cutting Concern.
 
-Provides centralized metrics collection, tracking, and export.
-Part of the CORE libraries - Tier 1 (full implementation).
+Provides simple metrics collection and Prometheus export.
+Part of the CORE libraries - Tier 1 (basic implementation).
 
-TODO: Full implementation needed
-- Counter, Gauge, Histogram metric types
-- Metric registry
-- Decorators (@track_performance, @count_calls)
-- Export to Prometheus, JSON, etc.
-- Aggregation and reporting
+Usage:
+    from core.libraries.metrics import Counter, Histogram, MetricRegistry
 
-Usage (planned):
-    from core.libraries.metrics import Counter, Histogram, track_performance
+    # Create metrics
+    processed = Counter('chunks_processed', labels=['stage'])
+    duration = Histogram('stage_duration_seconds', labels=['stage'])
 
-    # Declare metrics
-    processed = Counter('chunks_processed', labels=['stage_name'])
-    processing_time = Histogram('processing_seconds', labels=['operation'])
+    # Register for export
+    registry = MetricRegistry.get_instance()
+    registry.register(processed)
+    registry.register(duration)
 
     # Use in code
-    processed.inc(labels={'stage_name': 'extraction'})
+    processed.inc(labels={'stage': 'extraction'})
+    duration.observe(10.5, labels={'stage': 'extraction'})
 
-    @track_performance('extraction_time')
-    def extract():
-        # Automatically tracked
-        ...
+    # Export for Prometheus
+    from core.libraries.metrics import export_prometheus_text
+    metrics_text = export_prometheus_text()
 """
 
-# TODO: Implement collectors.py, registry.py, decorators.py, exporters.py
+from core.libraries.metrics.collectors import Counter, Gauge, Histogram, Timer
+from core.libraries.metrics.registry import MetricRegistry
+from core.libraries.metrics.exporters import export_prometheus_text
+from core.libraries.metrics.cost_models import (
+    estimate_llm_cost,
+    add_model_pricing,
+    LLM_PRICING,
+)
 
-__all__ = []  # TODO: Export when implemented
+
+__all__ = [
+    # Collectors
+    "Counter",
+    "Gauge",
+    "Histogram",
+    "Timer",
+    # Registry
+    "MetricRegistry",
+    # Exporters
+    "export_prometheus_text",
+    # Cost Models
+    "estimate_llm_cost",
+    "add_model_pricing",
+    "LLM_PRICING",
+]

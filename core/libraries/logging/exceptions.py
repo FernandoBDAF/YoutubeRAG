@@ -15,11 +15,12 @@ def log_exception(
     exception: Exception,
     include_traceback: bool = True,
     context: Optional[dict] = None,
+    track_metric: bool = True,
 ) -> None:
     """Log exception with guaranteed type and message visibility.
 
     Ensures exception type is ALWAYS shown, preventing empty error messages.
-    This is the core logging pattern that prevents the "empty error" problem.
+    Also automatically tracks error metrics (if enabled).
 
     Args:
         logger: Logger instance to use
@@ -27,6 +28,7 @@ def log_exception(
         exception: The exception that occurred
         include_traceback: Include full traceback (default: True)
         context: Optional dict of contextual information
+        track_metric: Auto-track error in metrics (default: True)
 
     Example:
         try:
@@ -34,13 +36,13 @@ def log_exception(
         except Exception as e:
             log_exception(logger, "Operation failed", e)
 
-        # Logs:
-        # "ERROR - Operation failed: ValueError: Invalid data
-        # [Full traceback]"
+        # Logs AND tracks metric:
+        # 1. "ERROR - Operation failed: ValueError: Invalid data [Full traceback]"
+        # 2. Increments errors_total{error_type="ValueError"}
 
         # With context:
-        log_exception(logger, "Stage failed", e, context={'stage': 'extraction', 'chunk_id': '123'})
-        # "ERROR - Stage failed: StageError: ... [Context: stage=extraction, chunk_id=123]"
+        log_exception(logger, "Stage failed", e, context={'stage': 'extraction'})
+        # Tracks: errors_total{error_type="StageError", component="extraction"}
     """
     # CRITICAL: Always capture exception type (prevents empty messages!)
     error_type = type(exception).__name__
@@ -59,6 +61,28 @@ def log_exception(
         logger.error(full_msg, exc_info=True)
     else:
         logger.error(full_msg)
+
+    # Auto-track error metric (INTEGRATION with metrics library)
+    if track_metric:
+        try:
+            from core.libraries.metrics import MetricRegistry
+
+            registry = MetricRegistry.get_instance()
+            error_counter = registry.get("errors_total")
+
+            # If errors_total counter exists, track this error
+            if error_counter:
+                # Extract component from logger name (e.g., "stages.extraction" -> "extraction")
+                component = (
+                    logger.name.split(".")[-1] if "." in logger.name else logger.name
+                )
+
+                error_counter.inc(
+                    labels={"error_type": error_type, "component": component}
+                )
+        except Exception:
+            # Don't fail if metrics tracking fails
+            pass
 
 
 def format_exception_for_log(exception: Exception) -> str:

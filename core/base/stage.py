@@ -14,6 +14,7 @@ from core.libraries.logging import (
     log_operation_complete,
     log_exception,
 )
+from core.libraries.metrics import Counter, Histogram, Timer, MetricRegistry
 
 try:
     from dependencies.database.mongodb import get_mongo_client
@@ -25,6 +26,36 @@ except ModuleNotFoundError:
 
 from core.config.paths import DB_NAME as DEFAULT_DB
 from core.models.config import BaseStageConfig
+
+
+# Initialize stage metrics (shared across all stages)
+_stage_started = Counter(
+    "stage_started", "Number of stage executions started", labels=["stage"]
+)
+_stage_completed = Counter(
+    "stage_completed", "Number of stage executions completed", labels=["stage"]
+)
+_stage_failed = Counter(
+    "stage_failed", "Number of stage executions failed", labels=["stage"]
+)
+_stage_duration = Histogram(
+    "stage_duration_seconds", "Stage execution duration", labels=["stage"]
+)
+_documents_processed = Counter(
+    "documents_processed", "Documents processed by stage", labels=["stage"]
+)
+_documents_failed = Counter(
+    "documents_failed", "Documents failed in stage", labels=["stage"]
+)
+
+# Register metrics
+_registry = MetricRegistry.get_instance()
+_registry.register(_stage_started)
+_registry.register(_stage_completed)
+_registry.register(_stage_failed)
+_registry.register(_stage_duration)
+_registry.register(_documents_processed)
+_registry.register(_documents_failed)
 
 
 class BaseStage:
@@ -115,12 +146,16 @@ class BaseStage:
 
     @handle_errors(log_traceback=True, capture_context=True, reraise=False)
     def run(self, config: Optional[BaseStageConfig] = None) -> int:
-        """Run stage with comprehensive error handling."""
+        """Run stage with comprehensive error handling and metrics."""
         if config is None:
             self.parse_args()
             self.config = self.build_config_from_args_env()
         else:
             self.config = config
+
+        # Track metrics
+        stage_labels = {"stage": self.name}
+        _stage_started.inc(labels=stage_labels)
 
         # Log stage start
         log_operation_context(
@@ -129,58 +164,72 @@ class BaseStage:
             max_docs=self.config.max if self.config.max else "unlimited",
         )
 
-        try:
-            self.setup()
+        with Timer() as timer:
+            try:
+                self.setup()
 
-            docs = list(self.iter_docs())
-            total_docs = len(docs)
-            if self.config.max:
-                total_docs = min(total_docs, int(self.config.max))
+                docs = list(self.iter_docs())
+                total_docs = len(docs)
+                if self.config.max:
+                    total_docs = min(total_docs, int(self.config.max))
 
-            if total_docs > 0:
-                self.logger.info(
-                    f"[{self.name}] Processing {total_docs} document(s) "
-                    f"(max={self.config.max if self.config.max else 'unlimited'})"
-                )
+                if total_docs > 0:
+                    self.logger.info(
+                        f"[{self.name}] Processing {total_docs} document(s) "
+                        f"(max={self.config.max if self.config.max else 'unlimited'})"
+                    )
 
-            with stage_context(self.name, total_docs=total_docs):
-                for i, d in enumerate(docs):
-                    if self.config.max and i >= int(self.config.max):
-                        break
-                    try:
-                        # Log progress for batches (every 10% or every 10 items, whichever is more frequent)
-                        if total_docs > 10 and (i + 1) % max(1, total_docs // 10) == 0:
-                            progress_pct = int((i + 1) / total_docs * 100)
-                            self.logger.info(
-                                f"[{self.name}] Progress: {i + 1}/{total_docs} ({progress_pct}%) "
-                                f"processed={self.stats['processed']} "
-                                f"updated={self.stats['updated']} "
-                                f"skipped={self.stats['skipped']} "
-                                f"failed={self.stats['failed']}"
+                with stage_context(self.name, total_docs=total_docs):
+                    for i, d in enumerate(docs):
+                        if self.config.max and i >= int(self.config.max):
+                            break
+                        try:
+                            # Log progress for batches (every 10% or every 10 items, whichever is more frequent)
+                            if (
+                                total_docs > 10
+                                and (i + 1) % max(1, total_docs // 10) == 0
+                            ):
+                                progress_pct = int((i + 1) / total_docs * 100)
+                                self.logger.info(
+                                    f"[{self.name}] Progress: {i + 1}/{total_docs} ({progress_pct}%) "
+                                    f"processed={self.stats['processed']} "
+                                    f"updated={self.stats['updated']} "
+                                    f"skipped={self.stats['skipped']} "
+                                    f"failed={self.stats['failed']}"
+                                )
+                            self.handle_doc(d)
+                            self.stats["processed"] += 1
+                            _documents_processed.inc(labels=stage_labels)
+                        except Exception as e:
+                            self.stats["failed"] += 1
+                            _documents_failed.inc(labels=stage_labels)
+                            log_exception(
+                                self.logger,
+                                f"[{self.name}] Error processing document",
+                                e,
                             )
-                        self.handle_doc(d)
-                        self.stats["processed"] += 1
-                    except Exception as e:
-                        self.stats["failed"] += 1
-                        log_exception(
-                            self.logger, f"[{self.name}] Error processing document", e
-                        )
 
-                self.finalize()
+                    self.finalize()
 
-                # Log stage completion
-                duration = time.time() - self.start_ts
-                log_operation_complete(
-                    f"stage_{self.name}",
-                    duration=duration,
-                    processed=self.stats["processed"],
-                    updated=self.stats["updated"],
-                    failed=self.stats["failed"],
-                )
+                    # Track metrics
+                    _stage_completed.inc(labels=stage_labels)
+                    _stage_duration.observe(timer.elapsed(), labels=stage_labels)
 
-                return 0
+                    # Log stage completion
+                    duration = time.time() - self.start_ts
+                    log_operation_complete(
+                        f"stage_{self.name}",
+                        duration=duration,
+                        processed=self.stats["processed"],
+                        updated=self.stats["updated"],
+                        failed=self.stats["failed"],
+                    )
 
-        except Exception as e:
-            # Fatal stage error
-            log_exception(self.logger, f"[{self.name}] Fatal error", e)
-            return 1
+                    return 0
+
+            except Exception as e:
+                # Fatal stage error - track failure
+                _stage_failed.inc(labels=stage_labels)
+                _stage_duration.observe(timer.elapsed(), labels=stage_labels)
+                log_exception(self.logger, f"[{self.name}] Fatal error", e)
+                return 1
