@@ -16,6 +16,13 @@ _errors_total = Counter(
     labels=["error_type", "component"],
 )
 
+# Global retry counter (auto-populated by @with_retry)
+_retries_attempted = Counter(
+    "retries_attempted",
+    "Total retry attempts by function and error type",
+    labels=["function", "error_type"],
+)
+
 
 class MetricRegistry:
     """Singleton registry for all application metrics.
@@ -43,8 +50,9 @@ class MetricRegistry:
     def __init__(self):
         """Initialize registry (use get_instance() instead)."""
         self.metrics: Dict[str, Union[Counter, Gauge, Histogram]] = {}
-        # Auto-register global error counter
+        # Auto-register global counters
         self.metrics["errors_total"] = _errors_total
+        self.metrics["retries_attempted"] = _retries_attempted
 
     @classmethod
     def get_instance(cls) -> "MetricRegistry":

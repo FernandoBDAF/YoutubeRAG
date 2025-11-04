@@ -1,31 +1,55 @@
 """
 Retry Library - Cross-Cutting Concern.
 
-Provides unified retry logic with configurable policies and circuit breakers.
+Provides automatic retry logic with configurable backoff policies.
 Part of the CORE libraries - Tier 1 (full implementation).
 
-TODO: Full implementation needed
-- @with_retry decorator
-- Retry policies (exponential backoff, fixed delay, custom)
-- Circuit breaker pattern
-- Retry statistics and monitoring
+Usage:
+    from core.libraries.retry import with_retry, ExponentialBackoff
 
-Usage (planned):
-    from core.libraries.retry import with_retry, RetryPolicy
-
-    @with_retry(max_attempts=3, backoff='exponential', base_delay=1.0)
-    def call_external_api():
-        # Automatic retries with exponential backoff
+    # Simple usage with defaults
+    @with_retry(max_attempts=3)
+    def call_api():
+        # Automatically retries with exponential backoff
         ...
 
-    # Or custom policy:
-    policy = RetryPolicy(max_attempts=5, backoff_multiplier=2.0)
+    # Custom policy
+    policy = ExponentialBackoff(max_attempts=5, base_delay=2.0)
 
     @with_retry(policy=policy)
-    def call_llm():
+    def important_operation():
+        ...
+
+    # Specialized for LLM calls
+    from core.libraries.retry import retry_llm_call
+
+    @retry_llm_call(max_attempts=5)
+    def call_openai():
         ...
 """
 
-# TODO: Implement policies.py, decorators.py, circuit_breaker.py
+from core.libraries.retry.policies import (
+    RetryPolicy,
+    ExponentialBackoff,
+    FixedDelay,
+    NoRetry,
+    DEFAULT_POLICY,
+)
 
-__all__ = []  # TODO: Export when implemented
+from core.libraries.retry.decorators import (
+    with_retry,
+    retry_llm_call,
+)
+
+
+__all__ = [
+    # Policies
+    "RetryPolicy",
+    "ExponentialBackoff",
+    "FixedDelay",
+    "NoRetry",
+    "DEFAULT_POLICY",
+    # Decorators
+    "with_retry",
+    "retry_llm_call",
+]

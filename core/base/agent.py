@@ -14,6 +14,7 @@ from core.libraries.error_handling.context import agent_context
 from core.libraries.error_handling.exceptions import format_exception_message
 from core.libraries.logging import log_exception
 from core.libraries.metrics import Counter, Histogram, MetricRegistry
+from core.libraries.retry import retry_llm_call
 
 logger = logging.getLogger(__name__)
 
@@ -97,8 +98,9 @@ class BaseAgent(ABC):
         result = self.call_model(prompt)
         return result
 
+    @retry_llm_call(max_attempts=3)
     def call_model(self, system_prompt: str, prompt: str, **kwargs) -> str:
-        """Unified model call with metrics tracking."""
+        """Unified model call with automatic retry, metrics, and error tracking."""
         from core.libraries.metrics import Timer
 
         model_name = self.config.model_name
