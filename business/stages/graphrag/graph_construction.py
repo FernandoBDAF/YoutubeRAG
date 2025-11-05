@@ -11,14 +11,13 @@ import time
 from typing import Dict, List, Any, Optional, Iterator, Set
 from collections import defaultdict
 import numpy as np
-from pymongo.collection import Collection
-from pymongo.database import Database
 from core.base.stage import BaseStage
 from core.config.graphrag import GraphConstructionConfig
 from business.agents.graphrag.relationship_resolution import RelationshipResolutionAgent
-from core.models.graphrag import ResolvedRelationship, ResolvedEntity
+from core.models.graphrag import ResolvedRelationship
 from business.services.graphrag.indexes import get_graphrag_collections
 from core.config.paths import COLL_CHUNKS
+from core.libraries.database import batch_insert
 
 logger = logging.getLogger(__name__)
 
@@ -57,12 +56,10 @@ class GraphConstructionStage(BaseStage):
             llm_client=self.llm_client,
             model_name="gpt-4o-mini",  # Default model for relationship resolution
             temperature=0.1,
-            max_retries=3,
-            retry_delay=1.0,
         )
 
-        # Get GraphRAG collections
-        self.graphrag_collections = get_graphrag_collections(self.db)
+        # Get GraphRAG collections (use write DB for output)
+        self.graphrag_collections = get_graphrag_collections(self.db_write)
 
         logger.info(f"Initialized {self.name}")
 
@@ -94,7 +91,9 @@ class GraphConstructionStage(BaseStage):
 
         logger.info(f"Querying chunks for graph construction: {query}")
 
-        cursor = collection.find(query).limit(self.config.max or float("inf"))
+        cursor = collection.find(query)
+        if self.config.max:
+            cursor = cursor.limit(int(self.config.max))
 
         for doc in cursor:
             yield doc
@@ -404,8 +403,8 @@ class GraphConstructionStage(BaseStage):
 
         logger.info(f"Found {len(chunk_entities)} chunks with entity mentions")
 
-        # Create relationships for entities co-occurring in same chunks
-        added_count = 0
+        # Collect all relationships to insert in batch
+        relationships_to_insert = []
         skipped_count = 0
 
         for chunk_id, entity_ids in chunk_entities.items():
@@ -450,20 +449,25 @@ class GraphConstructionStage(BaseStage):
                         "relationship_type": "co_occurrence",  # Mark as auto-generated
                     }
 
-                    try:
-                        relations_collection.insert_one(relationship_doc)
-                        added_count += 1
+                    relationships_to_insert.append(relationship_doc)
 
-                        if added_count % 50 == 0:
-                            logger.debug(
-                                f"Added {added_count} co-occurrence relationships"
-                            )
-
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to insert co-occurrence relationship "
-                            f"{entity1_id} <-> {entity2_id}: {e}"
-                        )
+        # Batch insert all relationships for better performance
+        added_count = 0
+        if relationships_to_insert:
+            logger.info(
+                f"Inserting {len(relationships_to_insert)} co-occurrence relationships in batch"
+            )
+            result = batch_insert(
+                collection=relations_collection,
+                documents=relationships_to_insert,
+                batch_size=500,
+                ordered=False,  # Continue on errors
+            )
+            added_count = result["inserted"]
+            logger.info(
+                f"Co-occurrence batch insert: {result['inserted']}/{result['total']} successful, "
+                f"{result['failed']} failed"
+            )
 
         logger.info(
             f"Co-occurrence post-processing complete: "
@@ -528,8 +532,8 @@ class GraphConstructionStage(BaseStage):
             f"Calculating similarity for {len(entities_with_embeddings)} entities"
         )
 
-        # Step 3: Calculate pairwise cosine similarity
-        added_count = 0
+        # Step 3: Calculate pairwise cosine similarity and collect relationships
+        relationships_to_insert = []
         skipped_count = 0
 
         from itertools import combinations
@@ -581,20 +585,25 @@ class GraphConstructionStage(BaseStage):
                     "similarity_score": float(similarity),
                 }
 
-                try:
-                    relations_collection.insert_one(relationship_doc)
-                    added_count += 1
+                relationships_to_insert.append(relationship_doc)
 
-                    if added_count % 10 == 0:
-                        logger.debug(
-                            f"Added {added_count} semantic similarity relationships"
-                        )
-
-                except Exception as e:
-                    logger.error(
-                        f"Failed to insert similarity relationship "
-                        f"{entity1_id} <-> {entity2_id}: {e}"
-                    )
+        # Batch insert all similarity relationships
+        added_count = 0
+        if relationships_to_insert:
+            logger.info(
+                f"Inserting {len(relationships_to_insert)} semantic similarity relationships in batch"
+            )
+            result = batch_insert(
+                collection=relations_collection,
+                documents=relationships_to_insert,
+                batch_size=500,
+                ordered=False,
+            )
+            added_count = result["inserted"]
+            logger.info(
+                f"Semantic similarity batch insert: {result['inserted']}/{result['total']} successful, "
+                f"{result['failed']} failed"
+            )
 
         logger.info(
             f"Semantic similarity post-processing complete: "
@@ -666,7 +675,7 @@ class GraphConstructionStage(BaseStage):
         logger.info(f"Found {len(video_chunks)} videos with chunks")
 
         # Step 4: For each video, only connect entities in nearby chunks
-        added_count = 0
+        relationships_to_insert = []
         skipped_count = 0
 
         for video_id, chunks in video_chunks.items():
@@ -777,20 +786,25 @@ class GraphConstructionStage(BaseStage):
                                     "relationship_type": "cross_chunk",
                                 }
 
-                                try:
-                                    relations_collection.insert_one(relationship_doc)
-                                    added_count += 1
+                                relationships_to_insert.append(relationship_doc)
 
-                                    if added_count % 50 == 0:
-                                        logger.debug(
-                                            f"Added {added_count} cross-chunk relationships"
-                                        )
-
-                                except Exception as e:
-                                    logger.error(
-                                        f"Failed to insert cross-chunk relationship "
-                                        f"{entity1_id} <-> {entity2_id}: {e}"
-                                    )
+        # Batch insert all cross-chunk relationships
+        added_count = 0
+        if relationships_to_insert:
+            logger.info(
+                f"Inserting {len(relationships_to_insert)} cross-chunk relationships in batch"
+            )
+            result = batch_insert(
+                collection=relations_collection,
+                documents=relationships_to_insert,
+                batch_size=500,
+                ordered=False,
+            )
+            added_count = result["inserted"]
+            logger.info(
+                f"Cross-chunk batch insert: {result['inserted']}/{result['total']} successful, "
+                f"{result['failed']} failed"
+            )
 
         window_mode = (
             "adaptive" if use_adaptive_window else f"override={chunk_window_override}"
@@ -874,8 +888,8 @@ class GraphConstructionStage(BaseStage):
             "is_a": "has_instance",
         }
 
-        # Get all relationships that have reverse predicates
-        added_count = 0
+        # Collect all reverse relationships to insert in batch
+        relationships_to_insert = []
         skipped_count = 0
 
         for relationship in relations_collection.find():
@@ -921,17 +935,25 @@ class GraphConstructionStage(BaseStage):
                 "original_relationship_id": relationship["relationship_id"],
             }
 
-            try:
-                relations_collection.insert_one(reverse_relationship_doc)
-                added_count += 1
+            relationships_to_insert.append(reverse_relationship_doc)
 
-                if added_count % 50 == 0:
-                    logger.debug(f"Added {added_count} reverse relationships")
-
-            except Exception as e:
-                logger.error(
-                    f"Failed to insert reverse relationship for {relationship['relationship_id']}: {e}"
-                )
+        # Batch insert all reverse relationships
+        added_count = 0
+        if relationships_to_insert:
+            logger.info(
+                f"Inserting {len(relationships_to_insert)} reverse relationships in batch"
+            )
+            result = batch_insert(
+                collection=relations_collection,
+                documents=relationships_to_insert,
+                batch_size=500,
+                ordered=False,
+            )
+            added_count = result["inserted"]
+            logger.info(
+                f"Bidirectional batch insert: {result['inserted']}/{result['total']} successful, "
+                f"{result['failed']} failed"
+            )
 
         logger.info(
             f"Bidirectional relationship post-processing complete: "
@@ -998,7 +1020,8 @@ class GraphConstructionStage(BaseStage):
 
         logger.info(f"Got {len(predictions)} link predictions")
 
-        added_count = 0
+        # Collect all predicted relationships to insert in batch
+        relationships_to_insert = []
 
         for subject_id, object_id, predicate, confidence in predictions:
             # Check if relationship already exists
@@ -1034,18 +1057,25 @@ class GraphConstructionStage(BaseStage):
                 "prediction_confidence": float(confidence),
             }
 
-            try:
-                relations_collection.insert_one(relationship_doc)
-                added_count += 1
+            relationships_to_insert.append(relationship_doc)
 
-                if added_count % 50 == 0:
-                    logger.debug(f"Added {added_count} predicted relationships")
-
-            except Exception as e:
-                logger.error(
-                    f"Failed to insert predicted relationship "
-                    f"{subject_id} <-> {object_id}: {e}"
-                )
+        # Batch insert all predicted relationships
+        added_count = 0
+        if relationships_to_insert:
+            logger.info(
+                f"Inserting {len(relationships_to_insert)} predicted relationships in batch"
+            )
+            result = batch_insert(
+                collection=relations_collection,
+                documents=relationships_to_insert,
+                batch_size=500,
+                ordered=False,
+            )
+            added_count = result["inserted"]
+            logger.info(
+                f"Link prediction batch insert: {result['inserted']}/{result['total']} successful, "
+                f"{result['failed']} failed"
+            )
 
         logger.info(
             f"Link prediction post-processing complete: added {added_count} relationships"
@@ -1264,6 +1294,25 @@ class GraphConstructionStage(BaseStage):
 
         logger.info(f"Cleaned up {result.modified_count} failed constructions")
         return result.modified_count
+
+    # run() inherited from BaseStage - auto-detects concurrency and calls appropriate method
+    # BaseStage.run() now handles:
+    # - Concurrent + TPM tracking → _run_concurrent_with_tpm() [default]
+    # - Concurrent only → _run_concurrent() if implemented
+    # - Sequential → standard loop processing
+
+    # _run_concurrent removed - BaseStage.run() handles concurrency automatically
+
+    def estimate_tokens(self, doc: Dict[str, Any]) -> int:
+        """Estimate tokens for graph construction (override base method)."""
+        extraction_data = doc.get("graphrag_extraction", {}).get("data", {})
+        relationships = extraction_data.get("relationships", [])
+        # Each relationship ~300 tokens, output ~600 tokens
+        estimated = len(relationships) * 300 + 600
+        return max(estimated, 100)
+
+    # process_doc_with_tracking uses default (calls handle_doc)
+    # store_batch_results uses default (no-op, handle_doc writes directly)
 
     def finalize(self) -> None:
         """

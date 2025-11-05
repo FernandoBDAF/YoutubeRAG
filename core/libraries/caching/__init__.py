@@ -1,28 +1,45 @@
 """
 Caching Library - Cross-Cutting Concern.
 
-Provides in-memory and distributed caching with decorators.
-Part of the CORE libraries - Tier 2 (simple implementation + TODOs).
+Provides in-memory LRU caching with optional TTL support.
+Part of the CORE libraries - Tier 2.
 
-TODO: Implement
-- Simple LRU cache (basic implementation)
-- @cached decorator
-- TTL support (TODO for later)
-- Distributed cache (Redis) (TODO for later)
-- Cache invalidation patterns
+Usage:
+    from core.libraries.caching import LRUCache, cached
 
-Usage (planned):
-    from core.libraries.caching import cached, LRUCache
-
-    @cached(max_size=1000, ttl=3600)
-    def get_entity(entity_id: str):
-        # Result cached for 1 hour
-        ...
-
-    # Or manual:
-    cache = LRUCache(max_size=100)
+    # Manual cache usage
+    cache = LRUCache(max_size=1000, ttl=3600, name="entities")
     cache.set('key', 'value')
     value = cache.get('key')
+
+    # Decorator usage
+    @cached(max_size=100, ttl=600)
+    def get_entity(entity_id: str):
+        # Result cached for 10 minutes
+        # Cache size limited to 100 items (LRU eviction)
+        ...
+
+    # Custom cache key
+    @cached(
+        max_size=500,
+        key_func=lambda user_id, date: f"{user_id}:{date}",
+        name="user_data"
+    )
+    def get_user_data(user_id: str, date: str):
+        ...
+
+    # Check cache stats
+    @cached(max_size=100)
+    def my_func():
+        ...
+
+    stats = my_func.cache.stats()
+    # {'hits': 50, 'misses': 10, 'hit_rate': 83.3, ...}
 """
 
-__all__ = []  # TODO: Export when implemented
+from core.libraries.caching.lru_cache import LRUCache, cached
+
+__all__ = [
+    "LRUCache",
+    "cached",
+]

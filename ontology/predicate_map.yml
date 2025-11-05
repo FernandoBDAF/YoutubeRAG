@@ -1,0 +1,137 @@
+# === Taxonomy / topical ===
+is_a: is_a
+is_a_type_of: is_a
+is_a_part_of: part_of
+part_of: part_of
+component_of: part_of
+composed_of: includes
+consists_of: includes
+contain: includes
+includ: includes
+includes: includes
+included_in: part_of
+contains_information_about: focuses_on
+focuses_on: focuses_on
+focused_on: focuses_on
+related_to: related_to
+is_related_to: related_to
+similar_to: similar_to
+connected_to: connected_to
+connects_to: connected_to
+connect: connected_to
+links_to: connected_to
+mapped_to: equivalent_to
+maps_to: equivalent_to
+compared_to: compared_to
+compares_to: compared_to
+compared_with: compared_to
+compares_with: compared_to
+contrasts_with: contrasts_with
+integrates_with: integrates_with
+integrat: integrates_with
+interacts_with: interacts_with
+collaborates_with: collaborates_with
+partners_with: partners_with
+compatible_with: compatible_with
+equivalent_to: equivalent_to
+
+# === Usage / dependency ===
+us: uses
+use: uses
+uses: uses
+utiliz: uses
+used_in: uses
+used_for: uses
+used_with: uses
+does_not_use: __DROP__
+requir: requires
+requires: requires
+depends_on: depends_on
+relies_on: depends_on
+operates_on: uses
+operates_in: hosted_on
+operates_with: interacts_with
+implemented_in: implemented_in
+implemented_by: created_by
+runs_on: hosted_on
+runs_in: hosted_on
+host: hosted_on
+hosted_on: hosted_on
+
+# === Authorship / creation ===
+develop: created_by
+developed: created_by
+developed_by: created_by
+creat: created_by
+created: created_by
+created_by: created_by
+produc: results_in
+produced_by: produced_by
+generated_by: produced_by
+build: references
+builds_on: references
+built_on: references
+
+# === Eval / training / measure ===
+train: trained_on
+trained_on: trained_on
+trains_on: trained_on
+evaluat: evaluated_on
+evaluated_on: evaluated_on
+evaluated_in: evaluated_on
+measur: measured_by
+measured_by: measured_by
+has_property: has_property
+
+# === Causal / temporal ===
+affect: causes
+influenc: causes
+impact: causes
+leads_to: results_in
+results_in: results_in
+preced: precedes
+precedes: precedes
+successor_of: precedes
+
+# === Location / affiliation ===
+located_in: located_in
+works_at: works_at
+worked_at: works_at
+member_of: member_of
+affiliated_with: collaborates_with
+
+# === Citation / reference ===
+referenc: references
+references: references
+
+# === DROP — instructional or provenance ===
+discuss: __DROP__
+discussed_in: __DROP__
+discussed_by: __DROP__
+discussed_at: __DROP__
+mention: __DROP__
+mentioned_in: __DROP__
+present: __DROP__
+explain: __DROP__
+describ: __DROP__
+demonstrat: __DROP__
+illustrat: __DROP__
+question: __DROP__
+inquires_about: __DROP__
+provides_access_to: __DROP__
+provides_information_about: __DROP__
+provides_information_on: __DROP__
+guid: __DROP__
+offer: __DROP__
+featur: __DROP__
+speaks_at: __DROP__
+process: __DROP__
+manag: __DROP__
+stor: __DROP__
+stored_in: __DROP__
+introduc: __DROP__
+cover: __DROP__
+review: __DROP__
+teach: __DROP__
+studi: __DROP__
+writ: __DROP__

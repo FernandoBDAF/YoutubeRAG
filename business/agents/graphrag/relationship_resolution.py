@@ -7,12 +7,12 @@ their descriptions using LLM-based summarization.
 """
 
 import logging
-import hashlib
-import time
-from typing import Dict, List, Any, Optional, Set, Tuple
+from core.libraries.retry import retry_llm_call
+from core.libraries.logging import log_exception
+from typing import Dict, List, Any, Optional, Set
 from collections import defaultdict
 from openai import OpenAI
-from core.models.graphrag import ResolvedRelationship, RelationshipModel
+from core.models.graphrag import ResolvedRelationship
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +27,6 @@ class RelationshipResolutionAgent:
         llm_client: OpenAI,
         model_name: str = "gpt-4o-mini",
         temperature: float = 0.1,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
     ):
         """
         Initialize the Relationship Resolution Agent.
@@ -37,14 +35,10 @@ class RelationshipResolutionAgent:
             llm_client: OpenAI client instance
             model_name: Model to use for resolution
             temperature: Temperature for LLM generation
-            max_retries: Maximum number of retries for failed resolutions
-            retry_delay: Delay between retries in seconds
         """
         self.llm_client = llm_client
         self.model_name = model_name
         self.temperature = temperature
-        self.max_retries = max_retries
-        self.retry_delay = retry_delay
 
         # System prompt for relationship description resolution
         self.resolution_prompt = """
@@ -356,45 +350,60 @@ class RelationshipResolutionAgent:
             [f"Description {i+1}: {desc}" for i, desc in enumerate(descriptions)]
         )
 
-        for attempt in range(self.max_retries):
-            try:
-                response = self.llm_client.chat.completions.create(
-                    model=self.model_name,
-                    messages=[
-                        {"role": "system", "content": self.resolution_prompt},
-                        {
-                            "role": "user",
-                            "content": f"Subject: {subject_name}\nObject: {object_name}\nPredicate: {predicate}\n\nDescriptions:\n{combined_descriptions}",
-                        },
-                    ],
-                    temperature=self.temperature,
-                    max_tokens=1000,
-                )
+        try:
+            resolved_description = self._resolve_with_llm(
+                subject_name, object_name, predicate, combined_descriptions
+            )
 
-                resolved_description = response.choices[0].message.content.strip()
-
-                if len(resolved_description) < 10:
-                    logger.warning(
-                        f"Resolved description too short for relationship '{subject_name} -> {object_name}'"
-                    )
-                    continue
-
-                return resolved_description
-
-            except Exception as e:
+            if len(resolved_description) < 10:
                 logger.warning(
-                    f"Description resolution attempt {attempt + 1} failed for relationship '{subject_name} -> {object_name}': {e}"
+                    f"Resolved description too short for relationship '{subject_name} -> {object_name}'"
                 )
+                return None
 
-                if attempt < self.max_retries - 1:
-                    time.sleep(self.retry_delay * (2**attempt))
-                else:
-                    logger.error(
-                        f"All description resolution attempts failed for relationship '{subject_name} -> {object_name}'"
-                    )
-                    return None
+            return resolved_description
 
-        return None
+        except Exception as e:
+            log_exception(
+                logger,
+                f"All description resolution attempts failed for relationship '{subject_name} -> {object_name}'",
+                e,
+            )
+            return None
+
+    @retry_llm_call(max_attempts=3)
+    def _resolve_with_llm(
+        self,
+        subject_name: str,
+        object_name: str,
+        predicate: str,
+        combined_descriptions: str,
+    ) -> str:
+        """Resolve relationship descriptions with automatic retry.
+
+        Args:
+            subject_name: Subject entity name
+            object_name: Object entity name
+            predicate: Relationship predicate
+            combined_descriptions: Combined descriptions to resolve
+
+        Returns:
+            Resolved description
+        """
+        response = self.llm_client.chat.completions.create(
+            model=self.model_name,
+            messages=[
+                {"role": "system", "content": self.resolution_prompt},
+                {
+                    "role": "user",
+                    "content": f"Subject: {subject_name}\nObject: {object_name}\nPredicate: {predicate}\n\nDescriptions:\n{combined_descriptions}",
+                },
+            ],
+            temperature=self.temperature,
+            max_tokens=1000,
+        )
+
+        return response.choices[0].message.content.strip()
 
     def _calculate_overall_confidence(
         self, relationship_group: List[Dict[str, Any]]

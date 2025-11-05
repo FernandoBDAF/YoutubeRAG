@@ -1,8 +1,14 @@
 # Documentation Principles and Process
 
-**Last Updated**: November 3, 2025  
-**Purpose**: Establish consistent documentation practices optimized for LLM-assisted development  
+**Last Updated**: November 5, 2025  
+**Purpose**: Ultimate reference for documentation standards and structured development methodology  
 **Status**: Living document - update as we learn
+
+**Related Entry/Exit Points**:
+
+- **Start Work**: `IMPLEMENTATION_START_POINT.md` (how to begin)
+- **Complete Work**: `IMPLEMENTATION_END_POINT.md` (how to finish)
+- **This Document**: Ultimate reference for standards and methodology
 
 ---
 
@@ -81,6 +87,130 @@
 
 ---
 
+## 🏗️ Structured Development Methodology
+
+**Added**: November 5, 2025  
+**Purpose**: Hierarchical methodology for LLM-assisted development  
+**Reference**: `IMPLEMENTATION_START_POINT.md` (complete guide)
+
+### The Three-Tier Hierarchy
+
+**Development documents organized in three tiers**:
+
+```
+PLAN (defines WHAT - achievements)
+  ↓
+SUBPLAN (defines HOW - approach for one achievement)
+  ↓
+EXECUTION_TASK (logs execution - all attempts and learnings)
+```
+
+### Document Types & Naming
+
+**PLAN**: `PLAN_<FEATURE>.md`
+
+- Lists priority-ordered achievements (WHAT needs to exist)
+- Self-contained (LLM can execute from PLAN alone)
+- Dynamic (can add achievements during execution)
+- Tracks subplans as they're created
+- Example: `PLAN_OPTIMIZE-EXTRACTION.md`
+
+**SUBPLAN**: `SUBPLAN_<FEATURE>_<NUMBER>.md`
+
+- Defines specific approach (HOW) for one achievement
+- Created on-demand when tackling an achievement
+- Static once created (the "assignment")
+- Can have multiple EXECUTION_TASKs (different attempts)
+- Example: `SUBPLAN_OPTIMIZE-EXTRACTION_01.md`
+
+**EXECUTION_TASK**: `EXECUTION_TASK_<FEATURE>_<SUBPLAN>_<EXECUTION>.md`
+
+- Dynamic log of all implementation attempts
+- Updated after every iteration
+- Captures learnings, tracks circular debugging
+- Multiple per SUBPLAN if first attempt fails
+- Example: `EXECUTION_TASK_OPTIMIZE-EXTRACTION_01_01.md`
+
+### When to Use Each
+
+**Create a PLAN when**:
+
+- Starting significant work (>10 hours)
+- Work has multiple parts (achievements)
+- Coordination needed across subplans
+
+**Create a SUBPLAN when**:
+
+- Tackling a specific achievement from a PLAN
+- Have a specific approach to define
+- Want to outline before executing
+
+**Create an EXECUTION_TASK when**:
+
+- Starting work on a SUBPLAN
+- Starting a new attempt (after circular debugging)
+- Any iterative LLM work (even plan creation if complex)
+
+### Development Workflow
+
+**Entry → Work → Exit → Reference**:
+
+```
+IMPLEMENTATION_START_POINT.md (entry)
+  ↓
+Create PLAN (achievements list)
+  ↓
+Create SUBPLAN (approach)
+  ↓
+Create EXECUTION_TASK (log iterations)
+  ↓
+Work iteratively (test-first, learn, capture)
+  ↓
+Complete all subplans
+  ↓
+IMPLEMENTATION_END_POINT.md (exit)
+  ├─ Update IMPLEMENTATION_BACKLOG.md
+  ├─ Process improvement analysis
+  └─ Archive systematically
+  ↓
+DOCUMENTATION-PRINCIPLES-AND-PROCESS.md (this document - ultimate reference)
+```
+
+### Key Principles
+
+1. **Test-First Always**: Write tests before implementation
+2. **Never Cheat Tests**: Fix code, not tests
+3. **Document Every Iteration**: No iteration untracked
+4. **Prevent Circular Debugging**: Check every 3 iterations
+5. **Capture Learnings**: Add to code as comments
+6. **Dynamic Plans**: Add achievements if gaps discovered
+7. **Multiple Attempts OK**: One SUBPLAN → multiple EXECUTION_TASKs normal
+
+### Integration with Documentation
+
+**PLANs, SUBPLANs, EXECUTION_TASKs are temporary**:
+
+- Live in root during execution
+- Archived when PLAN complete
+- Follow archiving principles below
+
+**Permanent methodology documents**:
+
+- `IMPLEMENTATION_START_POINT.md` - Entry point guide
+- `IMPLEMENTATION_END_POINT.md` - Completion guide
+- `IMPLEMENTATION_BACKLOG.md` - Future work tracking
+- This document - Ultimate reference
+
+**Templates**:
+
+- `documentation/templates/PLAN-TEMPLATE.md`
+- `documentation/templates/SUBPLAN-TEMPLATE.md`
+- `documentation/templates/EXECUTION_TASK-TEMPLATE.md`
+
+For complete methodology details, see `IMPLEMENTATION_START_POINT.md`.
+
+---
+
 ## 📂 Folder Structure (Standard)
 
 ### Root Directory
@@ -89,11 +219,13 @@
 
 - Essential files (README.md, requirements.txt, .env.example)
 - Project files (TODO.md, CHANGELOG.md, BUGS.md)
+- Methodology docs (IMPLEMENTATION_START_POINT.md, IMPLEMENTATION_END_POINT.md, IMPLEMENTATION_BACKLOG.md)
 - Infrastructure (docker-compose.\*.yml)
-- Active work docs (max 5, temporary, will be archived)
+- Active work docs (PLAN_X.md, SUBPLAN_X_Y.md, EXECUTION_TASK_X_Y_Z.md - temporary, archive when complete)
 
-**Never Keep**:
+**Never Keep Long-Term**:
 
+- Completed PLANs/SUBPLANs/EXECUTION_TASKs (archive immediately after PLAN complete)
 - Implementation phase docs (archive immediately after completion)
 - Session summaries (archive)
 - Planning docs older than current sprint (archive)
@@ -453,28 +585,42 @@ archive/
 
 ### After Feature/Implementation Complete
 
-**Step 1: Consolidate** (within 24 hours)
+**Step 1: Follow IMPLEMENTATION_END_POINT.md**
 
-Extract learnings from phase docs and create/update:
+Complete the exit process:
+
+- Update IMPLEMENTATION_BACKLOG.md (extract future work from EXECUTION_TASKs)
+- Process improvement analysis (improve methodology)
+- Extract learnings to permanent docs
+- Create archive with INDEX.md
+
+**Step 2: Consolidate Learnings** (within 24 hours)
+
+Extract learnings from EXECUTION_TASKs and update:
 
 - Technical guide (documentation/technical/)
 - User guide (documentation/guides/)
 - Reference doc (documentation/reference/)
 - Post outline (documentation/posts/)
 
-**Step 2: Archive** (immediately after consolidation)
+**Step 3: Archive** (per IMPLEMENTATION_END_POINT.md)
 
 ```bash
-# Create archive folder
-mkdir -p documentation/archive/[topic]-[date]/{planning,implementation,testing,analysis,summaries}
+# For PLAN-based work (using structured methodology)
+mkdir -p documentation/archive/[feature]-[date]/{planning,subplans,execution,summary}
 
-# Move all phase docs
-mv *-MICRO-PLAN.md documentation/archive/[topic]/planning/
+# Move PLAN documents
+mv PLAN_[FEATURE].md documentation/archive/[feature]-[date]/planning/
+mv SUBPLAN_[FEATURE]_*.md documentation/archive/[feature]-[date]/subplans/
+mv EXECUTION_TASK_[FEATURE]_*.md documentation/archive/[feature]-[date]/execution/
+# Create and move completion summary
+
+# For other work (legacy pattern)
+mkdir -p documentation/archive/[topic]-[date]/{planning,implementation,testing,analysis,summaries}
 mv *-COMPLETE.md documentation/archive/[topic]/implementation/
-mv SESSION-SUMMARY-*.md documentation/archive/[topic]/summaries/
 # ... etc
 
-# Create INDEX.md
+# Always create INDEX.md
 # Document what's in archive, why, and how to use it
 ```
 

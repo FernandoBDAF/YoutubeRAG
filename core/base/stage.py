@@ -2,10 +2,12 @@ import os
 import time
 import argparse
 import logging
-from typing import Any, Dict, Iterable, Optional
+import threading
+from typing import Any, Dict, Iterable, Optional, List, Callable
 
 from dotenv import load_dotenv
 from pymongo import MongoClient
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from core.libraries.error_handling.decorators import handle_errors
 from core.libraries.error_handling.context import stage_context
@@ -15,6 +17,7 @@ from core.libraries.logging import (
     log_exception,
 )
 from core.libraries.metrics import Counter, Histogram, Timer, MetricRegistry
+from core.libraries.rate_limiting import RateLimiter
 
 try:
     from dependencies.database.mongodb import get_mongo_client
@@ -74,7 +77,11 @@ class BaseStage:
         self.start_ts = time.time()
         self.stats = {"processed": 0, "skipped": 0, "failed": 0, "updated": 0}
 
+    # NOTE: Stages should NOT be called directly - they are components called by pipelines
+    # These argument parsing methods exist for backward compatibility only
+    # TODO: Remove in future version when all stages are called exclusively via pipelines
     def build_parser(self, p: argparse.ArgumentParser) -> None:
+        """DEPRECATED: Stages should be called by pipelines, not directly."""
         p.add_argument("--max", type=int)
         p.add_argument("--llm", action="store_true")
         p.add_argument("--verbose", action="store_true")
@@ -88,6 +95,7 @@ class BaseStage:
         p.add_argument("--concurrency", type=int)
 
     def parse_args(self) -> None:
+        """DEPRECATED: Stages should be called by pipelines, not directly."""
         p = argparse.ArgumentParser(description=self.description or self.name)
         self.build_parser(p)
         self.args = p.parse_args()
@@ -95,16 +103,18 @@ class BaseStage:
     def setup(self) -> None:
         load_dotenv()
         self.client = get_mongo_client()
-        # Determine default/read/write DBs with fallbacks
+
+        # Config fallbacks ARE necessary because config allows None values
+        # from_args_env() may return None for read_db_name/write_db_name
+        # These fallbacks ensure we always have valid database names
         default_db_name = self.config.db_name or DEFAULT_DB
-        # If specific read/write DBs aren't provided, fall back to the default DB
         write_db_name = self.config.write_db_name or default_db_name
         read_db_name = self.config.read_db_name or default_db_name
-        # Default DB (backward compatibility)
-        self.db = self.client[default_db_name]
-        # Explicit read/write handles for per-stage overrides
-        self.db_write = self.client[write_db_name]
-        self.db_read = self.client[read_db_name]
+
+        # Set up database handles
+        self.db = self.client[default_db_name]  # Default (backward compatibility)
+        self.db_write = self.client[write_db_name]  # Explicit write DB
+        self.db_read = self.client[read_db_name]  # Explicit read DB
 
     def log(self, msg: str) -> None:
         self.logger.info(f"[{self.name}] {msg}")
@@ -144,9 +154,251 @@ class BaseStage:
             f"skipped={self.stats['skipped']} failed={self.stats['failed']} in {dur:.1f}s"
         )
 
+    # ============================================================================
+    # Concurrent Processing Support (Template Methods)
+    # ============================================================================
+
+    def estimate_tokens(self, doc: Dict[str, Any]) -> int:
+        """
+        Estimate tokens for a document (template method - override in stages).
+
+        Args:
+            doc: Document to estimate tokens for
+
+        Returns:
+            Estimated token count
+        """
+        # Default: simple text-based estimation
+        text = doc.get("chunk_text", "")
+        return int(len(text) / 4) + 1000  # ~4 chars per token + output estimate
+
+    def process_doc_with_tracking(self, doc: Dict[str, Any]) -> Any:
+        """
+        Process a document with TPM/RPM tracking (template method - override in stages).
+
+        Default implementation calls handle_doc(). Stages can override to call
+        agent methods or perform custom processing.
+
+        Args:
+            doc: Document to process
+
+        Returns:
+            Processing result (may be None)
+        """
+        return self.handle_doc(doc)
+
+    def store_batch_results(
+        self, batch_results: List[Any], batch_docs: List[Dict[str, Any]]
+    ) -> None:
+        """
+        Store batch processing results (template method - override in stages).
+
+        Default: no-op (results are handled by handle_doc internally).
+        Stages that need to store results incrementally should override this.
+
+        Args:
+            batch_results: Results from processing batch_docs
+            batch_docs: Original documents that were processed
+        """
+        pass
+
+    def _setup_tpm_tracking(self, limiter_name: str = "default") -> tuple:
+        """
+        Setup TPM/RPM tracking infrastructure.
+
+        Args:
+            limiter_name: Name for the rate limiter (for logging)
+
+        Returns:
+            Tuple of (target_tpm, target_rpm, rpm_limiter, token_window, token_lock)
+        """
+        target_tpm = int(os.getenv("GRAPHRAG_TARGET_TPM", "950000"))
+        target_rpm = int(os.getenv("GRAPHRAG_TARGET_RPM", "20000"))
+
+        rpm_limiter = RateLimiter(rpm=target_rpm, name=f"{self.name}_{limiter_name}")
+        token_window = []  # (timestamp, tokens) tuples
+        token_lock = threading.Lock()
+
+        return target_tpm, target_rpm, rpm_limiter, token_window, token_lock
+
+    def _wait_for_tpm_capacity(
+        self,
+        estimated_tokens: int,
+        target_tpm: int,
+        token_window: List[tuple],
+        token_lock: threading.Lock,
+    ) -> None:
+        """
+        Wait until TPM capacity is available (optimized for throughput).
+
+        Uses optimistic reservation: only blocks if we're over 120% of target.
+
+        Args:
+            estimated_tokens: Estimated tokens for this operation
+            target_tpm: Target tokens per minute
+            token_window: List of (timestamp, tokens) tuples
+            token_lock: Thread lock for token_window
+        """
+        now = time.time()
+        with token_lock:
+            # Clean old events (60 second window)
+            cutoff = now - 60
+            token_window[:] = [(ts, tok) for ts, tok in token_window if ts > cutoff]
+
+            # Current TPM
+            current_tpm = sum(tok for _, tok in token_window)
+
+            # Reserve immediately (optimistic)
+            token_window.append((now, estimated_tokens))
+
+            # Only wait if way over limit (> 120%)
+            if current_tpm > target_tpm * 1.2:
+                time.sleep(0.05)  # Minimal delay
+
+    def _run_concurrent_with_tpm(
+        self,
+        docs: List[Dict[str, Any]],
+        limiter_name: str = "default",
+    ) -> int:
+        """
+        Run stage with concurrent processing and TPM tracking.
+
+        This is the main orchestration method that stages can call from their run() method.
+        It uses template methods (estimate_tokens, process_doc_with_tracking, store_batch_results)
+        that stages can override for stage-specific behavior.
+
+        Args:
+            docs: List of documents to process
+            limiter_name: Name for rate limiter (for logging)
+
+        Returns:
+            0 on success, 1 on failure
+        """
+        try:
+            total = len(docs)
+            if total == 0:
+                return 0
+
+            # Dynamic batch size based on workers (2x workers, max 1000 for safety)
+            concurrency = int(self.config.concurrency or 300)
+            batch_size = min(concurrency * 2, 1000)
+
+            # Setup TPM tracking
+            target_tpm, target_rpm, rpm_limiter, token_window, token_lock = (
+                self._setup_tpm_tracking(limiter_name)
+            )
+
+            self.logger.info(
+                f"[{self.name}] Advanced TPM mode: {total} documents "
+                f"(workers={concurrency}, TPM={target_tpm:,}, RPM={target_rpm})"
+            )
+
+            overall_start = time.time()
+
+            # Process in batches
+            for batch_start in range(0, total, batch_size):
+                batch_end = min(batch_start + batch_size, total)
+                batch_docs = docs[batch_start:batch_end]
+                batch_num = (batch_start // batch_size) + 1
+                total_batches = (total + batch_size - 1) // batch_size
+
+                self.logger.info(
+                    f"[{self.name}] Batch {batch_num}/{total_batches}: "
+                    f"Processing documents {batch_start+1}-{batch_end}"
+                )
+
+                batch_start_time = time.time()
+
+                # Create worker function with tracking
+                def process_with_tracking(doc):
+                    """Process document with TPM/RPM tracking."""
+                    try:
+                        estimated = self.estimate_tokens(doc)
+                        self._wait_for_tpm_capacity(
+                            estimated, target_tpm, token_window, token_lock
+                        )
+                        rpm_limiter.wait()
+                        result = self.process_doc_with_tracking(doc)
+
+                        # Track actual tokens (approximate)
+                        with token_lock:
+                            token_window.append((time.time(), estimated))
+
+                        return result
+                    except Exception as e:
+                        self.stats["failed"] += 1
+                        self.logger.error(
+                            f"[{self.name}] Error processing document: {e}"
+                        )
+                        return None
+
+                # Process batch concurrently
+                batch_results = []
+                with ThreadPoolExecutor(max_workers=concurrency) as executor:
+                    future_to_idx = {
+                        executor.submit(process_with_tracking, doc): i
+                        for i, doc in enumerate(batch_docs)
+                    }
+
+                    # Collect results in order
+                    results_dict = {}
+                    for future in as_completed(future_to_idx):
+                        idx = future_to_idx[future]
+                        try:
+                            result = future.result()
+                            results_dict[idx] = result
+                        except Exception as e:
+                            self.logger.error(
+                                f"[{self.name}] Future error for document {idx}: {e}"
+                            )
+                            results_dict[idx] = None
+
+                    # Order by original index
+                    batch_results = [results_dict[i] for i in range(len(batch_docs))]
+
+                # Store batch results (if stage needs it)
+                self.store_batch_results(batch_results, batch_docs)
+
+                batch_elapsed = time.time() - batch_start_time
+
+                # Get current TPM
+                with token_lock:
+                    now = time.time()
+                    cutoff = now - 60
+                    token_window[:] = [
+                        (ts, tok) for ts, tok in token_window if ts > cutoff
+                    ]
+                    current_tpm = sum(tok for _, tok in token_window)
+
+                self.logger.info(
+                    f"[{self.name}] Batch {batch_num} complete: "
+                    f"{len(batch_docs)} documents in {batch_elapsed:.1f}s "
+                    f"(current TPM: {current_tpm:,}, "
+                    f"updated={self.stats['updated']}, failed={self.stats['failed']})"
+                )
+
+            overall_elapsed = time.time() - overall_start
+            self.logger.info(
+                f"[{self.name}] Complete: {total} documents in {overall_elapsed:.1f}s "
+                f"({overall_elapsed/60:.1f} minutes)"
+            )
+
+            # NOTE: finalize() NOT called here - user will call it separately when ready
+            return 0
+
+        except Exception as e:
+            self.logger.error(f"[{self.name}] Fatal error: {e}")
+            return 1
+
     @handle_errors(log_traceback=True, capture_context=True, reraise=False)
     def run(self, config: Optional[BaseStageConfig] = None) -> int:
-        """Run stage with comprehensive error handling and metrics."""
+        """Run stage with comprehensive error handling and metrics.
+
+        Automatically detects concurrency settings and uses appropriate execution method:
+        - Concurrent + TPM tracking: _run_concurrent_with_tpm() (default)
+        - Concurrent only: _run_concurrent() if implemented
+        - Sequential: standard loop processing
+        """
         if config is None:
             self.parse_args()
             self.config = self.build_config_from_args_env()
@@ -169,13 +421,50 @@ class BaseStage:
                 self.setup()
 
                 docs = list(self.iter_docs())
-                total_docs = len(docs)
-                if self.config.max:
-                    total_docs = min(total_docs, int(self.config.max))
+                if self.config.max is not None:
+                    docs = docs[: int(self.config.max)]
 
+                total_docs = len(docs)
+
+                if total_docs == 0:
+                    self.logger.info(f"[{self.name}] No documents to process")
+                    return 0
+
+                # Auto-detect execution mode
+                use_concurrent = self.config.concurrency and self.config.concurrency > 1
+                use_tpm_tracking = (
+                    os.getenv("GRAPHRAG_USE_TPM_TRACKING", "true").lower() == "true"
+                )
+
+                if use_concurrent and use_tpm_tracking:
+                    # Advanced TPM mode (default for GraphRAG stages)
+                    self.logger.info(
+                        f"[{self.name}] Using ADVANCED TPM TRACKING: "
+                        f"{total_docs} documents with {self.config.concurrency} workers"
+                    )
+                    return self._run_concurrent_with_tpm(docs, limiter_name=self.name)
+
+                elif use_concurrent:
+                    # Basic concurrent mode
+                    self.logger.info(
+                        f"[{self.name}] Using CONCURRENT processing: "
+                        f"{total_docs} documents with {self.config.concurrency} workers"
+                    )
+                    # Check if stage has custom _run_concurrent implementation
+                    if hasattr(self, "_run_concurrent") and callable(
+                        getattr(self, "_run_concurrent")
+                    ):
+                        return self._run_concurrent(docs)
+                    else:
+                        # Fallback to TPM tracking (works for all stages)
+                        return self._run_concurrent_with_tpm(
+                            docs, limiter_name=self.name
+                        )
+
+                # Sequential mode - original implementation below
                 if total_docs > 0:
                     self.logger.info(
-                        f"[{self.name}] Processing {total_docs} document(s) "
+                        f"[{self.name}] Using SEQUENTIAL processing: {total_docs} document(s) "
                         f"(max={self.config.max if self.config.max else 'unlimited'})"
                     )
 

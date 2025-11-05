@@ -25,17 +25,20 @@ def to_dict(model: BaseModel, for_mongodb: bool = False) -> Dict[str, Any]:
     """Convert Pydantic model to dict.
 
     Args:
-        model: Pydantic model instance
+        model: Pydantic model instance (or None)
         for_mongodb: If True, convert ObjectId/datetime to MongoDB-compatible types
 
     Returns:
-        Dictionary representation
+        Dictionary representation (or None if model is None)
 
     Example:
         entity = EntityModel(name="Python", type="TECHNOLOGY")
         doc = to_dict(entity, for_mongodb=True)
         db.collection.insert_one(doc)
     """
+    if model is None:
+        return None
+
     data = model.model_dump() if hasattr(model, "model_dump") else model.dict()
 
     if for_mongodb:
@@ -44,19 +47,19 @@ def to_dict(model: BaseModel, for_mongodb: bool = False) -> Dict[str, Any]:
     return data
 
 
-def from_dict(data: Dict[str, Any], model_class: Type[T]) -> T:
+def from_dict(model_class: Type[T], data: Dict[str, Any]) -> T:
     """Convert dict to Pydantic model.
 
     Args:
-        data: Dictionary (e.g., from MongoDB)
         model_class: Pydantic model class
+        data: Dictionary (e.g., from MongoDB)
 
     Returns:
         Model instance
 
     Example:
         doc = db.collection.find_one({'entity_id': '123'})
-        entity = from_dict(doc, EntityModel)
+        entity = from_dict(EntityModel, doc)
     """
     # Remove MongoDB-specific fields
     clean_data = {k: v for k, v in data.items() if not k.startswith("_")}
@@ -102,4 +105,5 @@ def json_encoder(obj: Any) -> Any:
     elif hasattr(obj, "__dict__"):
         return obj.__dict__
     else:
-        return str(obj)
+        # For basic JSON types, return as-is
+        return obj

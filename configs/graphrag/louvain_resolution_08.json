@@ -1,0 +1,16 @@
+{
+  "experiment_id": "louvain_resolution_0.8",
+  "read_db": "mongo_hack",
+  "write_db": "graphrag_exp_louvain_res08",
+  "concurrency": 300,
+  "community_detection": {
+    "algorithm": "louvain",
+    "resolution": 0.8,
+    "min_cluster_size": 2,
+    "max_cluster_size": 50
+  },
+  "comments": {
+    "purpose": "Test lower resolution for fewer, larger communities",
+    "expected": "Fewer communities with higher entity counts"
+  }
+}

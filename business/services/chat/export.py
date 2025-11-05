@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from core.libraries.serialization import json_encoder  # MongoDB type handling
 
 try:
     from bson import ObjectId
@@ -55,35 +56,14 @@ def export_last_turn(
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def to_plain(o: Any) -> Any:
-        """Convert MongoDB types to JSON-serializable types."""
-        try:
-            if ObjectId is not None and isinstance(o, ObjectId):
-                return str(o)
-        except Exception:
-            pass
-        try:
-            if isinstance(o, datetime):
-                return o.isoformat()
-        except Exception:
-            pass
-        try:
-            if Decimal128 is not None and isinstance(o, Decimal128):
-                return float(o.to_decimal())
-        except Exception:
-            pass
-        try:
-            return str(o)
-        except Exception:
-            return None
-
+    # Use centralized JSON encoder from serialization library (replaces manual to_plain)
     if fmt == "json":
         payload = {
             "session_id": session_id,
             **{k: v for k, v in last_turn.items()},
         }
         out_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2, default=to_plain),
+            json.dumps(payload, ensure_ascii=False, indent=2, default=json_encoder),
             encoding="utf-8",
         )
     else:

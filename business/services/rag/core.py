@@ -6,14 +6,20 @@ import requests
 from pymongo import MongoClient
 
 from dependencies.database.mongodb import get_mongo_client
-from dependencies.llm.rate_limit import RateLimiter
+from core.libraries.rate_limiting import RateLimiter  # Migrated from dependencies/llm/
 from core.config.paths import DB_NAME, COLL_CHUNKS, COLL_MEMORY_LOGS
 from core.config.runtime import RAG_WEIGHT_VECTOR, RAG_WEIGHT_TRUST, RAG_WEIGHT_RECENCY
 from business.services.rag.retrieval import vector_search, rerank_hits
-from business.services.rag.generation import answer_with_openai, stream_answer_with_openai
+from business.services.rag.generation import (
+    answer_with_openai,
+    stream_answer_with_openai,
+)
 from business.services.rag.retrieval import hybrid_search as _hybrid_search
 import pandas as pd
-from business.services.rag.indexes import ensure_vector_search_index, ensure_hybrid_search_index
+from business.services.rag.indexes import (
+    ensure_vector_search_index,
+    ensure_hybrid_search_index,
+)
 
 logger = logging.getLogger(__name__)
 

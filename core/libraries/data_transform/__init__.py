@@ -1,27 +1,33 @@
 """
-Data Transformation Library - Cross-Cutting Concern.
+Data Transform Library - Cross-Cutting Concern.
 
-Provides common data transformation utilities (flatten, group, dedupe).
-Part of the CORE libraries - Tier 2 (simple implementation + TODOs).
+Common data transformation utilities.
+Part of the CORE libraries - Tier 2 (simple implementation).
 
-TODO: Implement
-- flatten() - Flatten nested dicts
-- group_by() - Group list of dicts by key
-- deduplicate() - Remove duplicates by key
-- merge_dicts() - Deep merge dictionaries
-- normalize() - Normalize data structures
-
-Usage (planned):
+Usage:
     from core.libraries.data_transform import flatten, group_by, deduplicate
 
     # Flatten nested dict
-    flat = flatten({'a': {'b': {'c': 1}}})  # {'a.b.c': 1}
+    flat = flatten({'a': {'b': {'c': 1}}})  # Returns: {'a.b.c': 1}
 
     # Group by key
-    grouped = group_by(entities, key='type')  # {' PERSON': [...], 'TECH': [...]}
+    grouped = group_by(items, key='type')
 
-    # Deduplicate
+    # Remove duplicates
     unique = deduplicate(items, key='entity_id')
 """
 
-__all__ = []  # TODO: Export when implemented
+from core.libraries.data_transform.helpers import (
+    flatten,
+    group_by,
+    deduplicate,
+    merge_dicts,
+)
+
+
+__all__ = [
+    "flatten",
+    "group_by",
+    "deduplicate",
+    "merge_dicts",
+]

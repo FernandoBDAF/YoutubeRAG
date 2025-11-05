@@ -21,7 +21,7 @@ except ModuleNotFoundError:
     from core.models.config import BaseStageConfig
 from core.config.paths import DB_NAME, COLL_RAW_VIDEOS, COLL_CLEANED
 from core.domain.text import normalize_newlines
-from core.domain.concurrency import run_llm_concurrent
+from core.libraries.concurrency import run_llm_concurrent  # Migrated to core library
 from typing import Optional
 
 

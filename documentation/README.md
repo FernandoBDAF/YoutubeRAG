@@ -27,6 +27,8 @@
 **Core Systems**:
 
 - **[GraphRAG](technical/GRAPH-RAG.md)** - Knowledge graph system (complete guide)
+- **[GraphRAG Optimization](technical/GRAPHRAG-OPTIMIZATION.md)** - Performance optimization (35x speedup) ⭐ NEW
+- **[Community Detection](technical/COMMUNITY-DETECTION.md)** - Algorithm selection guide
 - **[Observability](technical/OBSERVABILITY.md)** - Error handling, metrics, retry, logging
 - **[Architecture](technical/ARCHITECTURE.md)** - 4-layer + domains + libraries (TODO)
 - **[Libraries](technical/LIBRARIES.md)** - All 18 cross-cutting libraries (TODO)
@@ -49,6 +51,7 @@ Detailed implementation patterns:
 
 How to use and deploy:
 
+- **[Quick Start](guides/QUICK-START.md)** - Run optimized pipeline in 2 minutes ⭐ NEW
 - **[EXECUTION](guides/EXECUTION.md)** - Running pipelines and stages
 - **[TESTING](guides/TESTING.md)** - Testing strategy and plans
 - **[DEPLOYMENT](guides/DEPLOYMENT.md)** - Deployment planning
@@ -62,11 +65,14 @@ How to use and deploy:
 ### Technical Guides:
 
 - **[GraphRAG](technical/GRAPH-RAG.md)** - Complete knowledge graph system
+- **[GraphRAG Optimization](technical/GRAPHRAG-OPTIMIZATION.md)** - Performance optimization (35x speedup) ⭐
+- **[Community Detection](technical/COMMUNITY-DETECTION.md)** - Algorithm selection guide
 - **[Observability](technical/OBSERVABILITY.md)** - 4 libraries + stack
 
 ### Reference:
 
 - **[GraphRAG Config](reference/GRAPHRAG-CONFIG-REFERENCE.md)** - All config options
+- **[TPM/RPM Limits Guide](reference/TPM-RPM-LIMITS-GUIDE.md)** - Rate limiting reference ⭐
 - **[API Reference](reference/API-REFERENCE.md)** - Library APIs (TODO)
 - **[Metrics Reference](reference/METRICS-REFERENCE.md)** - All metrics (TODO)
 
@@ -106,9 +112,28 @@ How to use and deploy:
 
 ## 📦 Archived Documentation
 
+### GraphRAG Optimization Archive (Nov 2025) ⭐ NEW
+
+**Location**: [archive/graphrag-optimization-nov-2025/](archive/graphrag-optimization-nov-2025/)
+
+**Purpose**: Complete journey of optimizing GraphRAG from 66.5 hours to 1.9 hours
+
+**Contents**:
+
+- `planning/` - 12 validation and optimization plans
+- `implementation/` - 19 implementation and tuning docs
+- `analysis/` - 4 performance and bug analyses
+- `testing/` - 4 test coverage docs
+- `summaries/` - 4 session and validation summaries
+- **[INDEX.md](archive/graphrag-optimization-nov-2025/INDEX.md)** - Complete archive guide
+
+**Use For**: Understanding optimization decisions, TPM tuning process, concurrent processing patterns
+
+### GraphRAG Implementation Archive (Oct 2025)
+
 **Location**: [archive/graphrag-implementation/](archive/graphrag-implementation/)
 
-**Purpose**: Historical GraphRAG implementation documentation (Oct 2025)
+**Purpose**: Historical GraphRAG implementation documentation
 
 **Contents**:
 
@@ -120,7 +145,13 @@ How to use and deploy:
 
 **Use For**: Understanding design evolution, historical context, problem analyses
 
-**Do NOT Use For**: Current implementation (use GRAPH-RAG-CONSOLIDATED.md instead)
+### Observability Archive (Nov 2025)
+
+**Location**: [archive/observability-nov-2025/](archive/observability-nov-2025/)
+
+**Purpose**: Observability libraries and testing implementation
+
+**Contents**: Library implementation, testing improvements, agent refactoring
 
 ---
 
@@ -347,5 +378,5 @@ Each layer has its own context file explaining:
 
 ---
 
-**Last Updated**: October 31, 2025  
-**Documentation Version**: Post-Refactor (4-Layer Architecture)
+**Last Updated**: November 4, 2025  
+**Documentation Version**: Post-Optimization (GraphRAG 35x Speedup)

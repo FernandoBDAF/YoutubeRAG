@@ -1,0 +1,139 @@
+canonical_predicates:
+  # Taxonomy / composition
+  - is_a
+  - part_of
+  - member_of
+
+  # Topical containment
+  - focuses_on
+  - includes
+
+  # Usage / dependency
+  - uses
+  - requires
+  - depends_on
+
+  # Implementation / authorship / production
+  - implemented_in
+  - created_by
+  - produced_by
+  - used_by
+
+  # Evaluation / training / measurement
+  - trained_on
+  - evaluated_on
+  - measured_by
+  - has_property
+
+  # Causal / outcome / temporal
+  - causes
+  - results_in
+  - precedes
+
+  # Location / affiliation / hosting
+  - located_in
+  - works_at
+  - hosted_on
+
+  # Citation / reference
+  - references
+
+  # Comparatives / relations (symmetric)
+  - related_to
+  - similar_to
+  - interacts_with
+  - integrates_with
+  - compatible_with
+  - connected_to
+  - compared_to
+  - contrasts_with
+  - equivalent_to
+  - collaborates_with
+  - partners_with
+
+symmetric_predicates:
+  - related_to
+  - similar_to
+  - interacts_with
+  - integrates_with
+  - compatible_with
+  - connected_to
+  - compared_to
+  - contrasts_with
+  - equivalent_to
+  - collaborates_with
+  - partners_with
+
+predicate_type_constraints:
+  is_a:
+    - [ALGORITHM, CONCEPT]
+    - [METHOD, CONCEPT]
+    - [MODEL, CONCEPT]
+    - [DATASTRUCTURE, CONCEPT]
+    - [CONCEPT, CONCEPT]
+
+  part_of:
+    - [DATASTRUCTURE, DATASTRUCTURE]
+    - [CONCEPT, CONCEPT]
+    - [EVENT, EVENT]
+
+  focuses_on:
+    - [COURSE, CONCEPT]
+    - [TECHNOLOGY, CONCEPT]
+    - [EVENT, CONCEPT]
+
+  includes:
+    - [COURSE, CONCEPT]
+    - [CONCEPT, CONCEPT]
+    - [DATASTRUCTURE, DATASTRUCTURE]
+
+  uses:
+    - [ALGORITHM, DATASTRUCTURE]
+    - [METHOD, TECHNOLOGY]
+    - [TECHNOLOGY, TECHNOLOGY]
+    - [PROCESS, TECHNOLOGY]
+
+  requires:
+    - [ALGORITHM, DATASTRUCTURE]
+    - [METHOD, CONCEPT]
+    - [TASK, CONCEPT]
+
+  depends_on:
+    - [MODEL, TECHNOLOGY]
+    - [TECHNOLOGY, TECHNOLOGY]
+    - [PROCESS, TECHNOLOGY]
+
+  implemented_in:
+    - [ALGORITHM, TECHNOLOGY]
+    - [FEATURE, TECHNOLOGY]
+
+  created_by:
+    - [MODEL, PERSON]
+    - [MODEL, ORGANIZATION]
+    - [TECHNOLOGY, ORGANIZATION]
+    - [DATASET, ORGANIZATION]
+
+  produced_by:
+    - [DATASET, ORGANIZATION]
+    - [ARTIFACT, ORGANIZATION]
+
+  trained_on:
+    - [MODEL, TECHNOLOGY]
+  evaluated_on:
+    - [MODEL, TECHNOLOGY]
+  measured_by:
+    - [METRIC, TECHNOLOGY]
+  has_property:
+    - [ENTITY, METRIC]
+
+  located_in:
+    - [ENTITY, LOCATION]
+  works_at:
+    - [PERSON, ORGANIZATION]
+  hosted_on:
+    - [TECHNOLOGY, TECHNOLOGY]
+
+  references:
+    - [CONCEPT, CONCEPT]
+    - [MODEL, MODEL]
+    - [TECHNOLOGY, TECHNOLOGY]

@@ -1,0 +1,13 @@
+{
+  "experiment_id": "louvain_resolution_1.0",
+  "read_db": "mongo_hack",
+  "write_db": "mongo_hack",
+  "concurrency": 300,
+  "community_detection": {
+    "algorithm": "louvain",
+    "resolution": 1.0,
+    "min_cluster_size": 2,
+    "max_cluster_size": 50
+  }
+}
+

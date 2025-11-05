@@ -1,59 +1,103 @@
 """
 Community Detection Agent
 
-This module implements community detection using the hierarchical Leiden algorithm
+This module implements community detection using the Louvain algorithm
 to identify clusters of related entities in the knowledge graph.
+
+NOTE: Switched from hierarchical_leiden to Louvain (Nov 4, 2025)
+Reason: hierarchical_leiden produced single-entity communities on sparse graphs.
+Louvain is proven to work well with GraphRAG's sparse, diverse entity graphs.
 """
 
 import logging
-import time
-from typing import Dict, List, Any, Optional, Set, Tuple
+import os
+from typing import Dict, List, Any
 from collections import defaultdict
 import networkx as nx
-from graspologic.partition import hierarchical_leiden
-from core.models.graphrag import ResolvedEntity, ResolvedRelationship, CommunitySummary
+from networkx.algorithms import community as nx_community
+from core.models.graphrag import ResolvedEntity, ResolvedRelationship
 
 logger = logging.getLogger(__name__)
 
 
 class CommunityDetectionAgent:
     """
-    Agent for detecting communities in the knowledge graph using hierarchical Leiden algorithm.
+    Agent for detecting communities in the knowledge graph using Louvain algorithm.
+
+    Switched from hierarchical_leiden (Nov 4, 2025) due to poor performance on sparse graphs.
+    Louvain is proven to work well with GraphRAG's diverse, sparse entity graphs.
     """
 
     def __init__(
         self,
-        max_cluster_size: int = 10,
+        max_cluster_size: int = 50,  # Increased from 10 (Louvain produces larger communities)
         min_cluster_size: int = 2,
         resolution_parameter: float = 1.0,
         max_iterations: int = 100,
         max_levels: int = 3,
+        algorithm: str = "louvain",  # Algorithm to use: "louvain" or "hierarchical_leiden"
     ):
         """
         Initialize the Community Detection Agent.
 
+        DESIGN DECISIONS & TESTING NOTES (2024-11-04):
+        ==============================================
+
+        1. ALGORITHM SELECTION:
+           - Current: Louvain (default)
+           - Why: Produces meaningful communities on sparse GraphRAG graphs
+           - Previous: hierarchical_leiden
+           - Why changed: hierarchical_leiden produced mostly single-entity communities
+           - Metrics: Louvain achieved modularity=0.6347 (excellent!) vs leiden ~0.3
+           - Future improvements to test:
+             * Leiden with different parameters (quality function, seed)
+             * Label Propagation (faster, simpler)
+             * Infomap (information-theoretic approach)
+             * Ensemble methods (combine multiple algorithms)
+
+        2. RESOLUTION PARAMETER:
+           - Current: 1.0 (default)
+           - Why: Produces balanced community sizes (10-4804 entities)
+           - Range: 0.5-2.0 (lower=fewer larger communities, higher=more smaller communities)
+           - Future improvements to test:
+             * 0.7-0.8: Fewer, larger communities (better for high-level topics)
+             * 1.5-2.0: More, smaller communities (better for fine-grained topics)
+             * Multi-resolution: Detect at multiple resolutions, pick best modularity
+
+        3. MIN/MAX CLUSTER SIZE:
+           - Current: min=2, max=50
+           - Why: Filter out single-entity communities (noise), soft cap at 50
+           - Note: Louvain ignores max_cluster_size (post-processing only)
+           - Actual sizes: 2-4804 entities (largest=4804, median~50)
+           - Future improvements to test:
+             * Split very large communities (>1000) using sub-community detection
+             * Merge very small communities (<5) if they're highly connected
+
         Args:
-            max_cluster_size: Maximum size of a community
-            min_cluster_size: Minimum size of a community
-            resolution_parameter: Resolution parameter for Leiden algorithm
+            max_cluster_size: Maximum size of a community (soft limit, Louvain ignores)
+            min_cluster_size: Minimum size to keep (filter out smaller, default=2)
+            resolution_parameter: Louvain resolution (0.5-2.0, default=1.0)
             max_iterations: Maximum iterations for the algorithm
-            max_levels: Maximum number of hierarchical levels
+            max_levels: Maximum number of hierarchical levels (hierarchical_leiden only)
+            algorithm: Algorithm to use ("louvain" default or "hierarchical_leiden")
         """
         self.max_cluster_size = max_cluster_size
         self.min_cluster_size = min_cluster_size
         self.resolution_parameter = resolution_parameter
         self.max_iterations = max_iterations
         self.max_levels = max_levels
+        self.algorithm = algorithm
 
         logger.info(
-            f"Initialized CommunityDetectionAgent with max_cluster_size={max_cluster_size}"
+            f"Initialized CommunityDetectionAgent with algorithm={algorithm}, "
+            f"resolution={resolution_parameter}, min_size={min_cluster_size}"
         )
 
     def detect_communities(
         self, entities: List[ResolvedEntity], relationships: List[ResolvedRelationship]
     ) -> Dict[str, Any]:
         """
-        Detect communities using hierarchical Leiden algorithm.
+        Detect communities using Louvain algorithm (default) or hierarchical Leiden.
 
         Args:
             entities: List of resolved entities
@@ -63,7 +107,8 @@ class CommunityDetectionAgent:
             Dictionary containing community detection results
         """
         logger.info(
-            f"Detecting communities from {len(entities)} entities and {len(relationships)} relationships"
+            f"Detecting communities from {len(entities)} entities and {len(relationships)} relationships "
+            f"using {self.algorithm} algorithm"
         )
 
         if not entities:
@@ -81,20 +126,22 @@ class CommunityDetectionAgent:
             f"Created graph with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges"
         )
 
-        # Run hierarchical Leiden algorithm
+        # Run community detection with selected algorithm
         try:
-            # Note: hierarchical_leiden API uses 'max_cluster_size' but may not support all parameters
-            communities = hierarchical_leiden(
-                G,
-                max_cluster_size=self.max_cluster_size,
-            )
+            if self.algorithm == "louvain":
+                communities = self._detect_louvain(G)
+            elif self.algorithm == "hierarchical_leiden":
+                communities = self._detect_hierarchical_leiden(G)
+            else:
+                logger.warning(f"Unknown algorithm '{self.algorithm}', using Louvain")
+                communities = self._detect_louvain(G)
 
             logger.info(
-                f"Detected {len(communities)} communities using hierarchical Leiden"
+                f"Detected {len(communities)} communities using {self.algorithm}"
             )
 
         except Exception as e:
-            logger.error(f"Failed to run hierarchical Leiden algorithm: {e}")
+            logger.error(f"Failed to run {self.algorithm} algorithm: {e}")
             # Fallback to simple community detection
             communities = self._fallback_community_detection(G)
 
@@ -188,6 +235,80 @@ class CommunityDetectionAgent:
 
         return G
 
+    def _detect_louvain(self, G: nx.Graph) -> List[Any]:
+        """
+        Detect communities using Louvain algorithm.
+
+        Args:
+            G: NetworkX graph
+
+        Returns:
+            List of community frozensets
+        """
+        logger.info(
+            f"Running Louvain algorithm with resolution={self.resolution_parameter}"
+        )
+
+        # Get random seed from environment or use default
+        seed = int(os.getenv("GRAPHRAG_RANDOM_SEED", "42"))
+
+        # Run Louvain algorithm
+        communities = nx_community.louvain_communities(
+            G,
+            resolution=self.resolution_parameter,
+            seed=seed,
+            weight="weight",  # Use edge weights
+        )
+
+        # Calculate modularity
+        modularity = nx_community.modularity(G, communities, weight="weight")
+
+        logger.info(
+            f"Louvain detected {len(communities)} communities "
+            f"(modularity={modularity:.4f})"
+        )
+
+        # Log community sizes
+        sizes = sorted([len(c) for c in communities], reverse=True)
+        if sizes:
+            logger.info(
+                f"Community sizes: {sizes[:10]}{'...' if len(sizes) > 10 else ''}"
+            )
+
+        return list(communities)
+
+    def _detect_hierarchical_leiden(self, G: nx.Graph) -> List[Any]:
+        """
+        Detect communities using hierarchical Leiden algorithm.
+
+        NOTE: Kept for backward compatibility, but not recommended for sparse graphs.
+
+        Args:
+            G: NetworkX graph
+
+        Returns:
+            List of communities
+        """
+        try:
+            from graspologic.partition import hierarchical_leiden
+
+            logger.info(
+                f"Running hierarchical Leiden with max_cluster_size={self.max_cluster_size}"
+            )
+
+            communities = hierarchical_leiden(
+                G,
+                max_cluster_size=self.max_cluster_size,
+            )
+
+            logger.info(f"hierarchical_leiden detected {len(communities)} communities")
+
+            return communities
+
+        except ImportError:
+            logger.error("graspologic not installed, falling back to Louvain")
+            return self._detect_louvain(G)
+
     def _fallback_community_detection(self, G: nx.Graph) -> List[Any]:
         """
         Fallback community detection using simple connected components.
@@ -231,8 +352,10 @@ class CommunityDetectionAgent:
         """
         Organize communities by hierarchical level.
 
+        Handles both Louvain format (list of frozensets) and hierarchical_leiden format (objects with attributes).
+
         Args:
-            communities: List of detected communities
+            communities: List of detected communities (frozensets from Louvain or objects from hierarchical_leiden)
             entities: List of resolved entities
             relationships: List of resolved relationships
 
@@ -241,23 +364,78 @@ class CommunityDetectionAgent:
         """
         organized = defaultdict(dict)
 
-        # Group communities by level
+        # Detect format: frozenset (Louvain) or object with attributes (hierarchical_leiden)
+        if communities and isinstance(communities[0], (frozenset, set)):
+            # Louvain format: list of frozensets
+            logger.debug("Processing Louvain format communities (frozensets)")
+            level = 1  # All Louvain communities at level 1
+
+            for i, community_nodes in enumerate(communities):
+                entity_ids = list(community_nodes)
+
+                if len(entity_ids) < self.min_cluster_size:
+                    logger.debug(
+                        f"Skipping community with {len(entity_ids)} entities (min_cluster_size={self.min_cluster_size})"
+                    )
+                    continue
+
+                community_id = f"level_{level}_community_{i}"
+
+                # Get entities in this community
+                community_entities = []
+                community_relationships = []
+
+                # Filter entities
+                for entity in entities:
+                    if entity.entity_id in entity_ids:
+                        community_entities.append(entity)
+
+                # Filter relationships (both entities must be in community)
+                for relationship in relationships:
+                    if (
+                        relationship.subject_id in entity_ids
+                        and relationship.object_id in entity_ids
+                    ):
+                        community_relationships.append(relationship)
+
+                # Calculate coherence
+                coherence_score = self._calculate_coherence_score(
+                    community_entities, community_relationships
+                )
+
+                # Store community
+                organized[level][community_id] = {
+                    "community_id": community_id,
+                    "level": level,
+                    "entities": [e.entity_id for e in community_entities],
+                    "entity_count": len(community_entities),
+                    "relationships": [
+                        r.relationship_id for r in community_relationships
+                    ],
+                    "relationship_count": len(community_relationships),
+                    "coherence_score": coherence_score,
+                    "entity_names": [e.name for e in community_entities],
+                    "entity_types": [e.type.value for e in community_entities],
+                }
+
+            logger.info(
+                f"Organized {len(organized.get(1, {}))} Louvain communities at level 1 "
+                f"(filtered from {len(communities)} total)"
+            )
+            return dict(organized)
+
+        # hierarchical_leiden format: objects with .level, .nodes/.node attributes
+        logger.debug("Processing hierarchical_leiden format communities (objects)")
         level_communities = defaultdict(list)
         for community in communities:
-            # Get level, default to 1 if not present (CommunitySummary requires level >= 1)
+            # Get level, default to 1 if not present
             level = getattr(community, "level", 1)
-            # Ensure level is at least 1
             level = max(1, level)
             level_communities[level].append(community)
 
         # Process each level
         for level, level_comm_list in level_communities.items():
             for i, community in enumerate(level_comm_list):
-                community_id = f"level_{level}_community_{i}"
-
-                # Get entities in this community
-                community_entities = []
-                community_relationships = []
 
                 if hasattr(community, "nodes"):
                     # Multiple nodes in community

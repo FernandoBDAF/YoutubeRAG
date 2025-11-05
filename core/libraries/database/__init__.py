@@ -1,27 +1,53 @@
 """
 Database Operations Library - Cross-Cutting Concern.
 
-Provides database operation helpers (batch, transactions, queries).
-Part of the CORE libraries - Tier 2 (simple implementation + TODOs).
+Provides database operation helpers for batch operations and queries.
+Part of the CORE libraries - Tier 2.
 
-TODO: Implement
-- Batch insert/update helpers (simple implementation)
-- Transaction support (TODO - complex)
-- Query builder helpers
-- Connection pooling configuration
+Usage:
+    from core.libraries.database import batch_insert, batch_update, batch_delete
 
-Usage (planned):
-    from core.libraries.database import batch_insert, batch_update, with_transaction
+    # Batch insert
+    result = batch_insert(
+        collection=db.entities,
+        documents=entities,
+        batch_size=1000,
+        ordered=False  # Continue on errors
+    )
+    print(f"Inserted: {result['inserted']}/{result['total']}")
 
-    # Batch operations
-    batch_insert(collection, documents, batch_size=1000)
-    batch_update(collection, updates, batch_size=500)
+    # Batch update
+    updates = [
+        {
+            'filter': {'_id': entity_id},
+            'update': {'$set': {'status': 'processed'}}
+        }
+        for entity_id in entity_ids
+    ]
+    result = batch_update(
+        collection=db.entities,
+        updates=updates,
+        batch_size=500,
+        upsert=False
+    )
 
-    # Transactions (TODO)
-    @with_transaction
-    def update_graph(entities, relationships):
-        # Atomic update
-        ...
+    # Batch delete
+    filters = [{'_id': id} for id in ids_to_delete]
+    result = batch_delete(
+        collection=db.old_data,
+        filters=filters,
+        batch_size=500
+    )
 """
 
-__all__ = []  # TODO: Export when implemented
+from core.libraries.database.operations import (
+    batch_insert,
+    batch_update,
+    batch_delete,
+)
+
+__all__ = [
+    "batch_insert",
+    "batch_update",
+    "batch_delete",
+]

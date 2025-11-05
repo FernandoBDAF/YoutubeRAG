@@ -39,10 +39,10 @@ class GraphRAGEnvironmentConfig:
         default_factory=lambda: os.getenv("GRAPHRAG_ENABLED", "true").lower() == "true"
     )
     max_concurrent_extractions: int = field(
-        default_factory=lambda: int(os.getenv("GRAPHRAG_EXTRACTION_CONCURRENCY", "15"))
+        default_factory=lambda: int(os.getenv("GRAPHRAG_EXTRACTION_CONCURRENCY", "300"))
     )
     max_concurrent_resolutions: int = field(
-        default_factory=lambda: int(os.getenv("GRAPHRAG_RESOLUTION_CONCURRENCY", "10"))
+        default_factory=lambda: int(os.getenv("GRAPHRAG_RESOLUTION_CONCURRENCY", "300"))
     )
     max_cluster_size: int = field(
         default_factory=lambda: int(os.getenv("GRAPHRAG_MAX_CLUSTER_SIZE", "10"))
@@ -584,19 +584,24 @@ class CommunityDetectionConfig(BaseStageConfig):
     """Configuration for community detection stage."""
 
     # LLM settings for summarization
-    model_name: str = "gpt-4o-mini"
+    model_name: str = (
+        "gpt-4o-mini"  # Use gpt-4o-mini for small communities (fast, cost-effective)
+    )
     temperature: float = 0.2
     max_tokens: Optional[int] = None
     llm_retries: int = 3
     llm_backoff_s: float = 1.0
 
     # Community detection settings
-    max_cluster_size: int = 50  # Updated from 10 to allow larger communities
+    algorithm: str = (
+        "louvain"  # Algorithm: "louvain" (default) or "hierarchical_leiden"
+    )
+    max_cluster_size: int = 50  # Soft limit for community size (Louvain ignores this)
     min_cluster_size: int = 2  # Used for post-filtering single-node communities
-    resolution_parameter: float = 1.0
+    resolution_parameter: float = 1.0  # Louvain resolution (0.5-2.0, default 1.0)
     max_iterations: int = 100
 
-    # Hierarchical settings
+    # Hierarchical settings (for hierarchical_leiden only)
     max_levels: int = 3
     level_size_threshold: int = 5
 
@@ -634,7 +639,8 @@ class CommunityDetectionConfig(BaseStageConfig):
         )
         llm_retries = int(env.get("GRAPHRAG_LLM_RETRIES", "3"))
         llm_backoff_s = float(env.get("GRAPHRAG_LLM_BACKOFF_S", "1.0"))
-        max_cluster_size = int(env.get("GRAPHRAG_MAX_CLUSTER_SIZE", "10"))
+        algorithm = env.get("GRAPHRAG_COMMUNITY_ALGORITHM", "louvain")
+        max_cluster_size = int(env.get("GRAPHRAG_MAX_CLUSTER_SIZE", "50"))
         min_cluster_size = int(env.get("GRAPHRAG_MIN_CLUSTER_SIZE", "2"))
         resolution_parameter = float(env.get("GRAPHRAG_RESOLUTION_PARAMETER", "1.0"))
         max_iterations = int(env.get("GRAPHRAG_MAX_ITERATIONS", "100"))
@@ -646,6 +652,11 @@ class CommunityDetectionConfig(BaseStageConfig):
         min_coherence_score = float(env.get("GRAPHRAG_MIN_COHERENCE_SCORE", "0.6"))
         min_entity_count = int(env.get("GRAPHRAG_MIN_ENTITY_COUNT", "2"))
 
+        # Get concurrency from args or env (default to 300 like other stages)
+        # Only override if base doesn't have it set (base already gets it from args/env)
+        if base.concurrency is None:
+            base.concurrency = int(env.get("GRAPHRAG_COMMUNITY_CONCURRENCY", "300"))
+
         return cls(
             **vars(base),
             model_name=model_name,
@@ -653,6 +664,7 @@ class CommunityDetectionConfig(BaseStageConfig):
             max_tokens=max_tokens,
             llm_retries=llm_retries,
             llm_backoff_s=llm_backoff_s,
+            algorithm=algorithm,
             max_cluster_size=max_cluster_size,
             min_cluster_size=min_cluster_size,
             resolution_parameter=resolution_parameter,
@@ -698,7 +710,17 @@ class GraphRAGQueryConfig:
 
 @dataclass
 class GraphRAGPipelineConfig:
-    """Configuration for the complete GraphRAG pipeline."""
+    """
+    Configuration for the complete GraphRAG pipeline.
+
+    EXPERIMENT SUPPORT (2024-11-04):
+    - experiment_id: Optional identifier for tracking experiments
+    - Enables running multiple configurations in parallel
+    - Used for comparative analysis and A/B testing
+    """
+
+    # Experiment tracking
+    experiment_id: Optional[str] = None  # For tracking experiment runs
 
     # Pipeline settings
     enable_incremental: bool = True
@@ -751,6 +773,9 @@ class GraphRAGPipelineConfig:
         )
         detection_config = CommunityDetectionConfig.from_args_env(args, env, default_db)
 
+        # Get experiment ID from env (for tracking)
+        experiment_id = env.get("EXPERIMENT_ID")
+
         # Get pipeline-level settings from env
         enable_incremental = (
             env.get("GRAPHRAG_ENABLE_INCREMENTAL", "true").lower() == "true"
@@ -766,6 +791,7 @@ class GraphRAGPipelineConfig:
         log_file = env.get("GRAPHRAG_LOG_FILE")
 
         return cls(
+            experiment_id=experiment_id,
             enable_incremental=enable_incremental,
             max_processing_time=max_processing_time,
             checkpoint_interval=checkpoint_interval,

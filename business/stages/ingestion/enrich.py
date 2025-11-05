@@ -12,7 +12,9 @@ try:
 
     # Ensure these are available in the normal import path as well
     from core.domain.text import normalize_newlines
-    from core.domain.concurrency import run_llm_concurrent
+    from core.libraries.concurrency import (
+        run_llm_concurrent,
+    )  # Migrated to core library
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
@@ -23,7 +25,9 @@ except ModuleNotFoundError:
     from core.base.stage import BaseStage
     from core.models.config import BaseStageConfig
     from core.domain.text import normalize_newlines
-    from core.domain.concurrency import run_llm_concurrent
+    from core.libraries.concurrency import (
+        run_llm_concurrent,
+    )  # Migrated to core library
 from core.config.paths import (
     DB_NAME,
     COLL_CLEANED,

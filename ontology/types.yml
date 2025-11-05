@@ -1,0 +1,21 @@
+canonical_types:
+  - ALGORITHM
+  - CONCEPT
+  - COURSE
+  - DATASTRUCTURE
+  - EVENT
+  - EXPERIMENT
+  - FORMULA
+  - LAW
+  - LOCATION
+  - MATERIAL
+  - METHOD
+  - METRIC
+  - MODEL
+  - ORGANIZATION
+  - OTHER
+  - PERSON
+  - PROCESS
+  - TASK
+  - TECHNOLOGY
+  - THEORY

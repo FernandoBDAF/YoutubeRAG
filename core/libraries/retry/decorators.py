@@ -20,6 +20,60 @@ from core.libraries.retry.policies import (
 logger = logging.getLogger(__name__)
 
 
+def _is_quota_error(error: Exception) -> bool:
+    """
+    Check if error is a quota/rate limit error that won't succeed on retry.
+
+    OpenAI quota errors are terminal - they won't succeed on retry and should
+    be detected immediately to avoid wasted API calls.
+
+    Args:
+        error: Exception to check
+
+    Returns:
+        True if this is a quota error that shouldn't be retried
+    """
+    # Check error type name
+    error_type = type(error).__name__
+    error_str = str(error).lower()
+
+    # Check for OpenAI RateLimitError
+    if error_type == "RateLimitError":
+        # Check error message/content for quota-related errors
+        if "insufficient_quota" in error_str:
+            return True
+        if "quota" in error_str and ("exceeded" in error_str or "limit" in error_str):
+            return True
+
+    # Check error attributes if available (OpenAI SDK structure)
+    # OpenAI SDK RateLimitError may have error details in response or body
+    if hasattr(error, "response"):
+        try:
+            # Try to get error body from response
+            if hasattr(error.response, "json"):
+                error_body = error.response.json()
+                error_data = error_body.get("error", {})
+                if error_data.get("code") == "insufficient_quota":
+                    return True
+                if error_data.get("type") == "insufficient_quota":
+                    return True
+        except Exception:
+            pass
+
+    # Also check if error has body attribute (some SDK versions)
+    if hasattr(error, "body"):
+        try:
+            error_data = (
+                error.body.get("error", {}) if isinstance(error.body, dict) else {}
+            )
+            if error_data.get("code") == "insufficient_quota":
+                return True
+        except Exception:
+            pass
+
+    return False
+
+
 def with_retry(
     max_attempts: int = 3,
     backoff: str = "exponential",
@@ -95,6 +149,15 @@ def with_retry(
 
                 except retry_on as e:
                     last_exception = e
+
+                    # Don't retry quota errors - they won't succeed
+                    if _is_quota_error(e):
+                        func_logger.error(
+                            f"[RETRY] {func.__name__} failed with quota error. "
+                            "Quota errors won't succeed on retry. Stopping immediately.",
+                            exc_info=True,
+                        )
+                        raise
 
                     # Check if should retry
                     if not policy.should_retry(attempt, e):

@@ -9,14 +9,7 @@ import logging
 import time
 import argparse
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass
-from core.config.graphrag import (
-    GraphRAGPipelineConfig,
-    GraphExtractionConfig,
-    EntityResolutionConfig,
-    GraphConstructionConfig,
-    CommunityDetectionConfig,
-)
+from core.config.graphrag import GraphRAGPipelineConfig
 from business.pipelines.runner import StageSpec, PipelineRunner
 from business.services.graphrag.indexes import (
     create_graphrag_indexes,
@@ -37,10 +30,36 @@ class GraphRAGPipeline:
         """
         Initialize the GraphRAG Pipeline.
 
+        EXPERIMENT SAFETY (2024-11-04):
+        - read_db and write_db MUST be explicitly specified
+        - NO defaults to prevent accidental data mixing between experiments
+        - Exception: If both missing, assume single-DB mode for backward compatibility
+
         Args:
             config: Configuration for the pipeline
         """
         self.config = config
+
+        # Validate explicit DB specification for experiment mode
+        # If running experiments, BOTH read_db and write_db must be explicit
+        read_db = config.extraction_config.read_db_name
+        write_db = config.extraction_config.write_db_name
+
+        if read_db or write_db:  # At least one specified → experiment mode
+            if not read_db:
+                raise ValueError(
+                    "❌ GraphRAG pipeline requires explicit --read-db-name when running experiments.\n"
+                    "This prevents accidental data mixing. Specify the source database explicitly."
+                )
+            if not write_db:
+                raise ValueError(
+                    "❌ GraphRAG pipeline requires explicit --write-db-name when running experiments.\n"
+                    "This prevents accidental data mixing. Specify the target database explicitly."
+                )
+            logger.info(f"🔬 Experiment mode: read_db={read_db}, write_db={write_db}")
+            if config.experiment_id:
+                logger.info(f"📊 Experiment ID: {config.experiment_id}")
+
         self.specs = self._create_stage_specs()
         self.runner = PipelineRunner(
             self.specs, stop_on_error=not config.continue_on_error
@@ -55,6 +74,59 @@ class GraphRAGPipeline:
         self.db = self.client[db_name]  # ✅ Now available for setup()
 
         logger.info("Initialized GraphRAGPipeline with PipelineRunner")
+
+        # Track experiment metadata if experiment_id is provided
+        if config.experiment_id:
+            self._track_experiment_start()
+
+    def _track_experiment_start(self):
+        """
+        Track experiment metadata for comparative analysis.
+
+        Stores experiment configuration and start time in experiment_tracking collection.
+        Useful for comparing multiple runs with different configurations.
+        """
+        if not self.config.experiment_id:
+            return
+
+        from datetime import datetime
+
+        # Store in write_db if specified, otherwise use default db
+        tracking_db_name = (
+            self.config.extraction_config.write_db_name
+            or self.config.extraction_config.db_name
+            or "mongo_hack"
+        )
+        tracking_db = self.client[tracking_db_name]
+        tracking_coll = tracking_db.experiment_tracking
+
+        metadata = {
+            "experiment_id": self.config.experiment_id,
+            "pipeline_type": "graphrag",
+            "started_at": datetime.utcnow(),
+            "status": "running",
+            "configuration": {
+                "read_db": self.config.extraction_config.read_db_name,
+                "write_db": self.config.extraction_config.write_db_name,
+                "concurrency": self.config.extraction_config.concurrency,
+                "community_detection": {
+                    "algorithm": self.config.detection_config.algorithm,
+                    "resolution": self.config.detection_config.resolution_parameter,
+                    "min_cluster_size": self.config.detection_config.min_cluster_size,
+                    "max_cluster_size": self.config.detection_config.max_cluster_size,
+                    "model": self.config.detection_config.model_name,
+                },
+            },
+        }
+
+        # Upsert experiment metadata
+        tracking_coll.update_one(
+            {"experiment_id": self.config.experiment_id},
+            {"$set": metadata},
+            upsert=True,
+        )
+
+        logger.info(f"📊 Experiment metadata tracked: {self.config.experiment_id}")
 
     def _create_stage_specs(self) -> List[StageSpec]:
         """
@@ -176,7 +248,7 @@ class GraphRAGPipeline:
     def get_pipeline_status(self) -> Dict[str, Any]:
         """Get current status of the GraphRAG pipeline."""
         try:
-            from app.pipelines.base_pipeline import STAGE_REGISTRY
+            from business.pipelines.runner import STAGE_REGISTRY
 
             stage_statuses = {}
 
@@ -245,7 +317,7 @@ class GraphRAGPipeline:
 
     def cleanup_failed_stages(self) -> Dict[str, int]:
         """Clean up failed stage records to allow retry."""
-        from app.pipelines.base_pipeline import STAGE_REGISTRY
+        from business.pipelines.runner import STAGE_REGISTRY
 
         cleanup_results = {}
 

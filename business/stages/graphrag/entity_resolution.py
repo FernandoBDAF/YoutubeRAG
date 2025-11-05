@@ -6,16 +6,17 @@ It groups similar entities and stores resolved entities in the entities collecti
 """
 
 import logging
+import os
 import time
 from typing import Dict, List, Any, Optional, Iterator
-from pymongo.collection import Collection
-from pymongo.database import Database
 from core.base.stage import BaseStage
 from core.config.graphrag import EntityResolutionConfig
 from business.agents.graphrag.entity_resolution import EntityResolutionAgent
 from core.models.graphrag import ResolvedEntity
 from business.services.graphrag.indexes import get_graphrag_collections
 from core.config.paths import COLL_CHUNKS
+from core.libraries.database import batch_insert
+from core.libraries.rate_limiting import RateLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +56,10 @@ class EntityResolutionStage(BaseStage):
             model_name=self.config.model_name,
             temperature=self.config.temperature,
             similarity_threshold=self.config.similarity_threshold,
-            max_retries=self.config.llm_retries,
-            retry_delay=self.config.llm_backoff_s,
         )
 
-        # Get GraphRAG collections
-        self.graphrag_collections = get_graphrag_collections(self.db)
+        # Get GraphRAG collections (use write DB for output)
+        self.graphrag_collections = get_graphrag_collections(self.db_write)
 
         logger.info(
             f"Initialized {self.name} with similarity threshold {self.config.similarity_threshold}"
@@ -94,7 +93,9 @@ class EntityResolutionStage(BaseStage):
 
         logger.info(f"Querying chunks for entity resolution: {query}")
 
-        cursor = collection.find(query).limit(self.config.max or float("inf"))
+        cursor = collection.find(query)
+        if self.config.max:
+            cursor = cursor.limit(int(self.config.max))
 
         for doc in cursor:
             yield doc
@@ -339,7 +340,17 @@ class EntityResolutionStage(BaseStage):
             mentions.append(mention_doc)
 
         if mentions:
-            mentions_collection.insert_many(mentions)
+            # Use batch_insert for better error handling and statistics
+            result = batch_insert(
+                collection=mentions_collection,
+                documents=mentions,
+                batch_size=1000,
+                ordered=False,  # Continue on errors
+            )
+            logger.debug(
+                f"Inserted {result['inserted']}/{result['total']} entity mentions "
+                f"(chunk {chunk_id})"
+            )
 
     def _mark_resolution_failed(self, doc: Dict[str, Any], error_message: str) -> None:
         """
@@ -484,3 +495,22 @@ class EntityResolutionStage(BaseStage):
 
         logger.info(f"Cleaned up {result.modified_count} failed resolutions")
         return result.modified_count
+
+    # run() inherited from BaseStage - auto-detects concurrency and calls appropriate method
+    # BaseStage.run() now handles:
+    # - Concurrent + TPM tracking → _run_concurrent_with_tpm() [default]
+    # - Concurrent only → _run_concurrent() if implemented
+    # - Sequential → standard loop processing
+
+    # _run_concurrent removed - BaseStage.run() handles concurrency automatically
+
+    def estimate_tokens(self, doc: Dict[str, Any]) -> int:
+        """Estimate tokens for entity resolution (override base method)."""
+        extraction_data = doc.get("graphrag_extraction", {}).get("data", {})
+        entities = extraction_data.get("entities", [])
+        # Each entity description ~200 tokens, output ~500 tokens for resolution
+        estimated = len(entities) * 200 + 500
+        return max(estimated, 100)
+
+    # process_doc_with_tracking uses default (calls handle_doc)
+    # store_batch_results uses default (no-op, handle_doc writes directly)

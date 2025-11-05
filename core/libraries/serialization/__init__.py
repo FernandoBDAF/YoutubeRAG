@@ -1,16 +1,10 @@
 """
 Serialization Library - Cross-Cutting Concern.
 
-Provides MongoDB ↔ Pydantic conversion and JSON encoding helpers.
-Part of the CORE libraries - Tier 2 (simple implementation + TODOs).
+Provides Pydantic ↔ MongoDB conversion and JSON encoding helpers.
+Part of the CORE libraries - Tier 2 (simple implementation).
 
-TODO: Implement
-- to_dict() - Pydantic → MongoDB dict
-- from_dict() - MongoDB dict → Pydantic
-- json_encoder() - Handle ObjectId, Decimal128, datetime
-- Batch serialization helpers
-
-Usage (planned):
+Usage:
     from core.libraries.serialization import to_dict, from_dict, json_encoder
 
     # Pydantic → MongoDB
@@ -22,8 +16,18 @@ Usage (planned):
     entity = from_dict(doc, EntityModel)
 
     # JSON export
-    import json
-    json.dumps(doc, default=json_encoder)  # Handles ObjectId, datetime, etc.
+    json_str = json.dumps(doc, default=json_encoder)
 """
 
-__all__ = []  # TODO: Export when implemented
+from core.libraries.serialization.converters import (
+    to_dict,
+    from_dict,
+    json_encoder,
+)
+
+
+__all__ = [
+    "to_dict",
+    "from_dict",
+    "json_encoder",
+]

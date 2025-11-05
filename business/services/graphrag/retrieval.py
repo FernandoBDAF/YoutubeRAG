@@ -12,6 +12,7 @@ from typing import Dict, List, Any, Optional, Set, Tuple
 from pymongo.database import Database
 from pymongo.collection import Collection
 from business.services.graphrag.indexes import get_graphrag_collections
+from core.libraries.caching import cached  # Cache entity lookups for performance
 
 logger = logging.getLogger(__name__)
 
