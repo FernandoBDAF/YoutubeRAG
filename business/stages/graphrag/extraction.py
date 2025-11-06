@@ -74,11 +74,12 @@ class GraphExtractionStage(BaseStage):
         collection = self.get_collection(src_coll_name, io="read", db_name=src_db)
 
         # Query for chunks that haven't been processed for entity extraction
+        # Exclude: completed, skipped (these are handled gracefully)
         query = {
             "chunk_text": {"$exists": True, "$ne": ""},
             "$or": [
                 {"graphrag_extraction": {"$exists": False}},
-                {"graphrag_extraction.status": {"$ne": "completed"}},
+                {"graphrag_extraction.status": {"$nin": ["completed", "skipped"]}},
             ],
         }
 
@@ -112,13 +113,50 @@ class GraphExtractionStage(BaseStage):
 
         logger.debug(f"Processing chunk {chunk_id} from video {video_id}")
 
+        # Pre-filter: Skip chunks that are too short or contain only noise
+        chunk_text = doc.get("chunk_text", "").strip()
+        if not chunk_text:
+            logger.debug(f"Skipping chunk {chunk_id}: empty text")
+            return self._mark_extraction_skipped(doc, "chunk_empty")
+
+        # Skip chunks with very short text (likely fragments/noise)
+        # Threshold: 50 characters (can be configured)
+        MIN_CHUNK_LENGTH = 50
+        if len(chunk_text) < MIN_CHUNK_LENGTH:
+            # Check if it's only punctuation/whitespace
+            import string
+
+            text_without_punct = chunk_text.translate(
+                str.maketrans("", "", string.punctuation + string.whitespace)
+            )
+            if len(text_without_punct) == 0:
+                logger.debug(
+                    f"Skipping chunk {chunk_id}: only punctuation/whitespace ({len(chunk_text)} chars)"
+                )
+                return self._mark_extraction_skipped(doc, "chunk_noise_only")
+            elif len(chunk_text) < 20:
+                logger.debug(
+                    f"Skipping chunk {chunk_id}: too short ({len(chunk_text)} chars, threshold: {MIN_CHUNK_LENGTH})"
+                )
+                return self._mark_extraction_skipped(doc, "chunk_too_short")
+
         try:
             # Extract entities and relationships
             knowledge_model = self.extraction_agent.extract_from_chunk(doc)
 
             if knowledge_model is None:
-                logger.warning(f"Failed to extract entities from chunk {chunk_id}")
-                return self._mark_extraction_failed(doc, "extraction_failed")
+                # Check if it's a "no_entities" case (graceful skip) vs actual failure
+                # The agent returns None for both, but we can distinguish by checking
+                # if the chunk was marked as "no_entities" in the extraction result
+                # For now, we'll mark as "no_entities" if text is short, otherwise "failed"
+                if len(chunk_text) < 100:
+                    logger.debug(
+                        f"Chunk {chunk_id} returned no entities (likely none to extract)"
+                    )
+                    return self._mark_extraction_skipped(doc, "no_entities")
+                else:
+                    logger.warning(f"Failed to extract entities from chunk {chunk_id}")
+                    return self._mark_extraction_failed(doc, "extraction_failed")
 
             # Convert to serializable format
             extraction_data = {
@@ -242,6 +280,45 @@ class GraphExtractionStage(BaseStage):
 
         self.stats["failed"] += 1
         logger.warning(f"Marked chunk {chunk_id} as failed: {error_message}")
+
+        return None
+
+    def _mark_extraction_skipped(self, doc: Dict[str, Any], reason: str) -> None:
+        """
+        Mark extraction as skipped for a document (graceful skip, not failure).
+
+        Args:
+            doc: Document to mark as skipped
+            reason: Reason for skipping (e.g., "chunk_too_short", "no_entities", "chunk_empty")
+        """
+        chunk_id = doc.get("chunk_id", "unknown")
+        video_id = doc.get("video_id", "unknown")
+
+        extraction_payload = {
+            "graphrag_extraction": {
+                "status": "skipped",
+                "reason": reason,
+                "processed_at": time.time(),
+                "model_used": self.config.model_name,
+            }
+        }
+
+        # Write skip status to database
+        dst_db = self.config.write_db_name or self.config.db_name
+        dst_coll_name = self.config.write_coll or COLL_CHUNKS
+        collection = self.get_collection(dst_coll_name, io="write", db_name=dst_db)
+
+        collection.update_one(
+            {"video_id": video_id, "chunk_id": chunk_id},
+            {"$set": extraction_payload},
+            upsert=False,
+        )
+
+        # Track skipped separately from failed
+        if "skipped" not in self.stats:
+            self.stats["skipped"] = 0
+        self.stats["skipped"] += 1
+        logger.debug(f"Skipped chunk {chunk_id}: {reason}")
 
         return None
 

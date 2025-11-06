@@ -303,6 +303,54 @@ class GraphExtractionAgent:
             return validated_model
 
         except Exception as e:
+            # Handle ValidationError for empty entities gracefully
+            # This happens when LLM correctly returns empty entity list for chunks with no extractable entities
+            # Pydantic raises ValidationError (not ValueError) when KnowledgeModel.validate_entities() fails
+            error_msg = str(e)
+            error_type = type(e).__name__
+
+            # Check if this is the empty entity validation error
+            # The error message contains "At least one entity must be identified"
+            # Pydantic ValidationError has the message in str(e) format
+            is_empty_entity_error = (
+                "At least one entity must be identified" in error_msg
+            )
+
+            # Also check Pydantic ValidationError.errors() structure if available
+            # This provides more robust detection for edge cases
+            if not is_empty_entity_error:
+                # Check error type name (ValidationError from pydantic_core)
+                if "ValidationError" in error_type:
+                    # Try to get detailed error info
+                    if hasattr(e, "errors"):
+                        try:
+                            # Pydantic ValidationError has errors() method that returns list
+                            errors_list = e.errors()
+                            is_empty_entity_error = any(
+                                "At least one entity must be identified"
+                                in str(err.get("msg", ""))
+                                for err in errors_list
+                            )
+                        except (TypeError, AttributeError, Exception):
+                            # If errors() fails, fall back to string check (already done above)
+                            pass
+
+                    # Also check if error message contains validation error pattern
+                    if not is_empty_entity_error:
+                        # Check for the pattern in the full error string representation
+                        error_repr = repr(e)
+                        is_empty_entity_error = (
+                            "At least one entity must be identified" in error_repr
+                        )
+
+            if is_empty_entity_error:
+                logger.debug(
+                    f"Chunk {chunk_id} has no extractable entities (LLM returned empty list). "
+                    "This is expected for fragments/noise chunks."
+                )
+                # Return None to signal "no entities" case (not a failure)
+                return None
+
             # Check for quota errors - don't log as exception, just return None
             # Quota errors are terminal and won't succeed on retry
             if self._is_quota_error(e):
@@ -313,6 +361,7 @@ class GraphExtractionAgent:
                 # Don't retry quota errors - they won't succeed
                 return None
 
+            # All other errors (including other ValidationErrors)
             log_exception(
                 logger, f"All extraction attempts failed for chunk {chunk_id}", e
             )

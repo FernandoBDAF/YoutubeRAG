@@ -1,0 +1,63 @@
+{
+  "analysis_timestamp": "2025-11-06T01:09:08.156502+00:00",
+  "database": "mongo_hack",
+  "collection": "video_chunks",
+  "total_entities": 99332,
+  "type_diversity": 7,
+  "expected_types_count": 7,
+  "other_ratio": 0.0617,
+  "type_distribution": {
+    "PERSON": 5263,
+    "CONCEPT": 61818,
+    "ORGANIZATION": 4292,
+    "OTHER": 6130,
+    "TECHNOLOGY": 18800,
+    "EVENT": 1562,
+    "LOCATION": 1467
+  },
+  "confidence_by_type": {
+    "PERSON": {
+      "avg": 0.8325,
+      "min": 0.4,
+      "max": 0.98,
+      "count": 5263
+    },
+    "CONCEPT": {
+      "avg": 0.8175,
+      "min": 0.4,
+      "max": 1.0,
+      "count": 61818
+    },
+    "ORGANIZATION": {
+      "avg": 0.8632,
+      "min": 0.5,
+      "max": 1.0,
+      "count": 4292
+    },
+    "OTHER": {
+      "avg": 0.7445,
+      "min": 0.4,
+      "max": 0.95,
+      "count": 6130
+    },
+    "TECHNOLOGY": {
+      "avg": 0.8546,
+      "min": 0.5,
+      "max": 0.98,
+      "count": 18800
+    },
+    "EVENT": {
+      "avg": 0.7869,
+      "min": 0.5,
+      "max": 0.95,
+      "count": 1562
+    },
+    "LOCATION": {
+      "avg": 0.838,
+      "min": 0.5,
+      "max": 0.98,
+      "count": 1467
+    }
+  },
+  "missing_types": []
+}

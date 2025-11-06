@@ -90,9 +90,15 @@ def test_calculate_overall_confidence():
 
     result = agent._calculate_overall_confidence(entity_group)
 
-    expected = (0.8 + 0.9 + 0.7) / 3
+    # Updated to match weighted confidence formula:
+    # confidence = μ + 0.1*log10(1+source_count) + 0.05*agreement
+    # Where μ = mean, source_count = 3, agreement = 1.0 (no descriptions provided)
+    mean_confidence = (0.8 + 0.9 + 0.7) / 3
+    import math
+
+    expected = mean_confidence + 0.1 * math.log10(1 + 3) + 0.05 * 1.0
     assert abs(result - expected) < 0.01
-    print("✓ _calculate_overall_confidence averages correctly")
+    print("✓ _calculate_overall_confidence uses weighted formula correctly")
 
 
 def test_normalize_entity_name_improvements():

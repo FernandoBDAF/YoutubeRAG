@@ -1,0 +1,40 @@
+================================================================================
+CONTEXT UPDATE: Entity Resolution Priority 3.5
+================================================================================
+
+Hi! You're working on PLAN_ENTITY-RESOLUTION-REFACTOR.md Priority 3.5.
+
+While you were working, significant methodology improvements were completed 
+including a new resume protocol. This affects how you should proceed.
+
+PLEASE READ THIS FILE COMPLETELY BEFORE CONTINUING:
+📄 HANDOFF_ENTITY-RESOLUTION-RESUME.md
+
+Key points:
+1. Priority 3.5 appears in TWO places in the PLAN - this is CORRECT (not duplication)
+   - Lines 367-413 = WHAT to do (the achievements)  
+   - Lines 581-621 = WHY it was added (the decision log)
+   
+2. New files created:
+   - IMPLEMENTATION_RESUME.md (resume protocol - new!)
+   - EXECUTION_ANALYSIS_ENTITY-RESOLUTION-BUGS.md (renamed from CRITICAL_ANALYSIS)
+   - Enhanced naming guidance in IMPLEMENTATION_START_POINT.md
+
+3. Important naming rules to follow:
+   ✅ Create: SUBPLAN_ENTITY-RESOLUTION-REFACTOR_XX.md
+   ✅ Create: EXECUTION_TASK_ENTITY-RESOLUTION-REFACTOR_XX_01.md
+   ❌ NEVER: PLAN_UPDATE_*, *-STATUS, *-SUMMARY, *-COMPLIANCE files
+
+BEFORE creating ANY more files:
+1. Read HANDOFF_ENTITY-RESOLUTION-RESUME.md (complete context)
+2. Check file names you've created (verify they follow naming convention)
+3. Read IMPLEMENTATION_RESUME.md (new resume protocol)
+4. Tell the user what files you've created so far
+5. Ask for confirmation before proceeding
+
+The work you're doing (Priority 3.5) is critical and correct - we just need to 
+ensure you're following the new protocol.
+
+Questions? Ask before creating more files.
+
+================================================================================

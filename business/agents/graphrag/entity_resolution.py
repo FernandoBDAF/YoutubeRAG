@@ -7,6 +7,7 @@ descriptions using LLM-based summarization.
 """
 
 import logging
+import re
 from core.libraries.retry import retry_llm_call
 from core.libraries.logging import log_exception
 import hashlib
@@ -15,6 +16,22 @@ from collections import defaultdict
 from difflib import SequenceMatcher
 from openai import OpenAI
 from core.models.graphrag import ResolvedEntity, EntityModel, EntityType
+
+try:
+    from rapidfuzz import fuzz
+
+    HAS_RAPIDFUZZ = True
+except ImportError:
+    HAS_RAPIDFUZZ = False
+    # Fallback to difflib if rapidfuzz not available
+    from difflib import SequenceMatcher
+
+try:
+    import jellyfish
+
+    HAS_JELLYFISH = True
+except ImportError:
+    HAS_JELLYFISH = False
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +47,7 @@ class EntityResolutionAgent:
         model_name: str = "gpt-4o-mini",
         temperature: float = 0.1,
         similarity_threshold: float = 0.85,
+        max_input_tokens: Optional[int] = None,
     ):
         """
         Initialize the Entity Resolution Agent.
@@ -39,11 +57,13 @@ class EntityResolutionAgent:
             model_name: Model to use for resolution
             temperature: Temperature for LLM generation
             similarity_threshold: Threshold for entity similarity matching
+            max_input_tokens: Optional token budget for input (None = disabled, preserves quality)
         """
         self.llm_client = llm_client
         self.model_name = model_name
         self.temperature = temperature
         self.similarity_threshold = similarity_threshold
+        self.max_input_tokens = max_input_tokens
 
         # System prompt for entity description resolution
         self.resolution_prompt = """
@@ -165,6 +185,209 @@ class EntityResolutionAgent:
 
         return normalized
 
+    def _blocking_keys(self, name: str) -> List[str]:
+        """
+        Generate blocking keys for efficient candidate search.
+
+        Blocking keys are used to quickly find potential matches in the database
+        without scanning all entities. Multiple keys are generated to maximize
+        recall while maintaining efficiency.
+
+        Generates:
+        - Normalized name (lowercase, stripped)
+        - Alnum-only key (alphanumeric characters only)
+        - Acronym key (first letter of each word)
+        - Optional: Soundex key (phonetic matching)
+        - Optional: Metaphone key (phonetic matching)
+
+        Args:
+            name: Original entity name
+
+        Returns:
+            List of blocking keys
+        """
+        normalized = self._normalize_entity_name(name)
+
+        keys = set()
+        keys.add(normalized)  # Normalized name
+
+        # Alnum-only key (remove all non-alphanumeric except spaces)
+        alnum_only = "".join(ch for ch in normalized if ch.isalnum() or ch.isspace())
+        alnum_only = re.sub(r"\s+", " ", alnum_only).strip()
+        if alnum_only:
+            keys.add(alnum_only)
+
+        # Acronym key (first letter of each word, excluding stop words)
+        words = normalized.split()
+        if len(words) > 1:
+            # Filter out common stop words for better acronyms (e.g., "MIT" not "MIOT")
+            stop_words = {
+                "of",
+                "the",
+                "a",
+                "an",
+                "and",
+                "or",
+                "but",
+                "in",
+                "on",
+                "at",
+                "to",
+                "for",
+                "with",
+                "by",
+            }
+            filtered_words = [w for w in words if w not in stop_words]
+            if len(filtered_words) > 1:
+                acronym = "".join(w[0] for w in filtered_words if w)
+            else:
+                # If filtering removes too many words, use all words
+                acronym = "".join(w[0] for w in words if w)
+            if acronym:
+                keys.add(acronym)
+
+        # Phonetic keys (optional, for better matching of similar-sounding names)
+        if HAS_JELLYFISH:
+            try:
+                # Soundex: phonetic algorithm for English names
+                # "Smith" and "Smyth" will have same Soundex
+                soundex_key = jellyfish.soundex(normalized)
+                if soundex_key:
+                    keys.add(f"soundex:{soundex_key}")
+
+                # Metaphone: more accurate than Soundex, handles more cases
+                # "Smith" and "Smyth" will have same Metaphone
+                metaphone_key = jellyfish.metaphone(normalized)
+                if metaphone_key:
+                    keys.add(f"metaphone:{metaphone_key}")
+            except Exception as e:
+                # Graceful degradation if phonetic encoding fails
+                logger.debug(f"Phonetic encoding failed for '{name}': {e}")
+
+        return list(keys)
+
+    def _string_score(self, a: str, b: str) -> float:
+        """
+        Calculate string similarity score between two entity names.
+
+        Uses RapidFuzz for fast, accurate fuzzy matching. Returns a score
+        between 0.0 (completely different) and 1.0 (identical).
+
+        Args:
+            a: First entity name
+            b: Second entity name
+
+        Returns:
+            Similarity score between 0.0 and 1.0
+        """
+        if not a or not b:
+            return 0.0
+
+        if a == b:
+            return 1.0
+
+        # Normalize both strings before comparison
+        a_norm = self._normalize_entity_name(a)
+        b_norm = self._normalize_entity_name(b)
+
+        if a_norm == b_norm:
+            return 1.0
+
+        if HAS_RAPIDFUZZ:
+            # Use RapidFuzz WRatio for best results
+            # WRatio combines multiple algorithms and handles word order
+            score = fuzz.WRatio(a_norm, b_norm) / 100.0
+        else:
+            # Fallback to SequenceMatcher if RapidFuzz not available
+            score = SequenceMatcher(None, a_norm, b_norm).ratio()
+
+        return max(0.0, min(1.0, score))  # Clamp to [0.0, 1.0]
+
+    def _token_score(self, a: str, b: str) -> float:
+        """
+        Calculate token overlap score using Jaccard similarity.
+
+        Tokenizes both names into word sets and calculates Jaccard similarity.
+        Useful for names with word order variations (e.g., "John Smith" vs "Smith, John").
+
+        Args:
+            a: First entity name
+            b: Second entity name
+
+        Returns:
+            Jaccard similarity score between 0.0 and 1.0
+        """
+        if not a or not b:
+            return 0.0
+
+        def tokenize(name: str) -> Set[str]:
+            """Tokenize name into word set (lowercase, no punctuation)."""
+            normalized = self._normalize_entity_name(name)
+            # Split on whitespace and filter out very short words
+            words = [w for w in normalized.split() if len(w) > 1]
+            return set(words)
+
+        tokens_a = tokenize(a)
+        tokens_b = tokenize(b)
+
+        if not tokens_a and not tokens_b:
+            return 1.0
+        if not tokens_a or not tokens_b:
+            return 0.0
+
+        intersection = len(tokens_a & tokens_b)
+        union = len(tokens_a | tokens_b)
+
+        jaccard = intersection / union if union > 0 else 0.0
+        return max(0.0, min(1.0, jaccard))
+
+    def _multi_strategy_score(
+        self, a: str, b: str, use_embeddings: bool = False
+    ) -> float:
+        """
+        Calculate combined similarity score using multiple strategies.
+
+        Combines:
+        - String similarity (RapidFuzz): 0.5 weight
+        - Token overlap (Jaccard): 0.3 weight
+        - Embedding similarity (optional): 0.2 weight
+
+        If embeddings unavailable, weights are adjusted to:
+        - String similarity: 0.6 weight
+        - Token overlap: 0.4 weight
+
+        Args:
+            a: First entity name
+            b: Second entity name
+            use_embeddings: Whether to use embedding similarity (future enhancement)
+
+        Returns:
+            Combined similarity score between 0.0 and 1.0
+        """
+        # String similarity (already implemented)
+        string_score = self._string_score(a, b)
+
+        # Token overlap (Jaccard)
+        token_score = self._token_score(a, b)
+
+        # Embedding similarity (optional, stub for future)
+        embedding_score = 0.0
+        if use_embeddings:
+            # TODO: Implement embedding similarity using sentence-transformers
+            # For now, use token score as proxy (can be enhanced later)
+            embedding_score = token_score
+            logger.debug("Embedding similarity not yet implemented, using token score")
+
+        # Combine scores with weights
+        if use_embeddings and embedding_score > 0:
+            # Full weights: 0.5*string + 0.3*token + 0.2*embedding
+            combined = 0.5 * string_score + 0.3 * token_score + 0.2 * embedding_score
+        else:
+            # Adjusted weights: 0.6*string + 0.4*token (sums to 1.0)
+            combined = 0.6 * string_score + 0.4 * token_score
+
+        return max(0.0, min(1.0, combined))
+
     def _resolve_entity_group(
         self, normalized_name: str, entity_group: List[Dict[str, Any]]
     ) -> Optional[ResolvedEntity]:
@@ -205,13 +428,14 @@ class EntityResolutionAgent:
             Resolved entity
         """
         canonical_name = entity_data["name"]
-        entity_id = ResolvedEntity.generate_entity_id(canonical_name)
+        entity_type = EntityType(entity_data["type"])
+        entity_id = ResolvedEntity.generate_entity_id(canonical_name, entity_type)
 
         return ResolvedEntity(
             entity_id=entity_id,
             canonical_name=canonical_name,
             name=entity_data["name"],
-            type=EntityType(entity_data["type"]),
+            type=entity_type,
             description=entity_data["description"],
             confidence=entity_data["confidence"],
             source_count=1,
@@ -235,7 +459,9 @@ class EntityResolutionAgent:
         # Determine canonical name (most common or highest confidence)
         canonical_name = self._determine_canonical_name(entity_group)
 
-        # Determine entity type (most common)
+        # Determine entity type using weighted voting
+        # Note: existing_type could be passed from candidate lookup, but for now
+        # we resolve from entity_group only
         entity_type = self._determine_entity_type(entity_group)
 
         # Resolve description using LLM
@@ -251,7 +477,7 @@ class EntityResolutionAgent:
         overall_confidence = self._calculate_overall_confidence(entity_group)
 
         # Generate entity ID
-        entity_id = ResolvedEntity.generate_entity_id(canonical_name)
+        entity_id = ResolvedEntity.generate_entity_id(canonical_name, entity_type)
 
         # Collect aliases
         aliases = list(set(entity["name"] for entity in entity_group))
@@ -304,31 +530,117 @@ class EntityResolutionAgent:
 
         return best_name
 
-    def _determine_entity_type(self, entity_group: List[Dict[str, Any]]) -> EntityType:
+    def _determine_entity_type(
+        self,
+        entity_group: List[Dict[str, Any]],
+        existing_type: Optional[EntityType] = None,
+    ) -> EntityType:
         """
-        Determine the entity type for a group of entities.
+        Determine the entity type for a group of entities using weighted voting.
+
+        Uses weighted scoring: type_score = confidence × source_count
+        Prefers existing DB type for stability (tie-breaker).
 
         Args:
             entity_group: List of entity instances
+            existing_type: Existing entity type from database (for stability)
 
         Returns:
-            Most common entity type
+            Selected entity type
         """
+        type_scores = defaultdict(float)
         type_counts = defaultdict(int)
 
         for entity in entity_group:
-            entity_type = entity["type"]
-            type_counts[entity_type] += 1
+            entity_type_str = entity.get("type", "OTHER")
+            confidence = float(entity.get("confidence", 0.5))
 
-        # Return most common type, defaulting to OTHER if tie
-        most_common_type = max(type_counts.keys(), key=lambda t: type_counts[t])
-        return EntityType(most_common_type)
+            # Weighted score: confidence × 1 (each entity is one source)
+            type_scores[entity_type_str] += confidence
+            type_counts[entity_type_str] += 1
+
+        if not type_scores:
+            return EntityType.OTHER
+
+        # Find type with highest weighted score
+        best_type_str = max(type_scores.keys(), key=lambda t: type_scores[t])
+        best_score = type_scores[best_type_str]
+
+        # Check for ties (within 0.1 of best score)
+        tied_types = [
+            t for t, score in type_scores.items() if abs(score - best_score) < 0.1
+        ]
+
+        # If tie and existing type is one of the tied types, prefer it
+        if len(tied_types) > 1 and existing_type:
+            existing_type_str = (
+                existing_type.value
+                if isinstance(existing_type, EntityType)
+                else str(existing_type)
+            )
+            if existing_type_str in tied_types:
+                logger.debug(
+                    f"Type tie detected, preferring existing type '{existing_type_str}' "
+                    f"over alternatives: {tied_types}"
+                )
+                return EntityType(existing_type_str)
+
+        return EntityType(best_type_str)
+
+    def _are_types_compatible(self, type1: EntityType, type2: EntityType) -> bool:
+        """
+        Check if two entity types are compatible for merging.
+
+        Some type pairs should never be merged:
+        - PERSON vs ORG
+        - PERSON vs TECHNOLOGY
+        - Add more rules as needed
+
+        Args:
+            type1: First entity type
+            type2: Second entity type
+
+        Returns:
+            True if types are compatible, False otherwise
+        """
+        # Normalize types to EntityType enum
+        if isinstance(type1, str):
+            type1 = EntityType(type1)
+        if isinstance(type2, str):
+            type2 = EntityType(type2)
+
+        # Same type is always compatible
+        if type1 == type2:
+            return True
+
+        # Incompatible type pairs
+        incompatible_pairs = [
+            (EntityType.PERSON, EntityType.ORG),
+            (EntityType.PERSON, EntityType.TECHNOLOGY),
+            (EntityType.ORG, EntityType.PERSON),
+            (EntityType.TECHNOLOGY, EntityType.PERSON),
+        ]
+
+        pair = (type1, type2)
+        if pair in incompatible_pairs:
+            logger.warning(
+                f"Incompatible types detected: {type1.value} vs {type2.value} - "
+                "these should not be merged"
+            )
+            return False
+
+        # All other combinations are compatible (for now)
+        return True
 
     def _resolve_descriptions(
         self, entity_group: List[Dict[str, Any]], entity_name: str
     ) -> Optional[str]:
         """
-        Resolve entity descriptions using LLM summarization.
+        Resolve entity descriptions using LLM summarization or local merge.
+
+        Checks description similarity first. If descriptions are near-duplicates
+        (similarity >= 0.8), performs local merge without LLM call. Only calls
+        LLM for genuinely divergent descriptions.
 
         Args:
             entity_group: List of entity instances
@@ -337,15 +649,66 @@ class EntityResolutionAgent:
         Returns:
             Resolved description or None if resolution fails
         """
-        descriptions = [entity["description"] for entity in entity_group]
+        # Extract and clean descriptions
+        descriptions = [
+            d.strip()
+            for d in (entity.get("description", "") for entity in entity_group)
+            if d and d.strip()
+        ]
+
+        if not descriptions:
+            return None
 
         if len(descriptions) == 1:
             return descriptions[0]
 
-        # Combine descriptions for LLM processing
-        combined_descriptions = "\n\n".join(
-            [f"Description {i+1}: {desc}" for i, desc in enumerate(descriptions)]
+        # De-dup near-identical texts first (exact matches)
+        unique_descriptions = []
+        seen_exact = set()
+        for desc in descriptions:
+            desc_lower = desc.lower()
+            if desc_lower not in seen_exact:
+                seen_exact.add(desc_lower)
+                unique_descriptions.append(desc)
+
+        if len(unique_descriptions) == 1:
+            return unique_descriptions[0]
+
+        # Check if descriptions are near-duplicates using Jaccard similarity
+        similarity = self._description_similarity(unique_descriptions)
+        llm_gate_threshold = 0.8  # Configurable threshold for LLM gating
+
+        if similarity >= llm_gate_threshold:
+            # Descriptions are similar enough, do local merge without LLM
+            logger.debug(
+                f"Descriptions for '{entity_name}' are similar (Jaccard={similarity:.3f}), "
+                "using local merge instead of LLM"
+            )
+            return self._merge_descriptions_locally(unique_descriptions)
+
+        # Descriptions diverge significantly, use LLM for proper resolution
+        logger.debug(
+            f"Descriptions for '{entity_name}' diverge (Jaccard={similarity:.3f}), "
+            "using LLM for resolution"
         )
+        combined_descriptions = "\n\n".join(
+            [f"Description {i+1}: {desc}" for i, desc in enumerate(unique_descriptions)]
+        )
+
+        # Apply token budget management if enabled
+        if self.max_input_tokens is not None:
+            estimated_tokens = self._estimate_tokens(combined_descriptions)
+            if estimated_tokens > self.max_input_tokens:
+                logger.debug(
+                    f"Input token budget exceeded ({estimated_tokens} > {self.max_input_tokens}) "
+                    f"for entity '{entity_name}', applying smart truncation"
+                )
+                combined_descriptions = self._truncate_descriptions_smartly(
+                    combined_descriptions, self.max_input_tokens
+                )
+                logger.debug(
+                    f"Truncated to {self._estimate_tokens(combined_descriptions)} tokens"
+                )
 
         try:
             resolved_description = self._resolve_with_llm(
@@ -367,6 +730,182 @@ class EntityResolutionAgent:
                 e,
             )
             return None
+
+    def _description_similarity(self, descriptions: List[str]) -> float:
+        """
+        Calculate average pairwise Jaccard similarity of descriptions.
+
+        Args:
+            descriptions: List of description strings
+
+        Returns:
+            Average pairwise Jaccard similarity (0.0 to 1.0)
+        """
+        if len(descriptions) < 2:
+            return 1.0
+
+        def tokens(text: str) -> Set[str]:
+            """Tokenize text into word set (lowercase, no punctuation)."""
+            # Simple tokenization: lowercase, split on whitespace
+            words = text.lower().split()
+            # Remove very short words (likely noise)
+            return {w for w in words if len(w) > 2}
+
+        similarities = []
+        for i in range(len(descriptions)):
+            for j in range(i + 1, len(descriptions)):
+                tokens_a = tokens(descriptions[i])
+                tokens_b = tokens(descriptions[j])
+
+                if not tokens_a and not tokens_b:
+                    similarity = 1.0
+                elif not tokens_a or not tokens_b:
+                    similarity = 0.0
+                else:
+                    intersection = len(tokens_a & tokens_b)
+                    union = len(tokens_a | tokens_b)
+                    jaccard = intersection / union if union > 0 else 0.0
+                    similarities.append(jaccard)
+
+        return sum(similarities) / len(similarities) if similarities else 0.0
+
+    def _merge_descriptions_locally(self, descriptions: List[str]) -> str:
+        """
+        Merge near-duplicate descriptions locally without LLM.
+
+        Extracts unique sentences and concatenates them, preserving key information.
+
+        Args:
+            descriptions: List of similar descriptions
+
+        Returns:
+            Merged description (max 1200 characters)
+        """
+        sentences = []
+        seen_sentences = set()
+
+        for desc in descriptions:
+            # Split on sentence boundaries (period, exclamation, question mark)
+            for sentence in re.split(r"[.!?]+", desc):
+                sentence = sentence.strip()
+                if not sentence:
+                    continue
+
+                sentence_lower = sentence.lower()
+                # Skip if we've seen this sentence before (exact match)
+                if sentence_lower in seen_sentences:
+                    continue
+
+                seen_sentences.add(sentence_lower)
+                sentences.append(sentence)
+
+        # Join sentences with period and space
+        merged = ". ".join(sentences)
+        if merged and not merged.endswith((".", "!", "?")):
+            merged += "."
+
+        # Truncate to 1200 characters to avoid overly long descriptions
+        if len(merged) > 1200:
+            merged = merged[:1197] + "..."
+
+        return merged
+
+    def _estimate_tokens(self, text: str) -> int:
+        """
+        Estimate token count for a text string.
+
+        Uses simple approximation: ~4 characters per token.
+        For more accuracy, tiktoken could be used in the future.
+
+        Args:
+            text: Text to estimate tokens for
+
+        Returns:
+            Estimated token count
+        """
+        # Simple approximation: average ~4 characters per token
+        # This is a rough estimate but sufficient for budget management
+        # For gpt-4o-mini, actual tokens per character varies but ~4 is reasonable
+        return len(text) // 4
+
+    def _truncate_descriptions_smartly(
+        self, combined_descriptions: str, max_tokens: int
+    ) -> str:
+        """
+        Intelligently truncate descriptions to fit within token budget.
+
+        Prioritizes informative sentences (longer, more content) over short ones.
+        Preserves sentence boundaries and order when possible.
+
+        Args:
+            combined_descriptions: Combined descriptions to truncate
+            max_tokens: Maximum token budget
+
+        Returns:
+            Truncated descriptions within token budget
+        """
+        # Split into sentences (preserve sentence boundaries)
+        sentences = []
+        current_sentence = ""
+
+        for char in combined_descriptions:
+            current_sentence += char
+            if char in ".!?":
+                sentence = current_sentence.strip()
+                if sentence:
+                    sentences.append(sentence)
+                current_sentence = ""
+
+        # Add any remaining text
+        if current_sentence.strip():
+            sentences.append(current_sentence.strip())
+
+        # Score sentences by informativeness (length, word count)
+        scored_sentences = []
+        for sentence in sentences:
+            # Score based on length and word count (longer = more informative)
+            word_count = len(sentence.split())
+            length_score = len(sentence)
+            # Combined score: prioritize sentences with both length and content
+            score = length_score + (word_count * 10)
+            scored_sentences.append((score, sentence))
+
+        # Sort by score (highest first) to prioritize informative sentences
+        scored_sentences.sort(key=lambda x: x[0], reverse=True)
+
+        # Select sentences until we fit within token budget
+        selected_sentences = []
+        current_tokens = 0
+
+        for score, sentence in scored_sentences:
+            sentence_tokens = self._estimate_tokens(sentence)
+            if current_tokens + sentence_tokens <= max_tokens:
+                selected_sentences.append(sentence)
+                current_tokens += sentence_tokens
+            else:
+                # Can't fit full sentence, but try to fit partial if we have room
+                remaining_tokens = max_tokens - current_tokens
+                if remaining_tokens > 50:  # Only if meaningful space left
+                    # Truncate sentence to fit
+                    max_chars = remaining_tokens * 4
+                    truncated = sentence[:max_chars]
+                    if truncated:
+                        selected_sentences.append(truncated + "...")
+                break
+
+        # If we have selected sentences, join them; otherwise return truncated original
+        if selected_sentences:
+            # Try to preserve original order if possible
+            # Otherwise just return sorted by score
+            result = " ".join(selected_sentences)
+        else:
+            # Fallback: truncate original text directly
+            max_chars = max_tokens * 4
+            result = combined_descriptions[:max_chars]
+            if len(combined_descriptions) > max_chars:
+                result += "..."
+
+        return result
 
     @retry_llm_call(max_attempts=3)
     def _resolve_with_llm(self, entity_name: str, combined_descriptions: str) -> str:
@@ -398,21 +937,55 @@ class EntityResolutionAgent:
         self, entity_group: List[Dict[str, Any]]
     ) -> float:
         """
-        Calculate overall confidence for a group of entities.
+        Calculate overall confidence for a group of entities using weighted model.
+
+        Uses formula: confidence = clamp(μ + 0.1*log10(1+source_count) + 0.05*agreement, 0, 1)
+        Where:
+        - μ = mean confidence from entity_group
+        - source_count = number of sources (entities)
+        - agreement = average pairwise similarity of descriptions
+
+        This rewards multi-source agreement and higher source counts.
 
         Args:
             entity_group: List of entity instances
 
         Returns:
-            Overall confidence score
+            Overall confidence score (0.0 to 1.0)
         """
-        confidences = [entity["confidence"] for entity in entity_group]
+        import math
 
-        # Use weighted average based on source count
-        total_weight = len(confidences)
-        weighted_sum = sum(confidences)
+        if not entity_group:
+            return 0.0
 
-        return weighted_sum / total_weight if total_weight > 0 else 0.0
+        # Calculate mean confidence
+        confidences = [float(entity.get("confidence", 0.5)) for entity in entity_group]
+        mean_confidence = sum(confidences) / len(confidences) if confidences else 0.5
+
+        # Source count (number of entities)
+        source_count = len(entity_group)
+
+        # Calculate agreement (average pairwise similarity of descriptions)
+        descriptions = [
+            entity.get("description", "").strip()
+            for entity in entity_group
+            if entity.get("description", "").strip()
+        ]
+
+        if len(descriptions) >= 2:
+            agreement = self._description_similarity(descriptions)
+        else:
+            # Single or no descriptions: assume perfect agreement
+            agreement = 1.0
+
+        # Calculate weighted confidence
+        # Formula: μ + 0.1*log10(1+source_count) + 0.05*agreement
+        confidence = (
+            mean_confidence + 0.1 * math.log10(1 + source_count) + 0.05 * agreement
+        )
+
+        # Clamp to [0.0, 1.0]
+        return max(0.0, min(1.0, confidence))
 
     def get_resolution_stats(
         self, resolved_entities: List[ResolvedEntity]

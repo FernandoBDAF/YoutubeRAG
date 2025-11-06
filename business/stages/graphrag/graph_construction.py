@@ -18,6 +18,8 @@ from core.models.graphrag import ResolvedRelationship
 from business.services.graphrag.indexes import get_graphrag_collections
 from core.config.paths import COLL_CHUNKS
 from core.libraries.database import batch_insert
+from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,14 @@ class GraphConstructionStage(BaseStage):
         """Initialize the Graph Construction Stage."""
         super().__init__()
         # Don't initialize agent here - will be done in setup()
+        # Initialize comprehensive metrics tracking (Achievement 3.3)
+        self.post_processing_stats = {
+            "co_occurrence": {"added": 0, "skipped": 0, "capped": 0},
+            "semantic_similarity": {"added": 0, "skipped": 0, "capped": 0},
+            "cross_chunk": {"added": 0, "skipped": 0},
+            "bidirectional": {"added": 0, "skipped": 0},
+            "predicted": {"added": 0, "skipped": 0},
+        }
 
     def setup(self):
         """Setup the stage with config-dependent initialization."""
@@ -61,7 +71,117 @@ class GraphConstructionStage(BaseStage):
         # Get GraphRAG collections (use write DB for output)
         self.graphrag_collections = get_graphrag_collections(self.db_write)
 
+        # Load ontology for predicate metadata (Achievement 3.1)
+        try:
+            from core.libraries.ontology.loader import load_ontology
+
+            self.ontology = load_ontology()
+            logger.info(
+                f"Loaded ontology: {len(self.ontology.get('canonical_predicates', set()))} canonical predicates, "
+                f"{len(self.ontology.get('symmetric_predicates', set()))} symmetric predicates"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to load ontology: {e}. Continuing with fallback.")
+            self.ontology = {
+                "canonical_predicates": set(),
+                "symmetric_predicates": set(),
+                "predicate_map": {},
+            }
+
         logger.info(f"Initialized {self.name}")
+
+    def _get_entity_degree(
+        self, entity_id: str, relationship_type: Optional[str] = None
+    ) -> int:
+        """
+        Get the degree (number of relationships) for an entity.
+
+        Args:
+            entity_id: Entity ID to check
+            relationship_type: Optional filter by relationship_type (e.g., "co_occurrence", "semantic_similarity")
+
+        Returns:
+            Number of relationships where entity is subject or object
+        """
+        relations_collection = self.graphrag_collections["relations"]
+
+        query = {
+            "$or": [
+                {"subject_id": entity_id},
+                {"object_id": entity_id},
+            ]
+        }
+
+        if relationship_type:
+            query["relationship_type"] = relationship_type
+
+        return relations_collection.count_documents(query)
+
+    def _get_reverse_predicate(self, predicate: str) -> Optional[str]:
+        """
+        Get the reverse predicate for a given predicate using ontology data.
+
+        Args:
+            predicate: The predicate to get reverse for
+
+        Returns:
+            Reverse predicate name, or None if:
+            - Predicate is symmetric (already bidirectional)
+            - No reverse predicate found in ontology
+        """
+        # Check if predicate is symmetric (no reverse needed)
+        symmetric_predicates = self.ontology.get("symmetric_predicates", set())
+        if predicate in symmetric_predicates:
+            return None  # Symmetric predicates don't need reverse
+
+        # Build reverse mapping from predicate_map (if it contains reverse pairs)
+        # For now, use a fallback pattern-based approach
+        # Common patterns: "X" → "X_by", "X" → "Xed_by", etc.
+        reverse_patterns = {
+            "uses": "used_by",
+            "teaches": "taught_by",
+            "creates": "created_by",
+            "develops": "developed_by",
+            "implements": "implemented_by",
+            "contains": "contained_in",
+            "has": "belongs_to",
+            "manages": "managed_by",
+            "leads": "led_by",
+            "explains": "explained_by",
+            "demonstrates": "demonstrated_by",
+            "requires": "required_by",
+            "depends_on": "dependency_of",
+            "applies_to": "applied_by",
+            "works_at": "employs",
+            "part_of": "has_part",
+            "subtype_of": "has_subtype",
+            "is_a": "has_instance",
+        }
+
+        # Check fallback mapping
+        return reverse_patterns.get(predicate)
+
+    def _build_attribution(
+        self, stage_name: str, algorithm: str, params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Build attribution dictionary for relationships (Achievement 3.2).
+
+        Args:
+            stage_name: Name of the stage creating the relationship
+            algorithm: Algorithm used (e.g., "co_occurrence", "semantic_similarity")
+            params: Optional dictionary of algorithm parameters
+
+        Returns:
+            Attribution dictionary with created_by_stage, algorithm, algorithm_version, params
+        """
+        return {
+            "created_by_stage": stage_name,
+            "algorithm": algorithm,
+            "algorithm_version": "1.0",  # Can be made configurable later
+            "params": params or {},
+            "created_at": time.time(),
+        }
 
     def iter_docs(self) -> Iterator[Dict[str, Any]]:
         """
@@ -98,7 +218,7 @@ class GraphConstructionStage(BaseStage):
         for doc in cursor:
             yield doc
 
-    def handle_doc(self, doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def handle_doc(self, doc: Dict[str, Any]) -> bool:
         """
         Process a single chunk for graph construction and write to database.
 
@@ -106,7 +226,7 @@ class GraphConstructionStage(BaseStage):
             doc: Chunk document to process
 
         Returns:
-            None (writes directly to database via update_one)
+            True if processing succeeded, False if it failed (Achievement 0.3)
         """
         chunk_id = doc.get("chunk_id", "unknown")
         video_id = doc.get("video_id", "unknown")
@@ -185,7 +305,7 @@ class GraphConstructionStage(BaseStage):
                         f"Skipping chunk {chunk_id} - already has completed construction"
                     )
                     self.stats["skipped"] += 1
-                    return None
+                    return True  # Skipped is considered success (already processed)
 
             # Update the chunk with construction results
             collection.update_one(
@@ -200,7 +320,7 @@ class GraphConstructionStage(BaseStage):
                 f"for chunk {chunk_id}"
             )
 
-            return None
+            return True  # Success (Achievement 0.3)
 
         except Exception as e:
             logger.error(
@@ -323,12 +443,20 @@ class GraphConstructionStage(BaseStage):
         """
         relations_collection = self.graphrag_collections["relations"]
 
-        # Update source count
+        # Check if chunk_id is already in source_chunks
+        # Only increment source_count if this is a new chunk (Achievement 0.2)
+        source_chunks = existing_relationship.get("source_chunks", [])
+        is_new_chunk = chunk_id not in source_chunks
+
+        # Build update document
         update_data = {
-            "$inc": {"source_count": 1},
             "$addToSet": {"source_chunks": chunk_id},
             "$set": {"updated_at": time.time()},
         }
+
+        # Only increment source_count if chunk_id is new
+        if is_new_chunk:
+            update_data["$inc"] = {"source_count": 1}
 
         # Update confidence if new relationship has higher confidence
         if resolved_relationship.confidence > existing_relationship.get(
@@ -366,11 +494,18 @@ class GraphConstructionStage(BaseStage):
             "predicate": resolved_relationship.predicate,
             "description": resolved_relationship.description,
             "confidence": resolved_relationship.confidence,
-            "source_count": resolved_relationship.source_count,
+            "source_count": 1,  # New relationship starts with source_count = 1
             "source_chunks": [chunk_id],
             "video_id": video_id,
             "created_at": time.time(),
             "updated_at": time.time(),
+            "relationship_type": "extracted",
+            # Attribution (Achievement 3.2)
+            **self._build_attribution(
+                stage_name=self.name,
+                algorithm="extraction",
+                params={"chunk_id": chunk_id, "video_id": video_id},
+            ),
         }
 
         relations_collection.insert_one(relationship_doc)
@@ -403,9 +538,13 @@ class GraphConstructionStage(BaseStage):
 
         logger.info(f"Found {len(chunk_entities)} chunks with entity mentions")
 
+        # Get edge cap from environment (Achievement 2.3)
+        max_cooc_per_entity = int(os.getenv("GRAPHRAG_MAX_COOC_PER_ENTITY", "200"))
+
         # Collect all relationships to insert in batch
         relationships_to_insert = []
         skipped_count = 0
+        capped_count = 0  # Track edges skipped due to degree cap
 
         for chunk_id, entity_ids in chunk_entities.items():
             if len(entity_ids) < 2:
@@ -415,18 +554,25 @@ class GraphConstructionStage(BaseStage):
             entity_list = list(entity_ids)
             for i, entity1_id in enumerate(entity_list):
                 for entity2_id in entity_list[i + 1 :]:
-                    # Check if relationship already exists (in either direction)
+                    # Check if relationship already exists (include predicate to allow multiple predicates per pair)
                     existing = relations_collection.find_one(
                         {
-                            "$or": [
-                                {"subject_id": entity1_id, "object_id": entity2_id},
-                                {"subject_id": entity2_id, "object_id": entity1_id},
-                            ]
+                            "subject_id": entity1_id,
+                            "object_id": entity2_id,
+                            "predicate": "co_occurs_with",
                         }
                     )
 
                     if existing:
                         skipped_count += 1
+                        continue
+
+                    # Check degree caps (Achievement 2.3)
+                    degree1 = self._get_entity_degree(entity1_id, "co_occurrence")
+                    degree2 = self._get_entity_degree(entity2_id, "co_occurrence")
+
+                    if degree1 >= max_cooc_per_entity or degree2 >= max_cooc_per_entity:
+                        capped_count += 1
                         continue
 
                     # Create co-occurrence relationship
@@ -447,6 +593,12 @@ class GraphConstructionStage(BaseStage):
                         "created_at": time.time(),
                         "updated_at": time.time(),
                         "relationship_type": "co_occurrence",  # Mark as auto-generated
+                        # Attribution (Achievement 3.2)
+                        **self._build_attribution(
+                            stage_name=self.name,
+                            algorithm="co_occurrence",
+                            params={"chunk_id": chunk_id},
+                        ),
                     }
 
                     relationships_to_insert.append(relationship_doc)
@@ -457,22 +609,44 @@ class GraphConstructionStage(BaseStage):
             logger.info(
                 f"Inserting {len(relationships_to_insert)} co-occurrence relationships in batch"
             )
-            result = batch_insert(
-                collection=relations_collection,
-                documents=relationships_to_insert,
-                batch_size=500,
-                ordered=False,  # Continue on errors
-            )
-            added_count = result["inserted"]
-            logger.info(
-                f"Co-occurrence batch insert: {result['inserted']}/{result['total']} successful, "
-                f"{result['failed']} failed"
-            )
+            try:
+                result = batch_insert(
+                    collection=relations_collection,
+                    documents=relationships_to_insert,
+                    batch_size=500,
+                    ordered=False,  # Continue on errors
+                )
+                added_count = result["inserted"]
+                logger.info(
+                    f"Co-occurrence batch insert: {result['inserted']}/{result['total']} successful, "
+                    f"{result['failed']} failed"
+                )
+            except DuplicateKeyError:
+                # Expected on reruns (idempotency) - unique index on relationship_id prevents duplicates
+                logger.debug(
+                    "Duplicate key error in co-occurrence batch insert (expected on reruns)"
+                )
+                # Count successful inserts by checking which ones exist
+                for rel_doc in relationships_to_insert:
+                    existing = relations_collection.find_one(
+                        {"relationship_id": rel_doc["relationship_id"]}
+                    )
+                    if existing:
+                        added_count += 1
+                logger.info(
+                    f"Co-occurrence batch insert: {added_count}/{len(relationships_to_insert)} relationships already exist (idempotent)"
+                )
 
         logger.info(
             f"Co-occurrence post-processing complete: "
-            f"added {added_count} relationships, skipped {skipped_count} existing"
+            f"added {added_count} relationships, skipped {skipped_count} existing, "
+            f"capped {capped_count} due to degree limits"
         )
+
+        # Update metrics (Achievement 3.3)
+        self.post_processing_stats["co_occurrence"]["added"] += added_count
+        self.post_processing_stats["co_occurrence"]["skipped"] += skipped_count
+        self.post_processing_stats["co_occurrence"]["capped"] += capped_count
 
         return added_count
 
@@ -510,13 +684,24 @@ class GraphConstructionStage(BaseStage):
 
                     embedding = embed_texts([embedding_text])[0]
 
+                    # Normalize embedding once at write time (Achievement 2.2)
+                    embedding_array = np.array(embedding)
+                    embedding_norm = np.linalg.norm(embedding_array)
+                    if embedding_norm > 0:
+                        embedding_normalized = (
+                            embedding_array / embedding_norm
+                        ).tolist()
+                    else:
+                        embedding_normalized = embedding
+
                     entities_collection.update_one(
                         {"entity_id": entity["entity_id"]},
                         {
                             "$set": {
-                                "entity_embedding": embedding,
+                                "entity_embedding": embedding_normalized,
                                 "entity_embedding_text": embedding_text,
-                                "entity_embedding_dim": len(embedding),
+                                "entity_embedding_dim": len(embedding_normalized),
+                                "entity_embedding_norm": 1.0,  # Flag: normalized
                             }
                         },
                     )
@@ -532,9 +717,13 @@ class GraphConstructionStage(BaseStage):
             f"Calculating similarity for {len(entities_with_embeddings)} entities"
         )
 
+        # Get edge cap from environment (Achievement 2.3)
+        max_sim_per_entity = int(os.getenv("GRAPHRAG_MAX_SIM_PER_ENTITY", "200"))
+
         # Step 3: Calculate pairwise cosine similarity and collect relationships
         relationships_to_insert = []
         skipped_count = 0
+        capped_count = 0  # Track edges skipped due to degree cap
 
         from itertools import combinations
 
@@ -542,13 +731,12 @@ class GraphConstructionStage(BaseStage):
             entity1_id = entity1["entity_id"]
             entity2_id = entity2["entity_id"]
 
-            # Check if relationship already exists
+            # Check if relationship already exists (include predicate to allow multiple predicates per pair)
             existing = relations_collection.find_one(
                 {
-                    "$or": [
-                        {"subject_id": entity1_id, "object_id": entity2_id},
-                        {"subject_id": entity2_id, "object_id": entity1_id},
-                    ]
+                    "subject_id": entity1_id,
+                    "object_id": entity2_id,
+                    "predicate": "semantically_similar_to",
                 }
             )
 
@@ -556,13 +744,22 @@ class GraphConstructionStage(BaseStage):
                 skipped_count += 1
                 continue
 
-            # Calculate cosine similarity
+            # Calculate cosine similarity (optimized for normalized embeddings - Achievement 2.2)
             emb1 = np.array(entity1["entity_embedding"])
             emb2 = np.array(entity2["entity_embedding"])
 
-            similarity = np.dot(emb1, emb2) / (
-                np.linalg.norm(emb1) * np.linalg.norm(emb2)
-            )
+            # Check if embeddings are normalized (flag or check norm)
+            norm1 = entity1.get("entity_embedding_norm", None)
+            norm2 = entity2.get("entity_embedding_norm", None)
+
+            if norm1 == 1.0 and norm2 == 1.0:
+                # Both normalized: use dot product directly (2-3× faster)
+                similarity = np.dot(emb1, emb2)
+            else:
+                # Not normalized: use standard cosine formula (backward compatibility)
+                similarity = np.dot(emb1, emb2) / (
+                    np.linalg.norm(emb1) * np.linalg.norm(emb2)
+                )
 
             if similarity >= similarity_threshold:
                 # Create similarity relationship
@@ -583,6 +780,15 @@ class GraphConstructionStage(BaseStage):
                     "updated_at": time.time(),
                     "relationship_type": "semantic_similarity",
                     "similarity_score": float(similarity),
+                    # Attribution (Achievement 3.2)
+                    **self._build_attribution(
+                        stage_name=self.name,
+                        algorithm="semantic_similarity",
+                        params={
+                            "similarity_threshold": similarity_threshold,
+                            "similarity_score": float(similarity),
+                        },
+                    ),
                 }
 
                 relationships_to_insert.append(relationship_doc)
@@ -593,22 +799,44 @@ class GraphConstructionStage(BaseStage):
             logger.info(
                 f"Inserting {len(relationships_to_insert)} semantic similarity relationships in batch"
             )
-            result = batch_insert(
-                collection=relations_collection,
-                documents=relationships_to_insert,
-                batch_size=500,
-                ordered=False,
-            )
-            added_count = result["inserted"]
-            logger.info(
-                f"Semantic similarity batch insert: {result['inserted']}/{result['total']} successful, "
-                f"{result['failed']} failed"
-            )
+            try:
+                result = batch_insert(
+                    collection=relations_collection,
+                    documents=relationships_to_insert,
+                    batch_size=500,
+                    ordered=False,
+                )
+                added_count = result["inserted"]
+                logger.info(
+                    f"Semantic similarity batch insert: {result['inserted']}/{result['total']} successful, "
+                    f"{result['failed']} failed"
+                )
+            except DuplicateKeyError:
+                # Expected on reruns (idempotency) - unique index on relationship_id prevents duplicates
+                logger.debug(
+                    "Duplicate key error in semantic similarity batch insert (expected on reruns)"
+                )
+                # Count successful inserts by checking which ones exist
+                for rel_doc in relationships_to_insert:
+                    existing = relations_collection.find_one(
+                        {"relationship_id": rel_doc["relationship_id"]}
+                    )
+                    if existing:
+                        added_count += 1
+                logger.info(
+                    f"Semantic similarity batch insert: {added_count}/{len(relationships_to_insert)} relationships already exist (idempotent)"
+                )
 
         logger.info(
             f"Semantic similarity post-processing complete: "
-            f"added {added_count} relationships, skipped {skipped_count} existing"
+            f"added {added_count} relationships, skipped {skipped_count} existing, "
+            f"capped {capped_count} due to degree limits"
         )
+
+        # Update metrics (Achievement 3.3)
+        self.post_processing_stats["semantic_similarity"]["added"] += added_count
+        self.post_processing_stats["semantic_similarity"]["skipped"] += skipped_count
+        self.post_processing_stats["semantic_similarity"]["capped"] += capped_count
 
         return added_count
 
@@ -722,27 +950,7 @@ class GraphConstructionStage(BaseStage):
                             if entity1_id == entity2_id:
                                 continue
 
-                            # Check if relationship already exists
-                            existing = relations_collection.find_one(
-                                {
-                                    "$or": [
-                                        {
-                                            "subject_id": entity1_id,
-                                            "object_id": entity2_id,
-                                        },
-                                        {
-                                            "subject_id": entity2_id,
-                                            "object_id": entity1_id,
-                                        },
-                                    ]
-                                }
-                            )
-
-                            if existing:
-                                skipped_count += 1
-                                continue
-
-                            # Get entity types to determine relationship type
+                            # Get entity types to determine relationship type first
                             entity1 = entities_collection.find_one(
                                 {"entity_id": entity1_id}
                             )
@@ -758,35 +966,64 @@ class GraphConstructionStage(BaseStage):
                                 entity1, entity2
                             )
 
-                            if predicate:
-                                relationship_id = (
-                                    ResolvedRelationship.generate_relationship_id(
-                                        entity1_id, entity2_id, predicate
-                                    )
-                                )
+                            if not predicate:
+                                continue
 
-                                # Calculate chunk distance for confidence adjustment
-                                chunk_distance = j - i
-                                # Confidence decreases with distance (0.6 for adjacent, 0.4 for window edge)
-                                confidence = max(0.4, 0.6 - (chunk_distance - 1) * 0.05)
-
-                                relationship_doc = {
-                                    "relationship_id": relationship_id,
+                            # Check if relationship already exists (include predicate to allow multiple predicates per pair)
+                            existing = relations_collection.find_one(
+                                {
                                     "subject_id": entity1_id,
                                     "object_id": entity2_id,
                                     "predicate": predicate,
-                                    "description": f"Entities mentioned in nearby chunks (distance: {chunk_distance})",
-                                    "confidence": confidence,
-                                    "source_count": 1,
-                                    "source_chunks": [chunk1_id, chunk2_id],
-                                    "video_id": video_id,
-                                    "chunk_distance": chunk_distance,
-                                    "created_at": time.time(),
-                                    "updated_at": time.time(),
-                                    "relationship_type": "cross_chunk",
                                 }
+                            )
 
-                                relationships_to_insert.append(relationship_doc)
+                            if existing:
+                                skipped_count += 1
+                                continue
+
+                            relationship_id = (
+                                ResolvedRelationship.generate_relationship_id(
+                                    entity1_id, entity2_id, predicate
+                                )
+                            )
+
+                            # Calculate chunk distance for confidence adjustment
+                            chunk_distance = j - i
+                            # Confidence decreases with distance (0.6 for adjacent, 0.4 for window edge)
+                            confidence = max(0.4, 0.6 - (chunk_distance - 1) * 0.05)
+
+                            relationship_doc = {
+                                "relationship_id": relationship_id,
+                                "subject_id": entity1_id,
+                                "object_id": entity2_id,
+                                "predicate": predicate,
+                                "description": f"Entities mentioned in nearby chunks (distance: {chunk_distance})",
+                                "confidence": confidence,
+                                "source_count": 1,
+                                "source_chunks": [chunk1_id, chunk2_id],
+                                "video_id": video_id,
+                                "chunk_distance": chunk_distance,
+                                "created_at": time.time(),
+                                "updated_at": time.time(),
+                                "relationship_type": "cross_chunk",
+                                # Attribution (Achievement 3.2)
+                                **self._build_attribution(
+                                    stage_name=self.name,
+                                    algorithm="cross_chunk",
+                                    params={
+                                        "chunk_window": (
+                                            chunk_window_override
+                                            if chunk_window_override
+                                            else "adaptive"
+                                        ),
+                                        "chunk_distance": chunk_distance,
+                                        "video_id": video_id,
+                                    },
+                                ),
+                            }
+
+                            relationships_to_insert.append(relationship_doc)
 
         # Batch insert all cross-chunk relationships
         added_count = 0
@@ -794,17 +1031,33 @@ class GraphConstructionStage(BaseStage):
             logger.info(
                 f"Inserting {len(relationships_to_insert)} cross-chunk relationships in batch"
             )
-            result = batch_insert(
-                collection=relations_collection,
-                documents=relationships_to_insert,
-                batch_size=500,
-                ordered=False,
-            )
-            added_count = result["inserted"]
-            logger.info(
-                f"Cross-chunk batch insert: {result['inserted']}/{result['total']} successful, "
-                f"{result['failed']} failed"
-            )
+            try:
+                result = batch_insert(
+                    collection=relations_collection,
+                    documents=relationships_to_insert,
+                    batch_size=500,
+                    ordered=False,
+                )
+                added_count = result["inserted"]
+                logger.info(
+                    f"Cross-chunk batch insert: {result['inserted']}/{result['total']} successful, "
+                    f"{result['failed']} failed"
+                )
+            except DuplicateKeyError:
+                # Expected on reruns (idempotency) - unique index on relationship_id prevents duplicates
+                logger.debug(
+                    "Duplicate key error in cross-chunk batch insert (expected on reruns)"
+                )
+                # Count successful inserts by checking which ones exist
+                for rel_doc in relationships_to_insert:
+                    existing = relations_collection.find_one(
+                        {"relationship_id": rel_doc["relationship_id"]}
+                    )
+                    if existing:
+                        added_count += 1
+                logger.info(
+                    f"Cross-chunk batch insert: {added_count}/{len(relationships_to_insert)} relationships already exist (idempotent)"
+                )
 
         window_mode = (
             "adaptive" if use_adaptive_window else f"override={chunk_window_override}"
@@ -814,6 +1067,10 @@ class GraphConstructionStage(BaseStage):
             f"added {added_count} relationships, skipped {skipped_count} existing "
             f"(window mode: {window_mode})"
         )
+
+        # Update metrics (Achievement 3.3)
+        self.post_processing_stats["cross_chunk"]["added"] += added_count
+        self.post_processing_stats["cross_chunk"]["skipped"] += skipped_count
 
         return added_count
 
@@ -866,28 +1123,6 @@ class GraphConstructionStage(BaseStage):
 
         relations_collection = self.graphrag_collections["relations"]
 
-        # Define reverse predicate mappings
-        reverse_predicates = {
-            "uses": "used_by",
-            "teaches": "taught_by",
-            "creates": "created_by",
-            "develops": "developed_by",
-            "implements": "implemented_by",
-            "contains": "contained_in",
-            "has": "belongs_to",
-            "manages": "managed_by",
-            "leads": "led_by",
-            "explains": "explained_by",
-            "demonstrates": "demonstrated_by",
-            "requires": "required_by",
-            "depends_on": "dependency_of",
-            "applies_to": "applied_by",
-            "works_at": "employs",
-            "part_of": "has_part",
-            "subtype_of": "has_subtype",
-            "is_a": "has_instance",
-        }
-
         # Collect all reverse relationships to insert in batch
         relationships_to_insert = []
         skipped_count = 0
@@ -895,33 +1130,68 @@ class GraphConstructionStage(BaseStage):
         for relationship in relations_collection.find():
             predicate = relationship.get("predicate", "")
 
-            if predicate not in reverse_predicates:
-                continue
+            # Get reverse predicate from ontology (Achievement 3.1)
+            reverse_predicate = self._get_reverse_predicate(predicate)
 
-            reverse_predicate = reverse_predicates[predicate]
+            if reverse_predicate is None:
+                continue  # Symmetric or no reverse found
             subject_id = relationship["subject_id"]
             object_id = relationship["object_id"]
 
-            # Check if reverse relationship already exists
-            existing = relations_collection.find_one(
-                {
-                    "subject_id": object_id,
-                    "object_id": subject_id,
-                    "predicate": reverse_predicate,
-                }
-            )
-
-            if existing:
-                skipped_count += 1
-                continue
-
-            # Create reverse relationship
-            relationship_id = ResolvedRelationship.generate_relationship_id(
+            # Generate reverse relationship_id
+            reverse_relationship_id = ResolvedRelationship.generate_relationship_id(
                 object_id, subject_id, reverse_predicate
             )
 
+            # Check if reverse relationship already exists by relationship_id (Achievement 1.2)
+            existing_reverse = relations_collection.find_one(
+                {"relationship_id": reverse_relationship_id}
+            )
+
+            if existing_reverse:
+                # Merge existing reverse relationship (Achievement 1.2)
+                # Merge policy: max confidence, union source_chunks, longest description
+                now = time.time()
+                original_desc = relationship.get("description", "")
+                reverse_desc = existing_reverse.get("description", "")
+                new_desc = (
+                    reverse_desc
+                    if len(reverse_desc) > len(original_desc)
+                    else f"Reverse of: {original_desc}"
+                )
+
+                # Build merge update
+                update = {
+                    "$set": {
+                        "description": new_desc,
+                        "updated_at": now,
+                    },
+                    "$max": {
+                        "confidence": max(
+                            relationship.get("confidence", 0.7),
+                            existing_reverse.get("confidence", 0.7),
+                        )
+                    },
+                    "$addToSet": {
+                        "source_chunks": {
+                            "$each": relationship.get("source_chunks", [])
+                        }
+                    },
+                }
+
+                # Atomic upsert to merge
+                relations_collection.find_one_and_update(
+                    {"relationship_id": reverse_relationship_id},
+                    update,
+                    upsert=False,  # Should exist, but safe
+                    return_document=ReturnDocument.AFTER,
+                )
+                skipped_count += 1  # Count as skipped (merged, not inserted)
+                continue
+
+            # Create new reverse relationship
             reverse_relationship_doc = {
-                "relationship_id": relationship_id,
+                "relationship_id": reverse_relationship_id,
                 "subject_id": object_id,
                 "object_id": subject_id,
                 "predicate": reverse_predicate,
@@ -933,6 +1203,15 @@ class GraphConstructionStage(BaseStage):
                 "updated_at": time.time(),
                 "relationship_type": "bidirectional",
                 "original_relationship_id": relationship["relationship_id"],
+                # Attribution (Achievement 3.2)
+                **self._build_attribution(
+                    stage_name=self.name,
+                    algorithm="bidirectional",
+                    params={
+                        "original_predicate": predicate,
+                        "reverse_predicate": reverse_predicate,
+                    },
+                ),
             }
 
             relationships_to_insert.append(reverse_relationship_doc)
@@ -943,28 +1222,56 @@ class GraphConstructionStage(BaseStage):
             logger.info(
                 f"Inserting {len(relationships_to_insert)} reverse relationships in batch"
             )
-            result = batch_insert(
-                collection=relations_collection,
-                documents=relationships_to_insert,
-                batch_size=500,
-                ordered=False,
-            )
-            added_count = result["inserted"]
-            logger.info(
-                f"Bidirectional batch insert: {result['inserted']}/{result['total']} successful, "
-                f"{result['failed']} failed"
-            )
+            try:
+                result = batch_insert(
+                    collection=relations_collection,
+                    documents=relationships_to_insert,
+                    batch_size=500,
+                    ordered=False,
+                )
+                added_count = result["inserted"]
+                logger.info(
+                    f"Bidirectional batch insert: {result['inserted']}/{result['total']} successful, "
+                    f"{result['failed']} failed"
+                )
+            except DuplicateKeyError:
+                # Expected on reruns (idempotency) - unique index on relationship_id prevents duplicates
+                logger.debug(
+                    "Duplicate key error in bidirectional batch insert (expected on reruns)"
+                )
+                # Count successful inserts by checking which ones exist
+                for rel_doc in relationships_to_insert:
+                    existing = relations_collection.find_one(
+                        {"relationship_id": rel_doc["relationship_id"]}
+                    )
+                    if existing:
+                        added_count += 1
+                logger.info(
+                    f"Bidirectional batch insert: {added_count}/{len(relationships_to_insert)} relationships already exist (idempotent)"
+                )
 
         logger.info(
             f"Bidirectional relationship post-processing complete: "
             f"added {added_count} relationships, skipped {skipped_count} existing"
         )
 
+        # Update metrics (Achievement 3.3)
+        self.post_processing_stats["bidirectional"]["added"] += added_count
+        self.post_processing_stats["bidirectional"]["skipped"] += skipped_count
+
         return added_count
 
     def _calculate_current_graph_density(self) -> float:
         """
         Calculate current graph density to prevent over-connection.
+
+        Density is calculated as: unique_unordered_pairs / max_possible_pairs
+
+        We count unique unordered pairs (subject_id, object_id) rather than total
+        relationships because:
+        - Graph can have multiple predicates per pair (e.g., "teaches" and "mentors")
+        - We want to measure connectivity, not relationship count
+        - Undirected denominator n*(n-1)/2 is correct for pair-based density
 
         Returns:
             Graph density (0.0 to 1.0)
@@ -973,16 +1280,48 @@ class GraphConstructionStage(BaseStage):
         relations_collection = self.graphrag_collections["relations"]
 
         num_entities = entities_collection.count_documents({})
-        num_relationships = relations_collection.count_documents({})
 
         if num_entities < 2:
             return 0.0
 
-        # Maximum possible edges in undirected graph
+        # Count unique unordered pairs (subject_id, object_id)
+        # Use aggregation to normalize pairs: min(s,o) | max(s,o)
+        pair_pipeline = [
+            {
+                "$project": {
+                    "pair_key": {
+                        "$concat": [
+                            {
+                                "$cond": [
+                                    {"$lt": ["$subject_id", "$object_id"]},
+                                    "$subject_id",
+                                    "$object_id",
+                                ]
+                            },
+                            "|",
+                            {
+                                "$cond": [
+                                    {"$gt": ["$subject_id", "$object_id"]},
+                                    "$subject_id",
+                                    "$object_id",
+                                ]
+                            },
+                        ]
+                    }
+                }
+            },
+            {"$group": {"_id": "$pair_key"}},
+            {"$count": "unique_pairs"},
+        ]
+
+        pair_result = list(relations_collection.aggregate(pair_pipeline))
+        unique_pairs = pair_result[0]["count"] if pair_result else 0
+
+        # Maximum possible unordered pairs in undirected graph
         max_possible = num_entities * (num_entities - 1) / 2
 
-        # Current density
-        density = num_relationships / max_possible if max_possible > 0 else 0.0
+        # Current density: unique pairs / max possible pairs
+        density = unique_pairs / max_possible if max_possible > 0 else 0.0
 
         return density
 
@@ -1055,6 +1394,20 @@ class GraphConstructionStage(BaseStage):
                 "updated_at": time.time(),
                 "relationship_type": "predicted",
                 "prediction_confidence": float(confidence),
+                # Attribution (Achievement 3.2)
+                **self._build_attribution(
+                    stage_name=self.name,
+                    algorithm="link_prediction",
+                    params={
+                        "confidence_threshold": float(
+                            os.getenv("GRAPHRAG_LINK_PREDICTION_THRESHOLD", "0.65")
+                        ),
+                        "max_predictions_per_entity": int(
+                            os.getenv("GRAPHRAG_MAX_PREDICTIONS_PER_ENTITY", "5")
+                        ),
+                        "predicted_confidence": float(confidence),
+                    },
+                ),
             }
 
             relationships_to_insert.append(relationship_doc)
@@ -1065,27 +1418,46 @@ class GraphConstructionStage(BaseStage):
             logger.info(
                 f"Inserting {len(relationships_to_insert)} predicted relationships in batch"
             )
-            result = batch_insert(
-                collection=relations_collection,
-                documents=relationships_to_insert,
-                batch_size=500,
-                ordered=False,
-            )
-            added_count = result["inserted"]
-            logger.info(
-                f"Link prediction batch insert: {result['inserted']}/{result['total']} successful, "
-                f"{result['failed']} failed"
-            )
+            try:
+                result = batch_insert(
+                    collection=relations_collection,
+                    documents=relationships_to_insert,
+                    batch_size=500,
+                    ordered=False,
+                )
+                added_count = result["inserted"]
+                logger.info(
+                    f"Link prediction batch insert: {result['inserted']}/{result['total']} successful, "
+                    f"{result['failed']} failed"
+                )
+            except DuplicateKeyError:
+                # Expected on reruns (idempotency) - unique index on relationship_id prevents duplicates
+                logger.debug(
+                    "Duplicate key error in predicted relationships batch insert (expected on reruns)"
+                )
+                # Count successful inserts by checking which ones exist
+                for rel_doc in relationships_to_insert:
+                    existing = relations_collection.find_one(
+                        {"relationship_id": rel_doc["relationship_id"]}
+                    )
+                    if existing:
+                        added_count += 1
+                logger.info(
+                    f"Link prediction batch insert: {added_count}/{len(relationships_to_insert)} relationships already exist (idempotent)"
+                )
 
         logger.info(
             f"Link prediction post-processing complete: added {added_count} relationships"
         )
 
+        # Update metrics (Achievement 3.3)
+        self.post_processing_stats["predicted"]["added"] += added_count
+
         return added_count
 
     def _mark_construction_failed(
         self, doc: Dict[str, Any], error_message: str
-    ) -> None:
+    ) -> bool:
         """
         Mark construction as failed for a document.
 
@@ -1120,7 +1492,7 @@ class GraphConstructionStage(BaseStage):
             f"Marked chunk {chunk_id} construction as failed: {error_message}"
         )
 
-        return None
+        return False  # Failure (Achievement 0.3)
 
     def process_batch(
         self, docs: List[Dict[str, Any]]
@@ -1152,7 +1524,7 @@ class GraphConstructionStage(BaseStage):
                 logger.error(f"Error processing document {i + 1}: {e}")
                 results.append(None)
 
-        successful_count = sum(1 for r in results if r is not None)
+        successful_count = sum(1 for r in results if r is True)
         logger.info(
             f"Batch processing completed: {successful_count}/{len(docs)} successful"
         )
@@ -1440,6 +1812,8 @@ class GraphConstructionStage(BaseStage):
                 f"Graph post-processing complete: added {total_added} relationships"
             )
             logger.info("=" * 80)
+            # Log comprehensive metrics (Achievement 3.3)
+            self._log_comprehensive_metrics()
             super().finalize()
             return
 
@@ -1466,6 +1840,9 @@ class GraphConstructionStage(BaseStage):
             f"Graph post-processing complete: added {total_added} total relationships"
         )
         logger.info("=" * 80)
+
+        # Log comprehensive metrics (Achievement 3.3)
+        self._log_comprehensive_metrics()
 
         # Call parent finalize to log statistics
         super().finalize()

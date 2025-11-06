@@ -68,11 +68,34 @@ EXECUTION_TASK (logs execution - the journey)
 
 **Pattern**: `TYPE_FEATURE_NUMBER.md`
 
+#### Core Document Types
+
 - **PLAN**: `PLAN_<FEATURE>.md` (e.g., `PLAN_OPTIMIZE-EXTRACTION.md`)
 - **SUBPLAN**: `SUBPLAN_<FEATURE>_<NUMBER>.md` (e.g., `SUBPLAN_OPTIMIZE-EXTRACTION_01.md`)
 - **EXECUTION_TASK**: `EXECUTION_TASK_<FEATURE>_<SUBPLAN>_<EXECUTION>.md`
   - Example: `EXECUTION_TASK_OPTIMIZE-EXTRACTION_01_01.md` (first execution of subplan 01)
   - Example: `EXECUTION_TASK_OPTIMIZE-EXTRACTION_01_02.md` (second execution - new strategy)
+- **EXECUTION_ANALYSIS**: `EXECUTION_ANALYSIS_<TOPIC>.md` (for analysis work that isn't execution tracking)
+  - Example: `EXECUTION_ANALYSIS_METHODOLOGY-REVIEW.md` (performance review/post-mortem)
+  - Example: `EXECUTION_ANALYSIS_ENTITY-RESOLUTION-BUGS.md` (critical analysis)
+  - Use for: post-mortems, reviews, investigations, cross-cutting analysis
+  - Does NOT track iterations (use EXECUTION_TASK for that)
+
+#### ❌ NEVER Create These (Common Mistakes)
+
+These should be **sections**, not files:
+
+- ❌ `PLAN_UPDATE_<FEATURE>.md` → Update the PLAN itself (add section)
+- ❌ `<FEATURE>-STATUS.md` → Section in PLAN "Current Status & Handoff"
+- ❌ `<FEATURE>-SUMMARY.md` → Section in parent document or EXECUTION*ANALYSIS*
+- ❌ `<FEATURE>-COMPLIANCE.md` → Section in PLAN or EXECUTION*ANALYSIS*
+- ❌ `<FEATURE>-INSIGHTS.md` → Section in EXECUTION*ANALYSIS*
+- ❌ `<FEATURE>-REVIEW.md` → Section or use EXECUTION*ANALYSIS*
+- ❌ `MILESTONE_*.md` → Section in PLAN
+- ❌ `FEEDBACK_*.md` → Section in PLAN or EXECUTION_TASK
+- ❌ `RESUME_*.md` → Just resume, don't create file (use IMPLEMENTATION_RESUME.md)
+
+**Golden Rule**: If it's about ONE specific PLAN/SUBPLAN/EXECUTION, put it IN that document as a section, not a separate file.
 
 **Feature Name Rules**:
 

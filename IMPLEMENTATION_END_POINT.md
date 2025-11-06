@@ -26,6 +26,22 @@
 
 ---
 
+## 🔍 Pre-Archiving Checklist (Do This FIRST!)
+
+**CRITICAL**: Complete these steps BEFORE archiving to prevent file management issues!
+
+- [ ] **Accept all pending changes** in your editor (Cursor/VS Code/etc.)
+- [ ] **Run test suite**: `python scripts/run_tests.py` (if code changes)
+- [ ] **Run linters** on changed files (if code changes)
+- [ ] **Commit all changes**: `git add -A && git commit -m "Pre-archive checkpoint - <FEATURE> complete"`
+- [ ] **Verify clean state**: `git status` should show "nothing to commit, working tree clean"
+
+**⚠️ IMPORTANT**: If you skip this checklist, archived files may return to root when you accept changes later!
+
+**Why This Matters**: Git/editor interactions can restore moved files if there are uncommitted changes. Committing first ensures files stay archived.
+
+---
+
 ## ✅ Completion Checklist
 
 ### 1. Verify PLAN Completion
@@ -60,16 +76,98 @@
 
 ---
 
-## 📝 Backlog Update Process
+## 📊 Quality Analysis (REQUIRED Before Archiving)
+
+**Purpose**: Measure implementation quality, capture metrics, enable continuous improvement
+
+### Code Quality Metrics
+
+**For Code Implementations** (skip if documentation-only):
+
+- [ ] **All tests passing**: Run `python scripts/run_tests.py`
+  - Document pass/fail count
+  - Note any failing tests and why (bugs to fix vs expected failures)
+- [ ] **Coverage measured** (if coverage package available): Run `python scripts/run_tests.py --coverage`
+  - Document coverage percentage
+  - Identify uncovered critical paths
+- [ ] **Code quality check**:
+  - Linter warnings addressed
+  - Type hints present
+  - Comments with learnings added (LEARNED tags)
+- [ ] **Performance check** (if applicable):
+  - Measure key operation times
+  - Compare to baseline or target
+
+### Process Metrics
+
+**For All Implementations**:
+
+- [ ] **EXECUTION_TASK Count**: [Count EXECUTION_TASKs created]
+  - Expected from SUBPLANs: [count SUBPLANs]
+  - Actual created: [count EXECUTION_TASKs]
+  - Variance: [percentage difference]
+- [ ] **Average Iterations**: [Sum all iterations / count EXECUTION_TASKs]
+  - Target: <5 iterations per task
+  - Actual: [calculated average]
+- [ ] **Time Accuracy**:
+  - Estimated time: [from PLAN time estimates]
+  - Actual time: [sum from EXECUTION_TASK completion times]
+  - Variance: [percentage difference]
+  - Note: ±30% variance is normal
+- [ ] **Circular Debugging Incidents**: [Count EXECUTION_TASK_XX_YY_02 or higher]
+  - Target: 0 incidents
+  - Actual: [count]
+  - If >0: Document what happened and lessons learned
+- [ ] **Achievement Completion Rate**:
+  - Planned: [count from PLAN]
+  - Completed: [count completed achievements]
+  - Percentage: [completed/planned * 100]
+
+### Documentation Quality Metrics
+
+**For All Implementations**:
+
+- [ ] **EXECUTION_TASK Completeness**: [Count with "Learnings & Insights" sections] / [Total EXECUTION_TASKs]
+  - Target: 100%
+  - Actual: [percentage]
+- [ ] **Archive INDEX.md**: Complete and comprehensive
+  - All required sections present
+  - Timeline included
+  - Code changes listed
+  - Links working
+- [ ] **Completion Summary**: Created in archive/summary/
+  - Key learnings documented
+  - Metrics included
+  - Next steps clear
+- [ ] **CHANGELOG.md**: Updated with this completion
+- [ ] **Broken Links Check**: Scan archive for broken internal links
+
+### Quality Score
+
+Calculate overall quality score:
+
+- Code Quality: [Pass/Partial/Fail]
+- Process Quality: [Pass/Partial/Fail]
+- Documentation Quality: [Pass/Partial/Fail]
+- **Overall**: [Pass = all Pass, Partial = any Partial, Fail = any Fail]
+
+**Document findings in PLAN "Process Improvement Analysis" section**
+
+---
+
+## 📝 Backlog Update Process (REQUIRED - Do Not Skip!)
+
+**⚠️ CRITICAL**: This step is REQUIRED for every PLAN completion. Do not skip!
 
 ### Review All EXECUTION_TASKs
 
 **For each EXECUTION_TASK**:
 
 1. Open the document
-2. Find "Future Work Discovered" section
+2. Find "Future Work Discovered" section (or similar)
 3. Extract all noted items
-4. List them for backlog addition
+4. Search for keywords: "nice to have", "could improve", "future", "edge case", "defer", "out of scope", "enhancement"
+5. List them for backlog addition
 
 **What to Look For**:
 
@@ -77,6 +175,10 @@
 - "Could optimize by doing Y"
 - "Edge case Z not covered, low priority"
 - "Discovered dependency on A, defer to later"
+- "Enhancement idea: X"
+- "Future improvement: Y"
+
+**Minimum Requirement**: Extract at least 1-3 backlog items per completed PLAN (even if plan is simple)
 
 ### Add to IMPLEMENTATION_BACKLOG.md
 
@@ -422,9 +524,42 @@ Move to: `documentation/archive/<feature>-<date>/summary/`
 **Verify**:
 
 - [ ] PLAN, SUBPLANs, EXECUTION_TASKs moved to archive
-- [ ] Only permanent docs remain (START_POINT, END_POINT, BACKLOG, etc.)
+- [ ] Only permanent docs remain (START_POINT, END_POINT, BACKLOG, ACTIVE_PLANS, etc.)
 - [ ] Root has <15 .md files
 - [ ] No leftover temporary files
+- [ ] No duplicate files (check: file exists in both root and archive)
+- [ ] No legacy completion reports
+- [ ] No non-conforming file names
+
+**Permanent Files** (should always be in root):
+
+- `README.md`, `CHANGELOG.md`, `TODO.md`, `BUGS.md`
+- `IMPLEMENTATION_START_POINT.md`, `IMPLEMENTATION_END_POINT.md`, `IMPLEMENTATION_BACKLOG.md`
+- `ACTIVE_PLANS.md`
+
+**Active Work Files** (temporary, should be <10):
+
+- Active `PLAN_*.md` files (in progress or paused)
+- Current `SUBPLAN_*.md` files (if working on achievement)
+- Current `EXECUTION_TASK_*.md` files (if actively executing)
+
+**Root Directory Cleanup** (do this last):
+
+```bash
+# Check for duplicates
+find . -maxdepth 1 -name "SUBPLAN_*.md" -o -name "EXECUTION_TASK_*.md" | while read file; do
+  basename=$(basename "$file")
+  if find documentation/archive -name "$basename" | grep -q .; then
+    echo "Duplicate found: $basename (exists in root and archive)"
+  fi
+done
+
+# Delete legacy files
+rm -f ARCHIVING-COMPLETE.md PLANS-CREATED-SUMMARY.md RECENT-WORK-IMPLEMENTATION-SUMMARY.md
+
+# Move completion reports to archives (if orphaned)
+# Verify first that they belong to an existing archive!
+```
 
 ### Documentation Check
 

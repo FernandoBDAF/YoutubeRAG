@@ -71,6 +71,20 @@ def _create_entities_indexes(db: Database) -> None:
     # Index for source_count (for entity importance)
     entities.create_index([("source_count", -1)], name="source_count")
 
+    # Index for normalized fields (for candidate lookup - Achievement 2.2)
+    # Sparse index: only indexes documents that have the field
+    entities.create_index(
+        [("canonical_name_normalized", 1)],
+        name="canonical_name_normalized",
+        sparse=True,
+    )
+
+    # Multikey index: indexes each element in the aliases_normalized array
+    entities.create_index([("aliases_normalized", 1)], name="aliases_normalized")
+
+    # Index for last_seen (for cleanup and recent entity queries)
+    entities.create_index([("last_seen", -1)], name="last_seen")
+
     logger.info("Created entities collection indexes")
 
 
@@ -133,6 +147,19 @@ def _create_communities_indexes(db: Database) -> None:
 def _create_entity_mentions_indexes(db: Database) -> None:
     """Create indexes for the entity_mentions collection."""
     entity_mentions = db.entity_mentions
+
+    # Unique index to prevent duplicate mentions (entity_id, chunk_id, position)
+    # This ensures reruns are idempotent (Achievement 3.5.2)
+    try:
+        entity_mentions.create_index(
+            [("entity_id", 1), ("chunk_id", 1), ("position", 1)],
+            name="entity_chunk_position_unique",
+            unique=True,
+        )
+        logger.info("Created unique index on (entity_id, chunk_id, position)")
+    except Exception as e:
+        # Index might already exist, log and continue
+        logger.debug(f"Unique index may already exist: {e}")
 
     # Compound index for entity-chunk lookups
     entity_mentions.create_index(

@@ -437,6 +437,12 @@ class EntityResolutionConfig(BaseStageConfig):
     max_aliases_per_entity: int = 10
     min_source_count: int = 1
 
+    # Token budget management (optional, disabled by default)
+    # Set to None to disable token budget (preserves quality)
+    # Set to a number (e.g., 6000) to limit input tokens per entity
+    # Note: With cheap models (gpt-4o-mini), token limits are usually not critical
+    max_input_tokens_per_entity: Optional[int] = None
+
     # Processing settings
     batch_size: int = 100
     resolution_timeout: int = 60  # seconds per batch

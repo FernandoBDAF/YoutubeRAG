@@ -174,9 +174,41 @@ class ResolvedEntity(BaseModel):
         return value.lower()
 
     @classmethod
-    def generate_entity_id(cls, canonical_name: str) -> str:
-        """Generate MD5 hash for entity ID."""
-        return hashlib.md5(canonical_name.lower().encode()).hexdigest()
+    def generate_entity_id(
+        cls, canonical_name: str, entity_type: Optional[EntityType] = None
+    ) -> str:
+        """
+        Generate stable, deterministic MD5 hash for entity ID.
+
+        Uses normalized canonical name + entity type to ensure the same entity
+        always gets the same ID across chunks and runs, even if canonical name
+        varies slightly. This prevents entity ID drift.
+
+        Args:
+            canonical_name: Canonical name of the entity
+            entity_type: Type of the entity (optional for backward compatibility)
+
+        Returns:
+            32-character MD5 hash string
+        """
+        # Normalize the canonical name (lowercase, strip whitespace)
+        normalized_name = canonical_name.lower().strip()
+
+        # Include entity type in hash to ensure different types get different IDs
+        # even if they have the same name (e.g., "Python" person vs "Python" language)
+        if entity_type:
+            # Use type value for consistency
+            type_str = (
+                entity_type.value
+                if isinstance(entity_type, EntityType)
+                else str(entity_type)
+            )
+            content = f"{normalized_name}|{type_str}"
+        else:
+            # Backward compatibility: use name only if type not provided
+            content = normalized_name
+
+        return hashlib.md5(content.encode("utf-8")).hexdigest()
 
 
 class ResolvedRelationship(BaseModel):

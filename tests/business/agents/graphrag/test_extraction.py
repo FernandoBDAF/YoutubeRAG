@@ -166,6 +166,41 @@ def test_validate_and_enhance_filters_invalid_relationships():
     print("✓ _validate_and_enhance filters invalid relationships")
 
 
+def test_extract_from_chunk_handles_empty_entity_validation_error():
+    """Test that empty entity ValidationError is handled gracefully."""
+    from business.agents.graphrag.extraction import GraphExtractionAgent
+    from core.models.graphrag import KnowledgeModel
+
+    mock_client = MagicMock()
+    agent = GraphExtractionAgent(llm_client=mock_client)
+
+    # Mock LLM parse to raise ValidationError by actually trying to create KnowledgeModel
+    # This simulates what happens when LLM returns empty entities
+    def raise_validation_error(*args, **kwargs):
+        # Actually create the ValidationError that Pydantic would raise
+        # This is what happens when KnowledgeModel.validate_entities() fails
+        try:
+            KnowledgeModel(entities=[], relationships=[])
+        except Exception as e:
+            raise e
+
+    mock_client.beta.chat.completions.parse.side_effect = raise_validation_error
+
+    # Test chunk with short/noise text (like the failing chunks)
+    chunk = {
+        "chunk_id": "test-123",
+        "chunk_text": ".",  # Just punctuation
+    }
+
+    # Execute - should catch ValidationError and return None gracefully
+    result = agent.extract_from_chunk(chunk)
+
+    # Verify - should return None gracefully (not raise exception)
+    assert result is None
+
+    print("✓ extract_from_chunk handles empty entity ValidationError gracefully")
+
+
 def run_all_tests():
     """Run all tests."""
     print("=== Testing Graph Extraction Agent ===\n")
@@ -174,6 +209,7 @@ def run_all_tests():
     test_extract_from_chunk_empty_text()
     test_validate_and_enhance_filters_low_confidence()
     test_validate_and_enhance_filters_invalid_relationships()
+    test_extract_from_chunk_handles_empty_entity_validation_error()
 
     print("\n✅ All extraction agent tests passed!")
 

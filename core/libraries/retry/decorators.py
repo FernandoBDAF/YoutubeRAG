@@ -74,6 +74,43 @@ def _is_quota_error(error: Exception) -> bool:
     return False
 
 
+def _is_empty_entity_validation_error(error: Exception) -> bool:
+    """
+    Check if error is a ValidationError for empty entities (expected case, don't retry).
+
+    This happens when the LLM correctly returns an empty entity list for chunks
+    that have no extractable entities. Retrying won't help - it's the correct response.
+
+    Args:
+        error: Exception to check
+
+    Returns:
+        True if this is an empty entity validation error that shouldn't be retried
+    """
+    error_type = type(error).__name__
+    error_msg = str(error)
+
+    # Check if this is a ValidationError about empty entities
+    if "ValidationError" in error_type:
+        # Check error message for the specific empty entity validation message
+        if "At least one entity must be identified" in error_msg:
+            return True
+
+        # Also check Pydantic ValidationError.errors() structure if available
+        if hasattr(error, "errors"):
+            try:
+                errors_list = error.errors()
+                if any(
+                    "At least one entity must be identified" in str(err.get("msg", ""))
+                    for err in errors_list
+                ):
+                    return True
+            except (TypeError, AttributeError, Exception):
+                pass
+
+    return False
+
+
 def with_retry(
     max_attempts: int = 3,
     backoff: str = "exponential",
@@ -156,6 +193,15 @@ def with_retry(
                             f"[RETRY] {func.__name__} failed with quota error. "
                             "Quota errors won't succeed on retry. Stopping immediately.",
                             exc_info=True,
+                        )
+                        raise
+
+                    # Don't retry ValidationError for empty entities - LLM correctly returned empty list
+                    # This is a known case where retrying won't help (chunk has no extractable entities)
+                    if _is_empty_entity_validation_error(e):
+                        func_logger.debug(
+                            f"[RETRY] {func.__name__} failed with empty entity validation error. "
+                            "This is expected for chunks with no extractable entities. Not retrying.",
                         )
                         raise
 
