@@ -66,7 +66,9 @@ class TestMultiplePredicatesPerPair:
         # Mock batch_insert to simulate successful insert
         from unittest.mock import patch
 
-        with patch("business.stages.graphrag.graph_construction.batch_insert") as mock_batch:
+        with patch(
+            "business.stages.graphrag.graph_construction.batch_insert"
+        ) as mock_batch:
             mock_batch.return_value = {"inserted": 1, "total": 1, "failed": 0}
 
             # First: Create "teaches" relationship
@@ -167,8 +169,13 @@ class TestCoOccurrenceExistenceCheck:
 
         mock_relations.find_one.side_effect = capture_find_one
 
+        # Mock degree check (Achievement 2.3)
+        mock_relations.count_documents.return_value = 0
+
         # Mock batch_insert
-        with patch("business.stages.graphrag.graph_construction.batch_insert") as mock_batch:
+        with patch(
+            "business.stages.graphrag.graph_construction.batch_insert"
+        ) as mock_batch:
             mock_batch.return_value = {"inserted": 1, "total": 1, "failed": 0}
 
             # Call _add_co_occurrence_relationships
@@ -217,20 +224,22 @@ class TestSemanticSimilarityExistenceCheck:
             # First call: entities without embeddings (empty)
             iter([]),
             # Second call: entities with embeddings
-            iter([
-                {
-                    "entity_id": "entity_1",
-                    "name": "Entity 1",
-                    "description": "Description 1",
-                    "entity_embedding": [0.1, 0.2, 0.3],
-                },
-                {
-                    "entity_id": "entity_2",
-                    "name": "Entity 2",
-                    "description": "Description 2",
-                    "entity_embedding": [0.4, 0.5, 0.6],
-                },
-            ]),
+            iter(
+                [
+                    {
+                        "entity_id": "entity_1",
+                        "name": "Entity 1",
+                        "description": "Description 1",
+                        "entity_embedding": [0.1, 0.2, 0.3],
+                    },
+                    {
+                        "entity_id": "entity_2",
+                        "name": "Entity 2",
+                        "description": "Description 2",
+                        "entity_embedding": [0.4, 0.5, 0.6],
+                    },
+                ]
+            ),
         ]
 
         # Capture find_one calls
@@ -243,7 +252,9 @@ class TestSemanticSimilarityExistenceCheck:
         mock_relations.find_one.side_effect = capture_find_one
 
         # Mock batch_insert
-        with patch("business.stages.graphrag.graph_construction.batch_insert") as mock_batch:
+        with patch(
+            "business.stages.graphrag.graph_construction.batch_insert"
+        ) as mock_batch:
             mock_batch.return_value = {"inserted": 1, "total": 1, "failed": 0}
 
             # Call _add_semantic_similarity_relationships
@@ -296,7 +307,9 @@ class TestCrossChunkExistenceCheck:
 
     def test_cross_chunk_check_includes_predicate(self):
         """Test that cross-chunk existence check includes predicate."""
-        stage, mock_relations, mock_mentions, mock_entities, mock_chunks = self._mock_stage()
+        stage, mock_relations, mock_mentions, mock_entities, mock_chunks = (
+            self._mock_stage()
+        )
 
         # Mock chunk metadata
         mock_chunks.find.return_value = [
@@ -339,7 +352,9 @@ class TestCrossChunkExistenceCheck:
         mock_relations.find_one.side_effect = capture_find_one
 
         # Mock batch_insert
-        with patch("business.stages.graphrag.graph_construction.batch_insert") as mock_batch:
+        with patch(
+            "business.stages.graphrag.graph_construction.batch_insert"
+        ) as mock_batch:
             mock_batch.return_value = {"inserted": 1, "total": 1, "failed": 0}
 
             # Call _add_cross_chunk_relationships
@@ -389,4 +404,3 @@ def run_all_tests():
 
 if __name__ == "__main__":
     run_all_tests()
-

@@ -2,7 +2,7 @@
 
 **Purpose**: Central repository for future implementation ideas discovered during work  
 **Status**: Living Document - Continuously Updated  
-**Last Updated**: November 6, 2025
+**Last Updated**: November 6, 2025 (Graph Construction Refactor Partial Completion)
 
 ---
 
@@ -49,13 +49,103 @@
 
 ## 📋 Backlog Items
 
+### Documentation Organization (November 6, 2025)
+
+**Source**: Ongoing documentation growth needs structure  
+**Discovered When**: November 6, 2025
+
+#### IMPL-DOC-001: Documentation Folder Restructuring
+
+**Theme**: Documentation / Organization  
+**Effort**: Medium (4-6h)  
+**Dependencies**: None  
+**Priority**: Medium  
+**Description**:
+
+- Current documentation folder has grown organically (guides, architecture, context, planning, etc.)
+- Need systematic organization with clear hierarchy
+- Potential structure:
+  - `documentation/methodology/` - START_POINT, END_POINT, RESUME, MULTIPLE-PLANS-PROTOCOL
+  - `documentation/guides/` - User-facing guides (execution, deployment, testing)
+  - `documentation/architecture/` - System architecture (AGENT, STAGE, PIPELINE)
+  - `documentation/reference/` - API reference, configuration
+  - `documentation/planning/` - Active planning docs (or keep in root)
+  - `documentation/archive/` - Completed work (keep as is)
+- Need update to all cross-references after restructuring
+- Consider navigation/index improvements
+
+**Value**:
+
+- Easier to find documentation
+- Clear purpose for each folder
+- Better onboarding experience
+- Cleaner organization
+
+**Why Medium**:
+
+- Not blocking current work
+- Moderate effort (lots of files to review/move)
+- Significant value for discoverability
+- Should be done before documentation grows further
+
+**Related Documents**:
+
+- All documentation (needs review)
+- DOCUMENTATION-PRINCIPLES-AND-PROCESS.md (may need update)
+
+---
+
 ### Methodology - Multi-LLM Communication Protocol (November 6, 2025)
 
 **Source**: Real-world need discovered during resume protocol implementation  
 **Discovered When**: November 6, 2025  
 **Discovered In**: HANDOFF_ENTITY-RESOLUTION-RESUME.md creation (good example, but violated naming convention)
 
-#### IMPL-METHOD-001: Multi-LLM Communication Protocol
+#### IMPL-METHOD-001: Meta-PLAN Special Rules
+
+**Theme**: Methodology / Process  
+**Effort**: Small (2-3h)  
+**Dependencies**: Multiple PLANS Protocol complete ✅  
+**Discovered In**: Achievement 1.4.5 (Multiple PLANS Protocol) - user feedback  
+**Discovered When**: November 6, 2025  
+**Priority**: Medium  
+**Description**:
+
+- PLAN_STRUCTURED-LLM-DEVELOPMENT.md is a meta-PLAN (defines methodology for all other PLANs)
+- Meta-PLANs have unique characteristics:
+  - Changes affect all other PLANs (cascading updates needed)
+  - No traditional dependencies (all PLANs depend on it)
+  - Self-referential (uses methodology it defines)
+  - Completion has project-wide impact
+- Need special rules for:
+  - When to update other PLANs after meta-PLAN changes
+  - How to version/track methodology changes
+  - Compliance auditing (ensure other PLANs stay current)
+  - Breaking changes communication
+- Consider: Methodology versioning, deprecation policy, migration guides
+
+**Value**:
+
+- Prevents methodology drift across PLANs
+- Ensures consistency when methodology evolves
+- Clear process for cascading updates
+- Better change management
+
+**Why Medium**:
+
+- Affects project organization
+- Need after methodology changes
+- Not blocking current work
+- Important for long-term consistency
+
+**Related Documents**:
+
+- PLAN: PLAN_STRUCTURED-LLM-DEVELOPMENT.md (the meta-PLAN)
+- Protocol: MULTIPLE-PLANS-PROTOCOL.md (may need meta-PLAN section)
+
+---
+
+#### IMPL-METHOD-002: Multi-LLM Communication Protocol
 
 **Theme**: Methodology / Process  
 **Effort**: Medium (3-4h)  

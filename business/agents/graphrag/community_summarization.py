@@ -8,11 +8,26 @@ comprehensive summaries of detected communities.
 import logging
 from core.libraries.retry import retry_llm_call
 from core.libraries.logging import log_exception
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from openai import OpenAI
 from core.models.graphrag import ResolvedEntity, ResolvedRelationship, CommunitySummary
+import networkx as nx
+
+import logging
 
 logger = logging.getLogger(__name__)
+
+# Achievement 2.1: Exact token counting with tiktoken
+try:
+    import tiktoken
+
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
+    logger.warning(
+        "tiktoken not available. Install with: pip install tiktoken. "
+        "Falling back to estimation."
+    )
 
 
 class CommunitySummarizationAgent:
@@ -91,6 +106,36 @@ class CommunitySummarizationAgent:
         self.max_tokens = max_tokens
         self.max_summary_length = max_summary_length
         self.min_summary_length = min_summary_length
+
+        # Achievement 2.1: Initialize tiktoken encoder for exact token counting
+        self._token_encoder = None
+        if TIKTOKEN_AVAILABLE:
+            try:
+                # Map model names to tiktoken encoding names
+                encoding_map = {
+                    "gpt-4o-mini": "o200k_base",  # o200k_base for GPT-4o models
+                    "gpt-4o": "o200k_base",
+                    "gpt-4-turbo": "cl100k_base",  # GPT-4 Turbo uses cl100k_base
+                    "gpt-4": "cl100k_base",
+                    "gpt-3.5-turbo": "cl100k_base",
+                }
+                encoding_name = encoding_map.get(
+                    (
+                        self.model_name.split("-")[0]
+                        + "-"
+                        + self.model_name.split("-")[1]
+                        if "-" in self.model_name
+                        else self.model_name
+                    ),
+                    "cl100k_base",  # Default to cl100k_base
+                )
+                self._token_encoder = tiktoken.get_encoding(encoding_name)
+                logger.info(
+                    f"Initialized tiktoken encoder: {encoding_name} for {self.model_name}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to initialize tiktoken encoder: {e}")
+                self._token_encoder = None
 
         # Auto-detect context window based on model
         if max_context_tokens is None:
@@ -500,6 +545,22 @@ class CommunitySummarizationAgent:
             coherence_score=community_data["coherence_score"],
         )
 
+    def _count_tokens_exact(self, text: str) -> int:
+        """
+        Count tokens exactly using tiktoken (Achievement 2.1).
+
+        Args:
+            text: Text to count tokens for
+
+        Returns:
+            Exact token count
+        """
+        if self._token_encoder:
+            return len(self._token_encoder.encode(text))
+        else:
+            # Fallback to rough estimation (~4 chars per token)
+            return len(text) // 4
+
     def _estimate_tokens_for_community(
         self, entities: List[ResolvedEntity], relationships: List[ResolvedRelationship]
     ) -> int:
@@ -529,18 +590,20 @@ class CommunitySummarizationAgent:
             ]
         )
 
-        # System prompt + input text + output estimate
-        system_prompt_len = len(self.summarization_prompt)
-        input_text_len = (
-            len(entity_text) + len(relationship_text) + 200
-        )  # Template overhead
+        # Count tokens exactly using tiktoken (Achievement 2.1)
+        input_text = entity_text + "\n" + relationship_text
+        input_tokens = self._count_tokens_exact(input_text)
+
+        # Count system prompt tokens exactly
+        system_tokens = self._count_tokens_exact(self.summarization_prompt)
+
+        # Output estimate (we don't know actual output until generation)
         output_estimate = self.max_tokens or 2000
 
-        # Rough estimation: ~4 characters per token for English text
-        total_chars = system_prompt_len + input_text_len + output_estimate
-        estimated_tokens = int(total_chars / 4)
+        # Total tokens
+        total_tokens = system_tokens + input_tokens + output_estimate
 
-        return estimated_tokens
+        return total_tokens
 
     def _generate_summary_text(
         self, entities: List[ResolvedEntity], relationships: List[ResolvedRelationship]
@@ -571,13 +634,21 @@ class CommunitySummarizationAgent:
             ]
         )
 
-        # Create input text
+        # Achievement 2.3: Compute predicate profile and add to prompt
+        predicate_profile = self._compute_predicate_profile(relationships)
+
+        # Create input text with predicate profile
+        predicate_profile_text = ""
+        if predicate_profile:
+            top_predicates = ", ".join(predicate_profile[:5])  # Top 5 predicates
+            predicate_profile_text = f"\n\nThis community focuses on these relationship types: {top_predicates}"
+
         input_text = f"""
         Entities in this community:
         {entities_text}
 
         Relationships in this community:
-        {relationships_text}
+        {relationships_text}{predicate_profile_text}
 
         Please create a comprehensive summary of this community.
         """
@@ -718,12 +789,19 @@ class CommunitySummarizationAgent:
         if not community_entities:
             return None
 
-        # Select most important entities and relationships
+        # Achievement 2.2: Select most important entities and relationships using centrality
+        # Compute centrality once for both entity and relationship selection
+        centrality_scores = self._compute_community_centrality(
+            community_entities, community_relationships
+        )
         selected_entities = self._select_important_entities(
-            community_entities, max_entities
+            community_entities, community_relationships, max_entities
         )
         selected_relationships = self._select_important_relationships(
-            community_relationships, max_relationships
+            community_relationships,
+            community_entities,
+            centrality_scores,
+            max_relationships,
         )
 
         # Generate summary with selected items using large model
@@ -743,13 +821,21 @@ class CommunitySummarizationAgent:
             ]
         )
 
-        # Create input text
+        # Achievement 2.3: Compute predicate profile and add to prompt
+        predicate_profile = self._compute_predicate_profile(selected_relationships)
+
+        # Create input text with predicate profile
+        predicate_profile_text = ""
+        if predicate_profile:
+            top_predicates = ", ".join(predicate_profile[:5])  # Top 5 predicates
+            predicate_profile_text = f"\n\nThis community focuses on these relationship types: {top_predicates}"
+
         input_text = f"""
         Entities in this community:
         {entities_text}
 
         Relationships in this community:
-        {relationships_text}
+        {relationships_text}{predicate_profile_text}
 
         Please create a comprehensive summary of this community.
         """
@@ -795,14 +881,89 @@ class CommunitySummarizationAgent:
             coherence_score=community_data["coherence_score"],
         )
 
+    def _compute_community_centrality(
+        self,
+        entities: List[ResolvedEntity],
+        relationships: List[ResolvedRelationship],
+    ) -> Dict[str, float]:
+        """
+        Compute centrality scores for entities in the community subgraph.
+
+        Achievement 2.2: Centrality-Aware Summarization Selection
+
+        Uses PageRank to compute centrality scores for each entity.
+
+        Args:
+            entities: List of entities in the community
+            relationships: List of relationships in the community
+
+        Returns:
+            Dictionary mapping entity_id to centrality score
+        """
+        if not entities or not relationships:
+            # Fallback: return uniform scores
+            return {entity.entity_id: 1.0 for entity in entities}
+
+        # Build subgraph for this community
+        G = nx.Graph()
+
+        # Add nodes (entities)
+        entity_map = {entity.entity_id: entity for entity in entities}
+        for entity in entities:
+            G.add_node(entity.entity_id)
+
+        # Add edges (relationships) with weights
+        for rel in relationships:
+            if rel.subject_id in entity_map and rel.object_id in entity_map:
+                # Use confidence as edge weight
+                weight = rel.confidence
+                G.add_edge(rel.subject_id, rel.object_id, weight=weight)
+
+        if G.number_of_nodes() == 0:
+            return {entity.entity_id: 1.0 for entity in entities}
+
+        # Compute PageRank centrality
+        try:
+            centrality_scores = nx.pagerank(G, weight="weight", max_iter=100)
+        except Exception as e:
+            logger.warning(f"Failed to compute PageRank: {e}, using degree centrality")
+            # Fallback to degree centrality
+            centrality_scores = nx.degree_centrality(G)
+
+        # Normalize scores (ensure all entities have a score)
+        max_score = (
+            max(centrality_scores.values()) if centrality_scores.values() else 1.0
+        )
+        if max_score == 0:
+            max_score = 1.0
+
+        # Normalize and ensure all entities have scores
+        normalized_scores = {}
+        for entity in entities:
+            score = centrality_scores.get(entity.entity_id, 0.0)
+            normalized_scores[entity.entity_id] = (
+                score / max_score if max_score > 0 else 0.5
+            )
+
+        return normalized_scores
+
     def _select_important_entities(
-        self, entities: List[ResolvedEntity], max_count: int
+        self,
+        entities: List[ResolvedEntity],
+        relationships: List[ResolvedRelationship],
+        max_count: int,
     ) -> List[ResolvedEntity]:
         """
-        Select most important entities for summarization.
+        Select most important entities using centrality-aware scoring.
+
+        Achievement 2.2: Centrality-Aware Summarization Selection
+
+        Scores entities: centrality × confidence × source_count
+        Selects top-K by score.
 
         Args:
             entities: List of entities
+            relationships: List of relationships (for centrality computation)
             max_count: Maximum number of entities to select
 
         Returns:
@@ -811,21 +972,50 @@ class CommunitySummarizationAgent:
         if len(entities) <= max_count:
             return entities
 
-        # Sort by confidence and source count
-        sorted_entities = sorted(
-            entities, key=lambda e: (e.confidence, e.source_count), reverse=True
+        # Compute centrality scores
+        centrality_scores = self._compute_community_centrality(entities, relationships)
+
+        # Score entities: centrality × confidence × source_count
+        scored_entities = []
+        for entity in entities:
+            centrality = centrality_scores.get(entity.entity_id, 0.5)
+            confidence = entity.confidence or 0.5
+            source_count = entity.source_count or 1
+
+            score = centrality * confidence * source_count
+            scored_entities.append((score, entity))
+
+        # Sort by score (highest first)
+        scored_entities.sort(key=lambda x: x[0], reverse=True)
+
+        # Select top-K
+        selected = [entity for _, entity in scored_entities[:max_count]]
+
+        logger.debug(
+            f"Selected {len(selected)}/{len(entities)} entities using centrality-aware scoring"
         )
 
-        return sorted_entities[:max_count]
+        return selected
 
     def _select_important_relationships(
-        self, relationships: List[ResolvedRelationship], max_count: int
+        self,
+        relationships: List[ResolvedRelationship],
+        entities: List[ResolvedEntity],
+        entity_centrality: Dict[str, float],
+        max_count: int,
     ) -> List[ResolvedRelationship]:
         """
-        Select most important relationships for summarization.
+        Select most important relationships using centrality-aware scoring.
+
+        Achievement 2.2: Centrality-Aware Summarization Selection
+
+        Scores relationships: (subject_score + object_score) / 2 × confidence × source_count
+        Selects top-M by score.
 
         Args:
             relationships: List of relationships
+            entities: List of entities (for entity map)
+            entity_centrality: Pre-computed centrality scores for entities
             max_count: Maximum number of relationships to select
 
         Returns:
@@ -834,12 +1024,106 @@ class CommunitySummarizationAgent:
         if len(relationships) <= max_count:
             return relationships
 
-        # Sort by confidence and source count
-        sorted_relationships = sorted(
-            relationships, key=lambda r: (r.confidence, r.source_count), reverse=True
+        # Build entity map for quick lookup
+        entity_map = {entity.entity_id: entity for entity in entities}
+
+        # Score relationships: (subject_score + object_score) / 2 × confidence × source_count
+        scored_relationships = []
+        for rel in relationships:
+            subject_entity = entity_map.get(rel.subject_id)
+            object_entity = entity_map.get(rel.object_id)
+
+            if not subject_entity or not object_entity:
+                # Skip if entities not found
+                continue
+
+            # Get entity scores (centrality × confidence × source_count)
+            subject_centrality = entity_centrality.get(rel.subject_id, 0.5)
+            object_centrality = entity_centrality.get(rel.object_id, 0.5)
+
+            subject_score = (
+                subject_centrality
+                * (subject_entity.confidence or 0.5)
+                * (subject_entity.source_count or 1)
+            )
+            object_score = (
+                object_centrality
+                * (object_entity.confidence or 0.5)
+                * (object_entity.source_count or 1)
+            )
+
+            # Relationship score: average of endpoint scores × relationship confidence × source_count
+            avg_endpoint_score = (subject_score + object_score) / 2
+            rel_confidence = rel.confidence or 0.5
+            rel_source_count = rel.source_count or 1
+
+            score = avg_endpoint_score * rel_confidence * rel_source_count
+            scored_relationships.append((score, rel))
+
+        # Sort by score (highest first)
+        scored_relationships.sort(key=lambda x: x[0], reverse=True)
+
+        # Select top-M
+        selected = [rel for _, rel in scored_relationships[:max_count]]
+
+        logger.debug(
+            f"Selected {len(selected)}/{len(relationships)} relationships using centrality-aware scoring"
         )
 
-        return sorted_relationships[:max_count]
+        return selected
+
+    def _compute_predicate_profile(
+        self, relationships: List[ResolvedRelationship], top_n: int = 10
+    ) -> List[str]:
+        """
+        Compute predicate distribution for a community.
+
+        Achievement 2.3: Predicate Profile Enhancement
+
+        Returns top-N predicates by frequency/weight to include in prompt.
+
+        Args:
+            relationships: List of relationships in the community
+            top_n: Number of top predicates to return
+
+        Returns:
+            List of top predicate names (sorted by frequency/weight)
+        """
+        if not relationships:
+            return []
+
+        # Count predicate frequencies and weights
+        predicate_counts = {}
+        predicate_weights = {}
+
+        for rel in relationships:
+            predicate = rel.predicate
+            weight = rel.confidence or 0.5
+
+            predicate_counts[predicate] = predicate_counts.get(predicate, 0) + 1
+            predicate_weights[predicate] = (
+                predicate_weights.get(predicate, 0.0) + weight
+            )
+
+        # Score predicates: frequency × average_weight
+        scored_predicates = []
+        for predicate, count in predicate_counts.items():
+            avg_weight = predicate_weights[predicate] / count
+            score = count * avg_weight  # Frequency × average confidence
+            scored_predicates.append((score, predicate))
+
+        # Sort by score (highest first)
+        scored_predicates.sort(key=lambda x: x[0], reverse=True)
+
+        # Return top-N predicate names
+        top_predicates = [predicate for _, predicate in scored_predicates[:top_n]]
+
+        logger.debug(
+            f"Computed predicate profile: top {len(top_predicates)} predicates "
+            f"from {len(relationships)} relationships"
+        )
+
+        return top_predicates
 
     def get_summarization_stats(
         self, summaries: Dict[str, CommunitySummary]

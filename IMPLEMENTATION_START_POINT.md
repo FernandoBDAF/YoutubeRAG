@@ -192,6 +192,55 @@ Create a PLAN when:
 
 **Template**: `documentation/templates/PLAN-TEMPLATE.md` (when created)
 
+**Before Creating PLAN**: Check `ACTIVE_PLANS.md` for related PLANs and dependencies. See `documentation/guides/MULTIPLE-PLANS-PROTOCOL.md` for managing multiple PLANs.
+
+---
+
+## 🔄 Working with Multiple PLANs
+
+**When This Applies**:
+
+- 2+ PLANs active/paused simultaneously
+- Dependencies exist between PLANs
+- Context switching between features
+- Overlapping code concerns
+
+**Before Creating a New PLAN**:
+
+1. **Check ACTIVE_PLANS.md**:
+
+   - Are there related PLANs?
+   - Do any PLANs touch same code?
+   - Are there existing dependencies?
+
+2. **Review Existing PLANs**:
+
+   - Read "Related Plans" sections
+   - Check for code overlaps
+   - Identify dependencies
+
+3. **Document Dependencies**:
+   - Add "Related Plans" section to new PLAN
+   - Use format from `documentation/guides/MULTIPLE-PLANS-PROTOCOL.md`
+   - Document dependency type (Hard/Soft/Data/Code/Sequential)
+
+**Key Rules**:
+
+- Only **ONE PLAN** should be "🚀 In Progress" at a time
+- Check dependencies before starting work
+- Update dependent PLANs when prerequisites complete
+- Coordinate if code conflicts exist
+
+**Complete Guide**: See `documentation/guides/MULTIPLE-PLANS-PROTOCOL.md` for:
+
+- Dependency types and tracking
+- Context switching workflow
+- Decision trees
+- Coordination strategies
+- Real-world examples
+
+---
+
 ### Common Mistakes to Avoid
 
 **❌ Don't**:

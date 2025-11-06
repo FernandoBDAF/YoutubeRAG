@@ -513,6 +513,32 @@ The extraction system is production-ready with ontology integration:
 
 ## 📚 References & Context
 
+### Related Plans
+
+**PLAN_ENTITY-RESOLUTION-REFACTOR.md**:
+
+- **Type**: Sequential
+- **Relationship**: Sequential (extraction → entity resolution)
+- **Dependency**: Extraction quality affects resolution quality
+- **Status**: Can proceed (entity resolution uses current extraction)
+- **Timing**: Can run in parallel, feeds into entity resolution
+
+**PLAN_ENTITY-RESOLUTION-ANALYSIS.md**:
+
+- **Type**: Data
+- **Relationship**: Parallel (both analyze extraction/resolution pipeline)
+- **Dependency**: Uses same extraction data
+- **Status**: Can proceed
+- **Timing**: Can run in parallel
+
+**PLAN_STRUCTURED-LLM-DEVELOPMENT.md**:
+
+- **Type**: Meta
+- **Relationship**: Meta (methodology for this PLAN)
+- **Dependency**: Uses START_POINT, END_POINT, RESUME, MULTIPLE-PLANS-PROTOCOL
+- **Status**: Foundation complete
+- **Timing**: Methodology ready for use
+
 ### Related Documentation
 
 **Current Documentation**:
