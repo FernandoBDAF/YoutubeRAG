@@ -1,5 +1,104 @@
 # Changelog - Multi-Agent CLI Chat Implementation
 
+## 2025-11-06: Community Detection Refactor Paused (Priorities 0-3 Complete)
+
+### 🎯 Achievement
+
+Transformed community detection and summarization into a production-grade pipeline with stable IDs, run metadata, ontology integration, intelligent summarization, and multi-resolution support.
+
+### 🔧 Key Changes
+
+**Priority 0 - Stability & Reproducibility**:
+
+- ✅ Stable, hash-based community IDs (deterministic across runs)
+- ✅ Run metadata & provenance tracking (params_hash, graph_signature)
+- ✅ Graph drift detection (prevents stale communities)
+- ✅ source_count analysis (determined not applicable to communities)
+
+**Priority 1 - Ontology Integration & Quality**:
+
+- ✅ Ontology-aware edge weighting (canonical +15%, soft-kept -15%, type-pair bonuses ±10-20%)
+- ✅ Community size management (split oversized >1000, merge micro <5)
+- ✅ Quality metrics persistence (graphrag_metrics collection)
+
+**Priority 2 - Intelligent Summarization**:
+
+- ✅ Exact token counting with tiktoken (eliminated 8× estimation error)
+- ✅ Centrality-aware summarization (PageRank-based entity/relationship selection)
+- ✅ Predicate profile enhancement (focus summaries on key relationship types)
+
+**Priority 3 - Multi-Resolution & Detection Improvements**:
+
+- ✅ Multi-resolution Louvain (hierarchical community navigation at multiple scales)
+- ✅ Leiden detector (proper NetworkX 3.5+/graspologic integration with fallback)
+- ✅ Label Propagation baseline (fast alternative with consensus)
+- ✅ Quality gates (modularity, coverage, size validation)
+
+### 📊 Impact
+
+- **Reproducibility**: 100% deterministic community IDs (hash-based)
+- **Token Accuracy**: Improved from ~8× error to <5% error
+- **Detection Algorithms**: 3 available (Louvain, Leiden, Label Propagation)
+- **Multi-Resolution**: Supports 3+ scales simultaneously
+- **Tests**: 7 new tests created (stable IDs validated)
+- **Quality**: Ontology improvements propagated to graph partitioning
+
+### 📁 Archive
+
+`documentation/archive/community-detection-partial-nov2025/`
+
+**Details**: See archive INDEX.md for complete documentation. PLAN remains in root for future resumption.
+
+**Status**: Paused after completing all critical priorities (0-3). Remaining work: advanced features (Priorities 4-6) and expanded testing (Priority 7).
+
+---
+
+## 2025-11-06: Graph Construction Refactor (Partial - Priorities 0-3)
+
+### 🎯 Achievement
+
+Fixed critical bugs in graph construction stage, improved graph modeling correctness, optimized performance, and enhanced quality/observability.
+
+### 🔧 Key Changes
+
+**Critical Bugs Fixed (Priority 0)**:
+
+- Fixed relationship existence checks to include predicate (allows multiple relationship types per entity pair)
+- Fixed source_count inflation on reruns (conditional increment only for new chunks)
+- Fixed batch success counter (handle_doc now returns True/False)
+
+**Correctness Improvements (Priority 1)**:
+
+- Corrected density computation formula (counts unique pairs, not total relationships)
+- Implemented reverse mapping collision handling (atomic upsert with merge policy)
+- Added DuplicateKeyError handling to all batch inserts (idempotent operations)
+
+**Performance Optimizations (Priority 2)**:
+
+- Optimized cosine similarity (normalize embeddings at write time, use dot product - 2-3× faster)
+- Added synthetic edge caps per entity (prevent high-degree entities from exploding graph)
+
+**Quality Enhancements (Priority 3)**:
+
+- Integrated existing ontology infrastructure (removed hard-coded reverse predicates)
+- Added edge attribution to all relationships (created_by_stage, algorithm, params)
+- Implemented comprehensive metrics tracking (per-stage, per-predicate, per-type)
+
+### 📊 Impact
+
+- **Tests**: 37 new tests passing across 9 test files
+- **Performance**: 2-3× faster semantic similarity computation
+- **Correctness**: 3 critical bugs fixed, proper multi-predicate support
+- **Quality**: Full relationship traceability, comprehensive observability
+
+### 📁 Archive
+
+`documentation/archive/graph-construction-refactor-partial-2025-11-06/`
+
+**Details**: See archive INDEX.md for complete documentation, remaining work in `PLAN_GRAPH-CONSTRUCTION-REFACTOR.md`.
+
+---
+
 ## 2025-10-28: Memory-Aware Chat System (v1.0)
 
 ### 🎯 Major Features Added

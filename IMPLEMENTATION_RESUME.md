@@ -42,6 +42,32 @@ Use this when:
 - [ ] **Check existing files**: See the pattern of SUBPLAN/EXECUTION_TASK numbering
 - [ ] **Note next numbers**: What's the next SUBPLAN number? Next EXECUTION number?
 
+### 2.5. Check Dependencies (5 minutes)
+
+- [ ] **Read PLAN "Related Plans" section**: Identify dependencies
+- [ ] **Verify prerequisites**: Are all dependencies complete?
+- [ ] **Check if blocked**: Is this PLAN blocked by another?
+- [ ] **Review MULTIPLE-PLANS-PROTOCOL.md**: Understand dependency types if needed
+
+### 2.6. Check Related Plans Format Compliance (2 minutes)
+
+- [ ] **Verify "Related Plans" section exists**: Should be in "References & Context"
+- [ ] **Check format**: Should use new 6-type format (Type, Relationship, Dependency, Status, Timing)
+- [ ] **If outdated**: Update format to match MULTIPLE-PLANS-PROTOCOL.md
+- [ ] **If missing**: Add section with current PLAN dependencies
+
+**New Format** (from MULTIPLE-PLANS-PROTOCOL.md):
+
+```markdown
+**PLAN_NAME.md**:
+
+- **Type**: [Hard / Soft / Data / Code / Sequential / Decision Context]
+- **Relationship**: [Description]
+- **Dependency**: [What this PLAN needs]
+- **Status**: [Blocked / Ready / Can proceed]
+- **Timing**: [When to work on this]
+```
+
 ### 3. Technical Pre-Flight (5 minutes)
 
 - [ ] **Git status clean**: No uncommitted changes
@@ -55,6 +81,48 @@ Use this when:
 - [ ] **Read last EXECUTION_TASK**: See where you left off
 - [ ] **Check for blockers**: Any dependencies or issues noted?
 - [ ] **Review learnings**: What was discovered in last execution?
+
+### 5. Update ACTIVE_PLANS.md (REQUIRED)
+
+- [ ] **Check current active PLAN**: Is another PLAN marked "🚀 In Progress"?
+- [ ] **If yes**: Pause it first:
+  - Update that PLAN's "Current Status & Handoff"
+  - Commit changes: `git commit -m "Pausing PLAN_X at Achievement Y"`
+  - Mark as "⏸️ Paused" in ACTIVE_PLANS.md
+- [ ] **Mark this PLAN as "🚀 In Progress"** in ACTIVE_PLANS.md
+- [ ] **Update "Last Updated"** timestamp
+- [ ] **Verify**: Only ONE PLAN is "🚀 In Progress"
+
+**⚠️ CRITICAL**: Skipping this step violates the "ONE In Progress" rule and can cause context confusion.
+
+---
+
+## 📢 Resume Announcement (Best Practice)
+
+**When resuming, announce your intent explicitly**:
+
+```
+Following IMPLEMENTATION_RESUME.md to resume PLAN_<FEATURE>.md for Achievement X.Y
+
+✅ Pre-Resume Checklist:
+  ✅ Step 1: Context Gathering - Complete
+  ✅ Step 2: Naming Convention - Reviewed
+  ✅ Step 2.5: Dependencies - [Status]
+  ✅ Step 3: Technical Pre-Flight - Complete
+  ✅ Step 4: Context Understanding - Complete
+  ✅ Step 5: ACTIVE_PLANS.md - Updated to "In Progress"
+
+✅ Next Achievement Identified: X.Y ([Title])
+
+Creating SUBPLAN_<NUMBER>...
+```
+
+**Why this matters**:
+
+- Makes resume explicit and traceable
+- Shows checklist compliance
+- Prevents assumption of context
+- Demonstrates process adherence
 
 ---
 
@@ -127,17 +195,79 @@ File: EXECUTION_TASK_<FEATURE>_09_01.md
 
 - Update EXECUTION_TASK after each iteration
 - Update PLAN "Subplan Tracking" when SUBPLAN complete
-- Commit frequently (good practice)
+- Commit at logical checkpoints (see commit discipline below)
+
+### Commit Discipline
+
+**When to commit**:
+
+- After completing each SUBPLAN
+- Before pausing a PLAN
+- At logical checkpoints (every 2-3 hours of work)
+- After significant milestones
+
+**Commit message format**:
+
+```bash
+Complete Achievement X.Y: [Title]
+
+- [Deliverable 1]
+- [Deliverable 2]
+- [Deliverable 3]
+```
+
+**Examples**:
+
+```bash
+git commit -m "Complete Achievement 0.1: Relationship Existence Checks
+
+- Fixed co-occurrence checks to include predicate
+- Fixed semantic similarity checks to include predicate
+- Added 12 tests (all passing)
+"
+
+git commit -m "Pausing PLAN_GRAPH-CONSTRUCTION at Priority 3
+
+- Priorities 0-3 complete (11/17 achievements)
+- Remaining: Priority 4-5 + Achievement 2.1
+- Foundation production-ready
+"
+```
 
 ### Step 4: Pause Again (If Needed)
 
-**Follow IMPLEMENTATION_END_POINT.md**:
+**Follow IMPLEMENTATION_END_POINT.md** (for partial completion):
 
-1. Update PLAN "Current Status & Handoff" section
-2. Note where you stopped
-3. Note what should be done next
-4. Commit all changes before pausing
-5. Update ACTIVE_PLANS.md (mark as "⏸️ Paused")
+1. **Update PLAN "Current Status & Handoff" section**:
+
+   - Note where you stopped
+   - Note what should be done next
+   - Document what's complete
+   - Document what remains
+
+2. **Commit all changes**:
+
+   ```bash
+   git add -A
+   git commit -m "Pausing PLAN_<FEATURE> at Achievement X.Y
+
+   - Achievements complete: [list]
+   - Remaining: [list]
+   - Status: [status]
+   "
+   ```
+
+3. **Update ACTIVE_PLANS.md**:
+
+   - Mark as "⏸️ Paused"
+   - Update completion percentage
+   - Update "Last Updated" timestamp
+   - Update "Next Achievement" column
+
+4. **Archive completed work** (if significant milestone):
+   - Follow IMPLEMENTATION_END_POINT.md partial completion process
+   - Move completed SUBPLANs and EXECUTION_TASKs to archive
+   - Keep PLAN in root
 
 ---
 
@@ -212,8 +342,12 @@ File: EXECUTION_TASK_<FEATURE>_09_01.md
 ### Before Resuming Other PLAN
 
 1. **Follow this document**: Complete Pre-Resume Checklist
-2. **Update ACTIVE_PLANS.md**: Mark as "🚀 In Progress"
-3. **Check dependencies**: Does this PLAN depend on others?
+2. **Check dependencies**:
+   - Read PLAN "Related Plans" section
+   - Verify prerequisites are complete
+   - Check if blocked by another PLAN
+   - See `documentation/guides/MULTIPLE-PLANS-PROTOCOL.md` for dependency types
+3. **Update ACTIVE_PLANS.md**: Mark as "🚀 In Progress"
 
 ### Tracking Active Plan
 
@@ -234,16 +368,20 @@ Update ACTIVE_PLANS.md when switching:
 
 **Self-check after resuming work for 1 hour**:
 
-- [ ] All files follow `TYPE_FEATURE_NUMBER.md` naming
-- [ ] PLAN "Subplan Tracking" section updated (if completed any)
-- [ ] EXECUTION_TASK logging iterations properly
-- [ ] Tests running (if applicable)
-- [ ] No status/summary/update files created
-- [ ] Using correct feature name (matches PLAN)
-- [ ] Sequential numbering correct
-- [ ] Git commits have good messages
+- [ ] **ACTIVE_PLANS.md updated**: This PLAN marked "🚀 In Progress" ⚠️ CRITICAL
+- [ ] **Only ONE PLAN "In Progress"**: Verify no other PLANs active ⚠️ CRITICAL
+- [ ] **All files follow naming**: `TYPE_FEATURE_NUMBER.md` pattern
+- [ ] **PLAN updated**: "Subplan Tracking" section (if completed any)
+- [ ] **EXECUTION_TASK updated**: Logging iterations properly
+- [ ] **Tests running**: If applicable
+- [ ] **No non-conforming files**: No status/summary/update files created
+- [ ] **Correct feature name**: Matches PLAN exactly
+- [ ] **Sequential numbering**: Correct (checked "Subplan Tracking")
+- [ ] **Git commits**: Good messages, logical checkpoints
 
 **If ANY item is ❌**: Stop, fix it now before continuing.
+
+**Focus on CRITICAL items first** (ACTIVE_PLANS.md updates are most commonly missed).
 
 ---
 

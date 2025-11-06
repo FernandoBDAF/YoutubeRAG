@@ -211,6 +211,36 @@ _None yet - will be added as subplans are created_
 
 ## 📚 References & Context
 
+### Related Plans
+
+[FILL: Document dependencies on other PLANs using MULTIPLE-PLANS-PROTOCOL.md format]
+
+**Format**:
+
+```markdown
+**PLAN_DEPENDENCY_NAME.md**:
+
+- **Type**: [Hard / Soft / Data / Code / Sequential]
+- **Relationship**: [Description of relationship]
+- **Dependency**: [What this PLAN needs from dependency]
+- **Status**: [Blocked / Ready / Can proceed]
+- **Timing**: [When to work on this relative to dependency]
+```
+
+**Example**:
+
+```markdown
+**PLAN_ENTITY-RESOLUTION-REFACTOR.md**:
+
+- **Type**: Hard dependency
+- **Relationship**: Sequential (entity resolution → graph construction)
+- **Dependency**: Graph construction depends on stable entity_ids
+- **Status**: Ready (Priorities 0-3 and 3.5 complete)
+- **Timing**: After entity resolution (Priorities 0-3 and 3.5 complete)
+```
+
+**Before creating PLAN**: Check ACTIVE_PLANS.md for related PLANs and dependencies. See `documentation/guides/MULTIPLE-PLANS-PROTOCOL.md` for complete guidance.
+
 ### Related Documentation
 
 - [FILL: Link to related guides]

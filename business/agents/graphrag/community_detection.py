@@ -11,6 +11,7 @@ Louvain is proven to work well with GraphRAG's sparse, diverse entity graphs.
 
 import logging
 import os
+import hashlib
 from typing import Dict, List, Any
 from collections import defaultdict
 import networkx as nx
@@ -88,6 +89,14 @@ class CommunityDetectionAgent:
         self.max_levels = max_levels
         self.algorithm = algorithm
 
+        # Achievement 3.1: Multi-resolution configuration
+        multires_str = os.getenv("GRAPHRAG_COMMUNITY_MULTIRES", "1.0")
+        self.multires_resolutions = self._parse_multires_config(multires_str)
+        self.use_multires = len(self.multires_resolutions) > 1
+
+        # Load ontology for edge weighting (Achievement 1.1, 1.2)
+        self.ontology = self._load_ontology()
+
         logger.info(
             f"Initialized CommunityDetectionAgent with algorithm={algorithm}, "
             f"resolution={resolution_parameter}, min_size={min_cluster_size}"
@@ -126,32 +135,62 @@ class CommunityDetectionAgent:
             f"Created graph with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges"
         )
 
-        # Run community detection with selected algorithm
-        try:
-            if self.algorithm == "louvain":
-                communities = self._detect_louvain(G)
-            elif self.algorithm == "hierarchical_leiden":
-                communities = self._detect_hierarchical_leiden(G)
-            else:
-                logger.warning(f"Unknown algorithm '{self.algorithm}', using Louvain")
-                communities = self._detect_louvain(G)
+        # Achievement 3.1: Multi-resolution detection
+        if self.use_multires and self.algorithm == "louvain":
+            # Multi-resolution Louvain
+            organized_communities = self._detect_multires_louvain(
+                G, entities, relationships
+            )
+        else:
+            # Single resolution (existing behavior)
+            # Run community detection with selected algorithm
+            try:
+                if self.algorithm == "louvain":
+                    communities = self._detect_louvain(G)
+                elif self.algorithm == "leiden":
+                    communities = self._detect_leiden(G)
+                elif self.algorithm == "label_prop":
+                    communities = self._detect_label_propagation(G)
+                elif self.algorithm == "hierarchical_leiden":
+                    communities = self._detect_hierarchical_leiden(G)
+                else:
+                    logger.warning(
+                        f"Unknown algorithm '{self.algorithm}', using Louvain"
+                    )
+                    communities = self._detect_louvain(G)
 
-            logger.info(
-                f"Detected {len(communities)} communities using {self.algorithm}"
+                logger.info(
+                    f"Detected {len(communities)} communities using {self.algorithm}"
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to run {self.algorithm} algorithm: {e}")
+                # Fallback to simple community detection
+                communities = self._fallback_community_detection(G)
+
+            # Organize communities by level
+            organized_communities = self._organize_communities_by_level(
+                communities, entities, relationships
             )
 
-        except Exception as e:
-            logger.error(f"Failed to run {self.algorithm} algorithm: {e}")
-            # Fallback to simple community detection
-            communities = self._fallback_community_detection(G)
-
-        # Organize communities by level
-        organized_communities = self._organize_communities_by_level(
-            communities, entities, relationships
+        # Apply size management (split oversized, merge micro) - Achievement 1.3
+        organized_communities = self._apply_size_management(
+            organized_communities, entities, relationships, G
         )
 
         # Calculate community quality metrics
         quality_metrics = self._calculate_community_quality(organized_communities, G)
+
+        # Achievement 3.4: Quality Gates - Validate quality before accepting results
+        quality_gate_result = self._validate_quality_gates(
+            organized_communities, quality_metrics, G
+        )
+
+        if not quality_gate_result["passed"]:
+            logger.warning(
+                f"Quality gates failed: {quality_gate_result['reasons']}. "
+                f"Results may be suboptimal but will be returned."
+            )
 
         return {
             "communities": organized_communities,
@@ -161,6 +200,7 @@ class CommunityDetectionAgent:
                 for level_communities in organized_communities.values()
             ),
             "quality_metrics": quality_metrics,
+            "quality_gates": quality_gate_result,
             "graph_stats": {
                 "nodes": G.number_of_nodes(),
                 "edges": G.number_of_edges(),
@@ -219,6 +259,11 @@ class CommunityDetectionAgent:
                     # LLM-extracted (no relationship_type field)
                     weight = base_confidence  # Full weight (0.8-0.95)
 
+                # Apply ontology-aware weight adjustments (Achievement 1.1, 1.2)
+                weight = self._apply_ontology_weight_adjustments(
+                    weight, relationship, G
+                )
+
                 # Ensure weight is in valid range
                 weight = max(0.1, min(1.0, weight))
 
@@ -234,6 +279,580 @@ class CommunityDetectionAgent:
                 )
 
         return G
+
+    def _load_ontology(self) -> Dict[str, Any]:
+        """
+        Load ontology for edge weighting.
+
+        Returns:
+            Ontology dictionary with canonical_predicates, predicate_map, predicate_type_constraints
+        """
+        try:
+            from core.libraries.ontology.loader import load_ontology
+
+            return load_ontology()
+        except Exception as e:
+            logger.warning(f"Could not load ontology for edge weighting: {e}")
+            return {
+                "canonical_predicates": set(),
+                "predicate_map": {},
+                "predicate_type_constraints": {},
+            }
+
+    def _apply_ontology_weight_adjustments(
+        self, weight: float, relationship: ResolvedRelationship, G: nx.Graph
+    ) -> float:
+        """
+        Apply ontology-aware weight adjustments to edge weight.
+
+        Achievement 1.1: Ontology-Aware Edge Weighting
+        Achievement 1.2: Type-Pair Validity Bonuses
+
+        Adjustments:
+        - Canonical predicates: +15% boost
+        - Soft-kept/unknown predicates: -15% penalty
+        - Valid type-pairs: +10% bonus
+        - Invalid type-pairs: -20% penalty
+
+        Args:
+            weight: Base edge weight
+            relationship: Relationship object
+            G: NetworkX graph (for entity type lookup)
+
+        Returns:
+            Adjusted weight
+        """
+        predicate = relationship.predicate
+        canonical_predicates = self.ontology.get("canonical_predicates", set())
+        predicate_map = self.ontology.get("predicate_map", {})
+        type_constraints = self.ontology.get("predicate_type_constraints", {})
+
+        # Achievement 1.1: Canonical predicate boost
+        if predicate in canonical_predicates:
+            weight *= 1.15  # +15% boost for canonical predicates
+            logger.debug(f"Canonical predicate boost: {predicate} → {weight:.3f}")
+        else:
+            # Check if predicate was soft-kept (mapped but not canonical)
+            normalized_pred = predicate.lower().strip()
+            if normalized_pred in predicate_map:
+                mapped_pred = predicate_map[normalized_pred]
+                if mapped_pred == "__DROP__":
+                    # Was soft-kept (should have been dropped but wasn't)
+                    weight *= 0.85  # -15% penalty
+                    logger.debug(
+                        f"Soft-kept predicate penalty: {predicate} → {weight:.3f}"
+                    )
+            else:
+                # Unknown predicate (not in ontology)
+                weight *= 0.85  # -15% penalty
+                logger.debug(f"Unknown predicate penalty: {predicate} → {weight:.3f}")
+
+        # Achievement 1.2: Type-pair validity bonus/penalty
+        subject_id = relationship.subject_id
+        object_id = relationship.object_id
+
+        # Get entity types from graph nodes
+        subject_type = G.nodes[subject_id].get("type") if subject_id in G else None
+        object_type = G.nodes[object_id].get("type") if object_id in G else None
+
+        if subject_type and object_type and predicate in type_constraints:
+            # Check if type-pair is valid for this predicate
+            valid_pairs = type_constraints[predicate]
+            is_valid = False
+
+            for valid_pair in valid_pairs:
+                if len(valid_pair) == 2:
+                    if valid_pair[0] == subject_type and valid_pair[1] == object_type:
+                        is_valid = True
+                        break
+
+            if is_valid:
+                weight *= 1.1  # +10% bonus for valid type-pairs
+                logger.debug(
+                    f"Valid type-pair bonus: {predicate} ({subject_type}→{object_type}) → {weight:.3f}"
+                )
+            else:
+                weight *= 0.8  # -20% penalty for invalid type-pairs
+                logger.debug(
+                    f"Invalid type-pair penalty: {predicate} ({subject_type}→{object_type}) → {weight:.3f}"
+                )
+
+        return weight
+
+    def _parse_multires_config(self, multires_str: str) -> List[float]:
+        """
+        Parse multi-resolution configuration from environment variable.
+
+        Achievement 3.1: Multi-Resolution Louvain
+
+        Args:
+            multires_str: Comma-separated resolution values (e.g., "0.8,1.0,1.6")
+
+        Returns:
+            List of resolution parameters as floats
+        """
+        try:
+            resolutions = [float(r.strip()) for r in multires_str.split(",")]
+            # Validate all are positive
+            resolutions = [r for r in resolutions if r > 0]
+            if not resolutions:
+                logger.warning("No valid resolutions found, using default 1.0")
+                return [1.0]
+            logger.info(f"Multi-resolution enabled: {resolutions}")
+            return resolutions
+        except Exception as e:
+            logger.warning(
+                f"Failed to parse multires config '{multires_str}': {e}, using default 1.0"
+            )
+            return [1.0]
+
+    def _detect_multires_louvain(
+        self,
+        G: nx.Graph,
+        entities: List[ResolvedEntity],
+        relationships: List[ResolvedRelationship],
+    ) -> Dict[int, Dict[str, Any]]:
+        """
+        Detect communities at multiple resolutions using Louvain.
+
+        Achievement 3.1: Multi-Resolution Louvain
+
+        Runs Louvain at each resolution and stores each as a separate level.
+        Entities can appear in multiple levels (multi-scale membership).
+
+        Args:
+            G: NetworkX graph
+            entities: List of entities
+            relationships: List of relationships
+
+        Returns:
+            Dictionary mapping levels to community information
+        """
+        logger.info(
+            f"Running multi-resolution Louvain at resolutions: {self.multires_resolutions}"
+        )
+
+        organized_communities = defaultdict(dict)
+        seed = int(os.getenv("GRAPHRAG_RANDOM_SEED", "42"))
+
+        # Run Louvain at each resolution
+        for level, resolution in enumerate(self.multires_resolutions, start=1):
+            logger.info(
+                f"Detecting communities at resolution {resolution} (level {level})"
+            )
+
+            try:
+                # Run Louvain at this resolution
+                communities = nx_community.louvain_communities(
+                    G,
+                    resolution=resolution,
+                    seed=seed,
+                    weight="weight",
+                )
+
+                # Calculate modularity
+                modularity = nx_community.modularity(G, communities, weight="weight")
+
+                logger.info(
+                    f"Resolution {resolution} (level {level}): {len(communities)} communities "
+                    f"(modularity={modularity:.4f})"
+                )
+
+                # Organize communities for this level
+                level_communities = self._organize_multires_level(
+                    level, communities, entities, relationships
+                )
+
+                organized_communities[level] = level_communities
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to detect communities at resolution {resolution}: {e}"
+                )
+                # Skip this resolution, continue with others
+                continue
+
+        logger.info(
+            f"Multi-resolution detection complete: {len(organized_communities)} levels, "
+            f"{sum(len(level_comms) for level_comms in organized_communities.values())} total communities"
+        )
+
+        return dict(organized_communities)
+
+    def _organize_multires_level(
+        self,
+        level: int,
+        communities: List[Any],
+        entities: List[ResolvedEntity],
+        relationships: List[ResolvedRelationship],
+    ) -> Dict[str, Any]:
+        """
+        Organize communities for a single multi-resolution level.
+
+        Achievement 3.1: Multi-Resolution Louvain
+
+        Args:
+            level: Level number (1, 2, 3, etc.)
+            communities: List of community frozensets from Louvain
+            entities: List of all entities
+            relationships: List of all relationships
+
+        Returns:
+            Dictionary mapping community_id to community data
+        """
+        level_communities = {}
+
+        for community_nodes in communities:
+            entity_ids = list(community_nodes)
+
+            if len(entity_ids) < self.min_cluster_size:
+                logger.debug(
+                    f"Skipping community with {len(entity_ids)} entities "
+                    f"(min_cluster_size={self.min_cluster_size})"
+                )
+                continue
+
+            # Generate stable, deterministic community ID
+            community_id = self._generate_stable_community_id(level, entity_ids)
+
+            # Get entities and relationships for this community
+            community_entities = []
+            community_relationships = []
+
+            # Filter entities
+            for entity in entities:
+                if entity.entity_id in entity_ids:
+                    community_entities.append(entity)
+
+            # Filter relationships (both entities must be in community)
+            for relationship in relationships:
+                if (
+                    relationship.subject_id in entity_ids
+                    and relationship.object_id in entity_ids
+                ):
+                    community_relationships.append(relationship)
+
+            # Calculate coherence
+            coherence_score = self._calculate_coherence_score(
+                community_entities, community_relationships
+            )
+
+            # Store community
+            level_communities[community_id] = {
+                "community_id": community_id,
+                "level": level,
+                "entities": [e.entity_id for e in community_entities],
+                "entity_count": len(community_entities),
+                "relationships": [r.relationship_id for r in community_relationships],
+                "relationship_count": len(community_relationships),
+                "coherence_score": coherence_score,
+                "entity_names": [e.name for e in community_entities],
+                "entity_types": [e.type.value for e in community_entities],
+            }
+
+        return level_communities
+
+    def _apply_size_management(
+        self,
+        organized_communities: Dict[int, Dict[str, Any]],
+        entities: List[ResolvedEntity],
+        relationships: List[ResolvedRelationship],
+        G: nx.Graph,
+    ) -> Dict[int, Dict[str, Any]]:
+        """
+        Apply size management to communities: split oversized, merge micro.
+
+        Achievement 1.3: Community Size Management
+
+        - Split oversized communities (>1000 entities) using recursive Louvain
+        - Merge micro-communities (<5 entities) into nearest neighbor
+
+        Args:
+            organized_communities: Dictionary of organized communities by level
+            entities: List of all entities
+            relationships: List of all relationships
+            G: NetworkX graph
+
+        Returns:
+            Updated organized communities dictionary
+        """
+        split_threshold = int(os.getenv("GRAPHRAG_COMMUNITY_SPLIT_THRESHOLD", "1000"))
+        merge_threshold = int(os.getenv("GRAPHRAG_COMMUNITY_MERGE_THRESHOLD", "5"))
+
+        updated_communities = defaultdict(dict)
+
+        for level, level_communities in organized_communities.items():
+            for community_id, community_data in level_communities.items():
+                entity_count = community_data["entity_count"]
+
+                # Split oversized communities
+                if entity_count > split_threshold:
+                    logger.info(
+                        f"Splitting oversized community {community_id} "
+                        f"({entity_count} entities > {split_threshold})"
+                    )
+                    split_communities = self._split_oversized_community(
+                        community_data, entities, relationships, G, level
+                    )
+                    # Add split communities to updated_communities
+                    for split_id, split_data in split_communities.items():
+                        updated_communities[level][split_id] = split_data
+                # Merge micro-communities (will be handled after all splits)
+                elif entity_count < merge_threshold:
+                    # Store for later merging
+                    if level not in updated_communities:
+                        updated_communities[level] = {}
+                    updated_communities[level][community_id] = community_data
+                else:
+                    # Keep as-is
+                    if level not in updated_communities:
+                        updated_communities[level] = {}
+                    updated_communities[level][community_id] = community_data
+
+        # Merge micro-communities
+        updated_communities = self._merge_micro_communities(
+            updated_communities, entities, relationships, G, merge_threshold
+        )
+
+        return dict(updated_communities)
+
+    def _split_oversized_community(
+        self,
+        community_data: Dict[str, Any],
+        entities: List[ResolvedEntity],
+        relationships: List[ResolvedRelationship],
+        G: nx.Graph,
+        parent_level: int,
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Split an oversized community using recursive Louvain.
+
+        Args:
+            community_data: Community data dictionary
+            entities: List of all entities
+            relationships: List of all relationships
+            G: Full NetworkX graph
+            parent_level: Level of parent community
+
+        Returns:
+            Dictionary of split communities
+        """
+        entity_ids = set(community_data["entities"])
+
+        # Create subgraph for this community
+        subgraph = G.subgraph(entity_ids)
+
+        if subgraph.number_of_nodes() < 2:
+            # Can't split single node
+            return {community_data["community_id"]: community_data}
+
+        # Run Louvain with higher resolution (1.5-2.0) to get finer partitions
+        split_resolution = float(
+            os.getenv("GRAPHRAG_COMMUNITY_SPLIT_RESOLUTION", "1.8")
+        )
+        seed = int(os.getenv("GRAPHRAG_RANDOM_SEED", "42"))
+
+        try:
+            split_communities = nx_community.louvain_communities(
+                subgraph,
+                resolution=split_resolution,
+                seed=seed,
+                weight="weight",
+            )
+
+            logger.info(
+                f"Split community {community_data['community_id']} into {len(split_communities)} sub-communities"
+            )
+
+            # Organize split communities
+            split_organized = {}
+            for i, split_nodes in enumerate(split_communities):
+                split_entity_ids = list(split_nodes)
+
+                # Generate stable ID with partition suffix
+                base_id = community_data["community_id"]
+                partition_hash = hashlib.sha1(
+                    ",".join(sorted(split_entity_ids)).encode()
+                ).hexdigest()[:8]
+                split_id = f"{base_id}-p{partition_hash}"
+
+                # Get entities and relationships for this split
+                split_entities = [
+                    e for e in entities if e.entity_id in split_entity_ids
+                ]
+                split_relationships = [
+                    r
+                    for r in relationships
+                    if r.subject_id in split_entity_ids
+                    and r.object_id in split_entity_ids
+                ]
+
+                # Calculate coherence
+                coherence = self._calculate_coherence_score(
+                    split_entities, split_relationships
+                )
+
+                split_organized[split_id] = {
+                    "community_id": split_id,
+                    "level": parent_level,
+                    "entities": split_entity_ids,
+                    "entity_count": len(split_entities),
+                    "relationships": [r.relationship_id for r in split_relationships],
+                    "relationship_count": len(split_relationships),
+                    "coherence_score": coherence,
+                    "entity_names": [e.name for e in split_entities],
+                    "entity_types": [e.type.value for e in split_entities],
+                    "parent_community_id": community_data["community_id"],
+                }
+
+            return split_organized
+
+        except Exception as e:
+            logger.error(
+                f"Failed to split community {community_data['community_id']}: {e}"
+            )
+            # Return original if split fails
+            return {community_data["community_id"]: community_data}
+
+    def _merge_micro_communities(
+        self,
+        organized_communities: Dict[int, Dict[str, Any]],
+        entities: List[ResolvedEntity],
+        relationships: List[ResolvedRelationship],
+        G: nx.Graph,
+        merge_threshold: int,
+    ) -> Dict[int, Dict[str, Any]]:
+        """
+        Merge micro-communities (<merge_threshold) into nearest neighbor.
+
+        Args:
+            organized_communities: Dictionary of organized communities
+            entities: List of all entities
+            relationships: List of all relationships
+            G: NetworkX graph
+            merge_threshold: Minimum size threshold for merging
+
+        Returns:
+            Updated organized communities with micro-communities merged
+        """
+        merged_communities = defaultdict(dict)
+
+        for level, level_communities in organized_communities.items():
+            micro_communities = []
+            normal_communities = {}
+
+            # Separate micro and normal communities
+            for comm_id, comm_data in level_communities.items():
+                if comm_data["entity_count"] < merge_threshold:
+                    micro_communities.append((comm_id, comm_data))
+                else:
+                    normal_communities[comm_id] = comm_data
+
+            # Try to merge each micro-community into nearest neighbor
+            for micro_id, micro_data in micro_communities:
+                micro_entity_ids = set(micro_data["entities"])
+
+                # Find nearest neighbor (highest edge weight connection)
+                best_neighbor_id = None
+                best_weight = 0.0
+
+                for neighbor_id, neighbor_data in normal_communities.items():
+                    neighbor_entity_ids = set(neighbor_data["entities"])
+
+                    # Calculate total edge weight between micro and neighbor
+                    total_weight = 0.0
+                    for micro_eid in micro_entity_ids:
+                        for neighbor_eid in neighbor_entity_ids:
+                            if G.has_edge(micro_eid, neighbor_eid):
+                                total_weight += G[micro_eid][neighbor_eid].get(
+                                    "weight", 0.0
+                                )
+
+                    if total_weight > best_weight:
+                        best_weight = total_weight
+                        best_neighbor_id = neighbor_id
+
+                # Merge into best neighbor or keep as-is if no good neighbor
+                if (
+                    best_neighbor_id and best_weight > 0.1
+                ):  # Minimum connection threshold
+                    logger.debug(
+                        f"Merging micro-community {micro_id} ({micro_data['entity_count']} entities) "
+                        f"into {best_neighbor_id} (weight={best_weight:.3f})"
+                    )
+                    # Merge entities and relationships
+                    neighbor_data = normal_communities[best_neighbor_id]
+                    merged_entity_ids = (
+                        set(neighbor_data["entities"]) | micro_entity_ids
+                    )
+
+                    # Recalculate merged community
+                    merged_entities = [
+                        e for e in entities if e.entity_id in merged_entity_ids
+                    ]
+                    merged_relationships = [
+                        r
+                        for r in relationships
+                        if r.subject_id in merged_entity_ids
+                        and r.object_id in merged_entity_ids
+                    ]
+                    merged_coherence = self._calculate_coherence_score(
+                        merged_entities, merged_relationships
+                    )
+
+                    # Update neighbor with merged data
+                    normal_communities[best_neighbor_id] = {
+                        "community_id": best_neighbor_id,
+                        "level": level,
+                        "entities": list(merged_entity_ids),
+                        "entity_count": len(merged_entities),
+                        "relationships": [
+                            r.relationship_id for r in merged_relationships
+                        ],
+                        "relationship_count": len(merged_relationships),
+                        "coherence_score": merged_coherence,
+                        "entity_names": [e.name for e in merged_entities],
+                        "entity_types": [e.type.value for e in merged_entities],
+                    }
+                else:
+                    # Keep micro-community as-is (no good neighbor to merge with)
+                    normal_communities[micro_id] = micro_data
+
+            merged_communities[level] = normal_communities
+
+        return dict(merged_communities)
+
+    def _generate_stable_community_id(self, level: int, entity_ids: List[str]) -> str:
+        """
+        Generate a stable, deterministic community ID based on entity set.
+
+        Uses SHA1 hash of sorted entity IDs to ensure:
+        - Same entities → same ID (deterministic)
+        - Different order → same ID (order-independent)
+        - Different entities → different ID
+
+        Args:
+            level: Community level (1, 2, 3, etc.)
+            entity_ids: List of entity IDs in the community
+
+        Returns:
+            Stable community ID in format: lvl{level}-{12-char-hash}
+            Example: lvl1-a3f2b1c4d5e6
+        """
+        # Sort entity IDs to ensure deterministic order
+        sorted_ids = sorted(entity_ids)
+
+        # Create signature string
+        signature = ",".join(sorted_ids)
+
+        # Compute SHA1 hash
+        hash_obj = hashlib.sha1(signature.encode())
+        hash_hex = hash_obj.hexdigest()[:12]  # Use first 12 characters
+
+        # Format: lvl{level}-{hash}
+        community_id = f"lvl{level}-{hash_hex}"
+
+        return community_id
 
     def _detect_louvain(self, G: nx.Graph) -> List[Any]:
         """
@@ -277,23 +896,66 @@ class CommunityDetectionAgent:
 
         return list(communities)
 
-    def _detect_hierarchical_leiden(self, G: nx.Graph) -> List[Any]:
+    def _detect_leiden(self, G: nx.Graph) -> List[Any]:
         """
-        Detect communities using hierarchical Leiden algorithm.
+        Detect communities using Leiden algorithm (proper implementation).
 
-        NOTE: Kept for backward compatibility, but not recommended for sparse graphs.
+        Achievement 3.2: Leiden Detector Implemented (Proper)
+
+        Tries multiple methods in order:
+        1. NetworkX 3.5+ leiden_communities (if available)
+        2. graspologic hierarchical_leiden (if available)
+        3. Falls back to Louvain with warning
 
         Args:
             G: NetworkX graph
 
         Returns:
-            List of communities
+            List of community frozensets (compatible with Louvain format)
         """
+        # Try NetworkX leiden_communities first (NetworkX 3.5+)
+        try:
+            # Check if leiden_communities is available
+            if hasattr(nx_community, "leiden_communities"):
+                logger.info(
+                    f"Using NetworkX leiden_communities with resolution={self.resolution_parameter}"
+                )
+
+                seed = int(os.getenv("GRAPHRAG_RANDOM_SEED", "42"))
+
+                # NetworkX leiden_communities signature:
+                # leiden_communities(G, resolution=1.0, seed=None, weight=None)
+                communities = nx_community.leiden_communities(
+                    G,
+                    resolution=self.resolution_parameter,
+                    seed=seed,
+                    weight="weight",
+                )
+
+                # Calculate modularity
+                modularity = nx_community.modularity(G, communities, weight="weight")
+
+                logger.info(
+                    f"Leiden (NetworkX) detected {len(communities)} communities "
+                    f"(modularity={modularity:.4f})"
+                )
+
+                # Convert to list of frozensets for compatibility
+                return list(communities)
+
+        except (AttributeError, Exception) as e:
+            logger.debug(f"NetworkX leiden_communities not available: {e}")
+
+        # Try graspologic hierarchical_leiden
         try:
             from graspologic.partition import hierarchical_leiden
 
             logger.info(
-                f"Running hierarchical Leiden with max_cluster_size={self.max_cluster_size}"
+                f"Using graspologic hierarchical_leiden with max_cluster_size={self.max_cluster_size}"
+            )
+            logger.warning(
+                "Note: graspologic hierarchical_leiden ignores resolution_parameter. "
+                "Use max_cluster_size to control community sizes."
             )
 
             communities = hierarchical_leiden(
@@ -301,13 +963,112 @@ class CommunityDetectionAgent:
                 max_cluster_size=self.max_cluster_size,
             )
 
-            logger.info(f"hierarchical_leiden detected {len(communities)} communities")
+            logger.info(f"Leiden (graspologic) detected {len(communities)} communities")
 
+            # Convert graspologic format to frozensets
+            # graspologic returns objects with .nodes/.node attributes
+            # We'll let _organize_communities_by_level handle the conversion
             return communities
 
         except ImportError:
-            logger.error("graspologic not installed, falling back to Louvain")
+            logger.warning(
+                "graspologic not installed. Leiden algorithm requires either "
+                "NetworkX 3.5+ (with leiden_communities) or graspologic. "
+                "Falling back to Louvain."
+            )
+        except Exception as e:
+            logger.error(f"graspologic hierarchical_leiden failed: {e}")
+
+        # Fallback to Louvain
+        logger.warning("Falling back to Louvain algorithm")
+        return self._detect_louvain(G)
+
+    def _detect_hierarchical_leiden(self, G: nx.Graph) -> List[Any]:
+        """
+        Detect communities using hierarchical Leiden algorithm.
+
+        NOTE: Kept for backward compatibility. Use "leiden" algorithm instead.
+
+        Args:
+            G: NetworkX graph
+
+        Returns:
+            List of communities
+        """
+        logger.warning(
+            "hierarchical_leiden algorithm is deprecated. Use 'leiden' instead."
+        )
+        return self._detect_leiden(G)
+
+    def _detect_label_propagation(self, G: nx.Graph) -> List[Any]:
+        """
+        Detect communities using Label Propagation algorithm.
+
+        Achievement 3.3: Label Propagation Baseline Implemented
+
+        Fast, non-deterministic algorithm. Runs multiple times and takes consensus
+        if needed for stability.
+
+        Args:
+            G: NetworkX graph
+
+        Returns:
+            List of community frozensets
+        """
+        logger.info("Running Label Propagation algorithm")
+
+        # Label Propagation is non-deterministic, so we run it multiple times
+        # and take consensus for stability
+        num_runs = int(os.getenv("GRAPHRAG_LABEL_PROP_RUNS", "3"))
+        seed = int(os.getenv("GRAPHRAG_RANDOM_SEED", "42"))
+
+        all_communities = []
+
+        for run in range(num_runs):
+            try:
+                # Use different seed for each run (if multiple runs)
+                run_seed = seed + run if num_runs > 1 else seed
+
+                # NetworkX label_propagation_communities
+                communities = list(
+                    nx_community.label_propagation_communities(G, seed=run_seed)
+                )
+
+                all_communities.append(communities)
+
+                logger.debug(
+                    f"Label Propagation run {run + 1}/{num_runs}: {len(communities)} communities"
+                )
+
+            except Exception as e:
+                logger.error(f"Label Propagation run {run + 1} failed: {e}")
+                continue
+
+        if not all_communities:
+            logger.error("All Label Propagation runs failed, falling back to Louvain")
             return self._detect_louvain(G)
+
+        # Take consensus: use the run with median number of communities
+        # (more stable than min/max)
+        all_communities.sort(key=len)
+        median_idx = len(all_communities) // 2
+        communities = all_communities[median_idx]
+
+        # Calculate modularity
+        modularity = nx_community.modularity(G, communities, weight="weight")
+
+        logger.info(
+            f"Label Propagation detected {len(communities)} communities "
+            f"(modularity={modularity:.4f}, {num_runs} runs, using median)"
+        )
+
+        logger.warning(
+            "Label Propagation is non-deterministic and may produce unstable partitions. "
+            "Use for fast baseline or very large graphs."
+        )
+
+        # Convert to list of frozensets for compatibility
+        return list(communities)
 
     def _fallback_community_detection(self, G: nx.Graph) -> List[Any]:
         """
@@ -379,7 +1140,8 @@ class CommunityDetectionAgent:
                     )
                     continue
 
-                community_id = f"level_{level}_community_{i}"
+                # Generate stable, deterministic community ID
+                community_id = self._generate_stable_community_id(level, entity_ids)
 
                 # Get entities in this community
                 community_entities = []
@@ -452,7 +1214,13 @@ class CommunityDetectionAgent:
                     )
                     continue
 
+                # Generate stable, deterministic community ID
+                community_id = self._generate_stable_community_id(level, entity_ids)
+
                 # Filter entities and relationships
+                community_entities = []
+                community_relationships = []
+
                 for entity in entities:
                     if entity.entity_id in entity_ids:
                         community_entities.append(entity)
@@ -593,6 +1361,127 @@ class CommunityDetectionAgent:
             "max_size": max(all_sizes),
             "min_size": min(all_sizes),
         }
+
+    def _validate_quality_gates(
+        self,
+        organized_communities: Dict[int, Dict[str, Any]],
+        quality_metrics: Dict[str, Any],
+        G: nx.Graph,
+    ) -> Dict[str, Any]:
+        """
+        Validate quality gates before accepting detection results.
+
+        Achievement 3.4: Quality Gates Implemented
+
+        Validates:
+        - Modularity > threshold (default 0.3)
+        - Coverage > threshold (default 0.7)
+        - No giant communities (max size check)
+        - No excessive singleton communities
+
+        Args:
+            organized_communities: Organized communities by level
+            quality_metrics: Quality metrics dictionary
+            G: NetworkX graph
+
+        Returns:
+            Dictionary with 'passed' (bool) and 'reasons' (list of strings)
+        """
+        # Get configurable thresholds
+        min_modularity = float(os.getenv("GRAPHRAG_QUALITY_MIN_MODULARITY", "0.3"))
+        min_coverage = float(os.getenv("GRAPHRAG_QUALITY_MIN_COVERAGE", "0.7"))
+        max_community_size = int(
+            os.getenv("GRAPHRAG_QUALITY_MAX_COMMUNITY_SIZE", "5000")
+        )
+        max_singleton_ratio = float(
+            os.getenv("GRAPHRAG_QUALITY_MAX_SINGLETON_RATIO", "0.3")
+        )
+
+        reasons = []
+        passed = True
+
+        # Check modularity (need to compute it from graph)
+        # For now, use a placeholder - modularity should be computed in quality_metrics
+        # We'll compute it here if not present
+        if "modularity" not in quality_metrics:
+            # Compute modularity from communities
+            all_communities = []
+            for level_communities in organized_communities.values():
+                for comm_data in level_communities.values():
+                    all_communities.append(frozenset(comm_data["entities"]))
+            if all_communities:
+                modularity = nx_community.modularity(
+                    G, all_communities, weight="weight"
+                )
+            else:
+                modularity = 0.0
+        else:
+            modularity = quality_metrics.get("modularity", 0.0)
+
+        if modularity < min_modularity:
+            reasons.append(
+                f"Modularity {modularity:.4f} below threshold {min_modularity}"
+            )
+            passed = False
+
+        # Check coverage
+        coverage = quality_metrics.get("coverage", 0.0)
+        if coverage < min_coverage:
+            reasons.append(f"Coverage {coverage:.4f} below threshold {min_coverage}")
+            passed = False
+
+        # Check for giant communities
+        max_size = 0
+        for level_communities in organized_communities.values():
+            for comm_data in level_communities.values():
+                entity_count = comm_data.get("entity_count", 0)
+                max_size = max(max_size, entity_count)
+
+        if max_size > max_community_size:
+            reasons.append(
+                f"Giant community detected: {max_size} entities (max: {max_community_size})"
+            )
+            passed = False
+
+        # Check for excessive singleton communities
+        total_communities = quality_metrics.get("total_communities", 0)
+        if total_communities > 0:
+            singleton_count = 0
+            for level_communities in organized_communities.values():
+                for comm_data in level_communities.values():
+                    if comm_data.get("entity_count", 0) == 1:
+                        singleton_count += 1
+
+            singleton_ratio = singleton_count / total_communities
+            if singleton_ratio > max_singleton_ratio:
+                reasons.append(
+                    f"Excessive singleton communities: {singleton_ratio:.2%} "
+                    f"(max: {max_singleton_ratio:.2%})"
+                )
+                passed = False
+
+        result = {
+            "passed": passed,
+            "reasons": reasons,
+            "thresholds": {
+                "min_modularity": min_modularity,
+                "min_coverage": min_coverage,
+                "max_community_size": max_community_size,
+                "max_singleton_ratio": max_singleton_ratio,
+            },
+            "actual": {
+                "modularity": modularity,
+                "coverage": coverage,
+                "max_community_size": max_size,
+            },
+        }
+
+        if passed:
+            logger.info("✅ Quality gates passed")
+        else:
+            logger.warning(f"⚠️ Quality gates failed: {', '.join(reasons)}")
+
+        return result
 
     def get_community_statistics(
         self, detection_results: Dict[str, Any]

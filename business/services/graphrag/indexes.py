@@ -36,6 +36,9 @@ def create_graphrag_indexes(db: Database) -> None:
         # Create entity_mentions collection indexes
         _create_entity_mentions_indexes(db)
 
+        # Create graphrag_runs collection indexes
+        _create_graphrag_runs_indexes(db)
+
         logger.info("Successfully created all GraphRAG indexes")
 
     except Exception as e:
@@ -178,6 +181,25 @@ def _create_entity_mentions_indexes(db: Database) -> None:
     )
 
     logger.info("Created entity_mentions collection indexes")
+
+
+def _create_graphrag_runs_indexes(db: Database) -> None:
+    """Create indexes for the graphrag_runs collection."""
+    runs = db.graphrag_runs
+
+    # Compound index for efficient run lookups (stage, params_hash, graph_signature)
+    runs.create_index(
+        [("stage", 1), ("params_hash", 1), ("graph_signature", 1)],
+        name="stage_params_graph_lookup",
+    )
+
+    # Index for run_id lookups
+    runs.create_index([("_id", 1)], name="run_id")
+
+    # Index for status queries
+    runs.create_index([("status", 1), ("started_at", -1)], name="status_started")
+
+    logger.info("Created graphrag_runs collection indexes")
 
 
 def ensure_graphrag_collections(db: Database) -> None:

@@ -15,6 +15,13 @@ from business.agents.graphrag.community_detection import CommunityDetectionAgent
 from business.agents.graphrag.community_summarization import CommunitySummarizationAgent
 from core.models.graphrag import ResolvedEntity, ResolvedRelationship, CommunitySummary
 from business.services.graphrag.indexes import get_graphrag_collections
+from business.services.graphrag.run_metadata import (
+    compute_params_hash,
+    compute_graph_signature,
+    create_run_document,
+    find_existing_run,
+    update_run_document,
+)
 from core.config.paths import COLL_CHUNKS
 
 logger = logging.getLogger(__name__)
@@ -168,6 +175,57 @@ class CommunityDetectionStage(BaseStage):
                     logger.warning("No entities found for community detection")
                     return self._mark_detection_failed(doc, "no_entities")
 
+                # Compute run metadata (params_hash and graph_signature)
+                params = self._collect_detection_params()
+                params_hash = compute_params_hash(params)
+                graph_signature = compute_graph_signature(entities, relationships)
+
+                # Check for existing run with same params and graph
+                existing_run = find_existing_run(
+                    self.db_write,
+                    "community_detection",
+                    params_hash,
+                    graph_signature,
+                )
+
+                if existing_run:
+                    # Reuse existing run
+                    run_id = str(existing_run["_id"])
+                    logger.info(
+                        f"✅ Found existing run: run_id={run_id}, "
+                        f"params_hash={params_hash[:8]}..., graph_signature={graph_signature[:8]}... "
+                        f"(skipping re-detection)"
+                    )
+                    # Use existing communities (they should already be stored)
+                    # Just update chunks with run_id
+                    metrics = existing_run.get("metrics", {})
+                    detection_results = {
+                        "communities": {},  # Not needed for batch update
+                        "total_communities": metrics.get("total_communities", 0),
+                        "levels": metrics.get("levels", 1),
+                    }
+                    self._batch_update_all_chunks(
+                        detection_results,
+                        metrics.get("stored_communities", 0),
+                        run_id,
+                        params_hash,
+                    )
+                    return None
+
+                # Create new run document
+                ontology_version = self._get_ontology_version()
+                run_id = create_run_document(
+                    self.db_write,
+                    "community_detection",
+                    params_hash,
+                    graph_signature,
+                    params,
+                    ontology_version,
+                )
+                logger.info(
+                    f"📝 Created new run: run_id={run_id}, params_hash={params_hash[:8]}..."
+                )
+
                 # Detect communities
                 detection_results = self.detection_agent.detect_communities(
                     entities, relationships
@@ -198,15 +256,42 @@ class CommunityDetectionStage(BaseStage):
                     logger.warning("No community summaries generated")
                     return self._mark_detection_failed(doc, "no_summaries_generated")
 
-                # Store communities in the communities collection
+                # Store communities in the communities collection (with run_id and params_hash)
                 stored_communities = self._store_communities(
-                    community_summaries, chunk_id, video_id
+                    community_summaries, chunk_id, video_id, run_id, params_hash
+                )
+
+                # Update run document with completion status and metrics
+                quality_metrics = detection_results.get("quality_metrics", {})
+                graph_stats = detection_results.get("graph_stats", {})
+
+                metrics = {
+                    "total_communities": detection_results["total_communities"],
+                    "levels": detection_results["levels"],
+                    "stored_communities": len(stored_communities),
+                    "modularity": quality_metrics.get("avg_coherence", 0),
+                    "coverage": quality_metrics.get("coverage", 0),
+                    "graph_stats": graph_stats,
+                    # Full quality metrics for persistence
+                    "quality_metrics": quality_metrics,
+                }
+                update_run_document(
+                    self.db_write,
+                    run_id,
+                    status="completed",
+                    metrics=metrics,
+                )
+
+                # Persist metrics to graphrag_metrics collection (Achievement 1.4)
+                self._persist_quality_metrics(
+                    run_id, params_hash, quality_metrics, graph_stats, detection_results
                 )
 
                 # Mark that communities have been detected (prevents re-detection for other chunks)
                 self._communities_detected = True
                 logger.info(
-                    f"✅ Community detection complete: stored {len(stored_communities)} communities"
+                    f"✅ Community detection complete: stored {len(stored_communities)} communities, "
+                    f"run_id={run_id}"
                 )
 
                 # Update entities with community assignments
@@ -218,7 +303,7 @@ class CommunityDetectionStage(BaseStage):
                     "📝 Batch updating all chunks with community detection status..."
                 )
                 self._batch_update_all_chunks(
-                    detection_results, len(stored_communities)
+                    detection_results, len(stored_communities), run_id, params_hash
                 )
 
                 # Done! All chunks updated in batch, return immediately
@@ -283,6 +368,55 @@ class CommunityDetectionStage(BaseStage):
                 f"Error processing chunk {chunk_id} for community detection: {e}"
             )
             return self._mark_detection_failed(doc, str(e))
+
+    def _collect_detection_params(self) -> Dict[str, Any]:
+        """
+        Collect all detection parameters for params_hash computation.
+
+        Returns:
+            Dictionary of all parameters affecting detection
+        """
+        # Get random seed from environment (default to 42)
+        seed = os.getenv("GRAPHRAG_RANDOM_SEED", "42")
+
+        params = {
+            "algorithm": self.config.algorithm,
+            "resolution_parameter": self.config.resolution_parameter,
+            "min_cluster_size": self.config.min_cluster_size,
+            "max_cluster_size": self.config.max_cluster_size,
+            "max_iterations": self.config.max_iterations,
+            "max_levels": self.config.max_levels,
+            "seed": seed,
+            "model_name": self.config.model_name,
+            "temperature": self.config.temperature,
+            "concurrency": self.config.concurrency or 300,
+        }
+
+        return params
+
+    def _get_ontology_version(self) -> str:
+        """
+        Get ontology version string.
+
+        Returns:
+            Ontology version string (or "unknown" if unavailable)
+        """
+        try:
+            from core.libraries.ontology.loader import load_ontology
+
+            ontology = load_ontology()
+            # Compute a simple version hash from canonical predicates
+            # This detects when ontology changes
+            if ontology.get("canonical_predicates"):
+                import hashlib
+
+                predicates_str = ",".join(sorted(ontology["canonical_predicates"]))
+                version_hash = hashlib.sha1(predicates_str.encode()).hexdigest()[:8]
+                return f"hash-{version_hash}"
+            return "unknown"
+        except Exception as e:
+            logger.debug(f"Could not determine ontology version: {e}")
+            return "unknown"
 
     def _get_all_entities(self) -> List[ResolvedEntity]:
         """
@@ -353,6 +487,8 @@ class CommunityDetectionStage(BaseStage):
         community_summaries: Dict[str, CommunitySummary],
         chunk_id: str,
         video_id: str,
+        run_id: Optional[str] = None,
+        params_hash: Optional[str] = None,
     ) -> List[str]:
         """
         Store community summaries in the communities collection.
@@ -378,11 +514,18 @@ class CommunityDetectionStage(BaseStage):
                 if existing_community:
                     # Update existing community
                     self._update_existing_community(
-                        existing_community, summary, chunk_id, video_id
+                        existing_community,
+                        summary,
+                        chunk_id,
+                        video_id,
+                        run_id,
+                        params_hash,
                     )
                 else:
                     # Insert new community
-                    self._insert_new_community(summary, chunk_id, video_id)
+                    self._insert_new_community(
+                        summary, chunk_id, video_id, run_id, params_hash
+                    )
 
                 stored_community_ids.append(community_id)
 
@@ -420,12 +563,23 @@ class CommunityDetectionStage(BaseStage):
             update_data["$set"]["summary"] = summary.summary
             update_data["$set"]["title"] = summary.title
 
+        # Update run metadata if provided (for provenance)
+        if run_id:
+            update_data["$set"]["run_id"] = run_id
+        if params_hash:
+            update_data["$set"]["params_hash"] = params_hash
+
         communities_collection.update_one(
             {"community_id": summary.community_id}, update_data
         )
 
     def _insert_new_community(
-        self, summary: CommunitySummary, chunk_id: str, video_id: str
+        self,
+        summary: CommunitySummary,
+        chunk_id: str,
+        video_id: str,
+        run_id: Optional[str] = None,
+        params_hash: Optional[str] = None,
     ) -> None:
         """
         Insert a new community into the communities collection.
@@ -450,6 +604,9 @@ class CommunityDetectionStage(BaseStage):
             "video_id": video_id,
             "created_at": time.time(),
             "updated_at": time.time(),
+            # Run metadata (for provenance and reproducibility)
+            "run_id": run_id,
+            "params_hash": params_hash,
         }
 
         communities_collection.insert_one(community_doc)
@@ -551,7 +708,11 @@ class CommunityDetectionStage(BaseStage):
         return results
 
     def _batch_update_all_chunks(
-        self, detection_results: Dict[str, Any], stored_count: int
+        self,
+        detection_results: Dict[str, Any],
+        stored_count: int,
+        run_id: Optional[str] = None,
+        params_hash: Optional[str] = None,
     ):
         """
         Batch update all chunks with community detection status (MASSIVE performance improvement).
@@ -586,6 +747,9 @@ class CommunityDetectionStage(BaseStage):
                 "stored_communities": stored_count,
                 "processed_at": time.time(),
                 "model_used": self.config.model_name,
+                # Run metadata (for provenance and reproducibility)
+                "run_id": run_id,
+                "params_hash": params_hash,
             }
         }
 
@@ -681,3 +845,117 @@ class CommunityDetectionStage(BaseStage):
 
         logger.info(f"Cleaned up {result.modified_count} failed detections")
         return result.modified_count
+
+    def _persist_quality_metrics(
+        self,
+        run_id: str,
+        params_hash: str,
+        quality_metrics: Dict[str, Any],
+        graph_stats: Dict[str, Any],
+        detection_results: Dict[str, Any],
+    ) -> None:
+        """
+        Persist quality metrics to graphrag_metrics collection.
+
+        Achievement 1.4: Quality Metrics Persistence
+
+        Args:
+            run_id: Run ID
+            params_hash: Parameters hash
+            quality_metrics: Quality metrics dictionary
+            graph_stats: Graph statistics dictionary
+            detection_results: Full detection results
+        """
+        try:
+            metrics_collection = self.db_write.graphrag_metrics
+
+            # Calculate size distribution histogram
+            size_distribution = {}
+            for level, level_communities in detection_results.get(
+                "communities", {}
+            ).items():
+                sizes = [
+                    comm_data.get("entity_count", 0)
+                    for comm_data in level_communities.values()
+                ]
+                if sizes:
+                    size_distribution[level] = {
+                        "min": min(sizes),
+                        "max": max(sizes),
+                        "mean": sum(sizes) / len(sizes),
+                        "median": sorted(sizes)[len(sizes) // 2],
+                        "histogram": self._compute_size_histogram(sizes),
+                    }
+
+            # Create metrics document
+            metrics_doc = {
+                "run_id": run_id,
+                "params_hash": params_hash,
+                "stage": "community_detection",
+                "timestamp": time.time(),
+                # Graph metrics
+                "graph": {
+                    "nodes": graph_stats.get("nodes", 0),
+                    "edges": graph_stats.get("edges", 0),
+                    "density": graph_stats.get("density", 0),
+                    "edge_to_node_ratio": (
+                        graph_stats.get("edges", 0) / graph_stats.get("nodes", 1)
+                        if graph_stats.get("nodes", 0) > 0
+                        else 0
+                    ),
+                },
+                # Detection metrics
+                "detection": {
+                    "total_communities": detection_results.get("total_communities", 0),
+                    "levels": detection_results.get("levels", 0),
+                    "modularity": quality_metrics.get("modularity", 0),
+                    "coverage": quality_metrics.get("coverage", 0),
+                    "size_distribution": size_distribution,
+                },
+                # Quality metrics
+                "quality": {
+                    "avg_coherence": quality_metrics.get("avg_coherence", 0),
+                    "min_coherence": quality_metrics.get("min_coherence", 0),
+                    "max_coherence": quality_metrics.get("max_coherence", 0),
+                    "coherence_stats": quality_metrics.get("coherence_stats", {}),
+                },
+            }
+
+            # Insert metrics document
+            metrics_collection.insert_one(metrics_doc)
+
+            logger.info(
+                f"Persisted quality metrics for run_id={run_id}, "
+                f"modularity={quality_metrics.get('modularity', 0):.4f}, "
+                f"coverage={quality_metrics.get('coverage', 0):.4f}"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to persist quality metrics: {e}")
+
+    def _compute_size_histogram(self, sizes: List[int]) -> Dict[str, int]:
+        """
+        Compute size distribution histogram.
+
+        Args:
+            sizes: List of community sizes
+
+        Returns:
+            Histogram dictionary with bins
+        """
+        if not sizes:
+            return {}
+
+        bins = [0, 5, 10, 25, 50, 100, 500, 1000, float("inf")]
+        histogram = {}
+
+        for size in sizes:
+            for i in range(len(bins) - 1):
+                if bins[i] <= size < bins[i + 1]:
+                    bin_label = (
+                        f"{bins[i]}-{bins[i+1] if bins[i+1] != float('inf') else 'inf'}"
+                    )
+                    histogram[bin_label] = histogram.get(bin_label, 0) + 1
+                    break
+
+        return histogram

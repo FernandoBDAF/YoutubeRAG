@@ -29,6 +29,13 @@ class TestReverseMappingCollision:
         stage.config = Mock()
         stage.config.db_name = "test_db"
 
+        # Mock ontology (Achievement 3.1)
+        stage.ontology = {
+            "canonical_predicates": set(),
+            "symmetric_predicates": set(),
+            "predicate_map": {},
+        }
+
         mock_relations = MagicMock()
         stage.graphrag_collections = {"relations": mock_relations}
 
@@ -98,7 +105,9 @@ class TestReverseMappingCollision:
         # Mock batch_insert (should not be called if merge happens)
         from unittest.mock import patch
 
-        with patch("business.stages.graphrag.graph_construction.batch_insert") as mock_batch:
+        with patch(
+            "business.stages.graphrag.graph_construction.batch_insert"
+        ) as mock_batch:
             # Call _add_bidirectional_relationships
             stage._add_bidirectional_relationships()
 
@@ -129,7 +138,9 @@ class TestReverseMappingCollision:
         # Mock batch_insert
         from unittest.mock import patch
 
-        with patch("business.stages.graphrag.graph_construction.batch_insert") as mock_batch:
+        with patch(
+            "business.stages.graphrag.graph_construction.batch_insert"
+        ) as mock_batch:
             mock_batch.return_value = {"inserted": 1, "total": 1, "failed": 0}
 
             # Call _add_bidirectional_relationships
@@ -176,7 +187,9 @@ class TestReverseMappingCollision:
         assert len(update_docs) > 0
         update = update_docs[0]
         # Should keep max confidence (0.9)
-        assert "$max" in update or ("$set" in update and "confidence" in update.get("$set", {}))
+        assert "$max" in update or (
+            "$set" in update and "confidence" in update.get("$set", {})
+        )
 
 
 def run_all_tests():
@@ -205,4 +218,3 @@ def run_all_tests():
 
 if __name__ == "__main__":
     run_all_tests()
-

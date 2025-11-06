@@ -16,12 +16,14 @@
 2. **Your Task**: Implement the achievements listed below (priority order)
 
 3. **How to Proceed**:
+
    - Read the achievement you want to tackle
    - Create a SUBPLAN with your specific approach
    - Create an EXECUTION_TASK to log your work
    - Follow the TDD workflow defined in IMPLEMENTATION_START_POINT.md
 
 4. **What You'll Create**:
+
    - Stable, reproducible community detection with run metadata
    - Ontology-aware edge weighting for better partitions
    - Intelligent summarization with centrality-aware truncation
@@ -71,22 +73,26 @@ The community detection system is functional with recent improvements:
 **Critical Issues**:
 
 **Bug 1: Non-Deterministic Community IDs** ⚠️ CRITICAL
+
 - IDs are index-based: `f"level_{level}_community_{i}"`
 - Order-dependent, changes between runs
 - **Impact**: Can't diff, can't cache, can't version, downstream references break
 
 **Bug 2: No Run Provenance** ⚠️ CRITICAL
+
 - No tracking of detection parameters (resolution, algorithm, seed, ontology version)
 - Can't reproduce results
 - Can't distinguish "already done" vs "done with different params"
 - **Impact**: Can't validate changes, can't rollback, can't audit
 
 **Bug 3: Graph Drift Undetected** ⚠️ HIGH
+
 - If entities/relations change, communities become stale but chunks say "completed"
 - No graph signature to detect drift
 - **Impact**: Stale communities used for retrieval, degraded quality
 
 **Bug 4: Token Estimation Inaccurate** ⚠️ HIGH
+
 - Estimation is 8× off (actual: ~1600 tokens/entity, estimated: ~200)
 - Conservative caps compensate but waste context
 - **Impact**: Summaries truncate too aggressively, lose valuable context
@@ -94,32 +100,38 @@ The community detection system is functional with recent improvements:
 **Missing Features**:
 
 1. **No Ontology Integration**: Edge weights don't use canonical predicate information
+
    - Canonical predicates should boost weight (+10-20%)
    - Soft-kept/unknown predicates should penalize (-10-20%)
    - **Impact**: Suboptimal partitions, ontology work not leveraged
 
 2. **No Community Size Management**: Single-entity communities filtered, but:
+
    - Oversized communities (4804 entities) not split
    - Micro-communities (<5) not merged
    - **Impact**: Poor quality for very large/small communities
 
 3. **No Salience-Aware Summarization**:
+
    - Truncation by count, not importance
    - Most important entities may be excluded
    - **Impact**: Summaries miss key entities, waste tokens on peripheral ones
 
 4. **No Multi-Resolution Structure**:
+
    - Single resolution (1.0) may not fit all community scales
    - No macro/micro topic layers
    - **Impact**: Either too coarse or too granular, never both
 
 5. **No Quality Metrics Persistence**:
+
    - Metrics logged but not stored
    - Can't track quality over time
    - Can't optimize parameters systematically
    - **Impact**: No self-improvement loop, manual parameter tuning
 
 6. **No Alternative Detectors**:
+
    - Louvain only, no Leiden/Infomap/Label Propagation
    - Can't compare or ensemble
    - **Impact**: Stuck with one algorithm's weaknesses
@@ -188,6 +200,7 @@ The community detection system is functional with recent improvements:
 ### In Scope
 
 1. **Critical Bug Fixes**:
+
    - Stable community IDs (hash-based)
    - Run metadata and provenance
    - Graph drift detection
@@ -195,23 +208,27 @@ The community detection system is functional with recent improvements:
    - source_count inflation fix
 
 2. **Ontology Integration**:
+
    - Load canonical_predicates for edge weighting
    - Boost canonical predicates (+10-20%)
    - Penalize soft-kept/unknown (-10-20%)
    - Type-pair validity bonuses
 
 3. **Community Size Management**:
+
    - Split oversized communities (>1000)
    - Merge micro-communities (<5)
    - Configurable thresholds
 
 4. **Intelligent Summarization**:
+
    - Centrality-aware entity/edge selection
    - Exact token counting with tiktoken
    - Predicate profile in prompts
    - Refined truncation strategy
 
 5. **Quality & Observability**:
+
    - Metrics persistence (graphrag_metrics collection)
    - Quality gates for validation
    - Determinism testing
@@ -240,6 +257,7 @@ The community detection system is functional with recent improvements:
 **Important Note**: This PLAN lists achievements (WHAT to do), not subplans (HOW to do it).
 
 **Process**:
+
 - Review achievements
 - Select one to work on
 - Create SUBPLAN with your approach
@@ -674,18 +692,21 @@ The community detection system is functional with recent improvements:
 ### Technical Constraints
 
 1. **Backward Compatibility**:
+
    - Community ID format change is **breaking**
    - Migration path required for existing systems
    - Must document upgrade process
    - Can provide migration script
 
 2. **Database Changes**:
+
    - New collections: `graphrag_runs`, `graphrag_metrics`
    - New fields on `communities` documents
    - New indexes required
    - Migration for existing communities (optional)
 
 3. **Dependency on Other PLANs**:
+
    - **PLAN_GRAPH-CONSTRUCTION-REFACTOR.md**: Graph quality affects community quality
    - **PLAN_ENTITY-RESOLUTION-REFACTOR.md**: Entity quality affects graph structure
    - **PLAN_EXTRACTION-QUALITY-ENHANCEMENT.md**: Ontology quality affects edge weighting
@@ -700,11 +721,13 @@ The community detection system is functional with recent improvements:
 ### Process Constraints
 
 1. **Test-First Always**:
+
    - Write tests before implementing changes
    - No cheating (fix implementation, not tests)
    - All tests must pass before marking achievement complete
 
 2. **Incremental Refactor**:
+
    - Small, testable changes
    - Each achievement independently testable
    - Can pause/resume at achievement boundaries
@@ -721,6 +744,7 @@ The community detection system is functional with recent improvements:
 ### Related Plans
 
 **PLAN_GRAPH-CONSTRUCTION-REFACTOR.md**:
+
 - **Status**: Planning (not started)
 - **Relationship**: Sequential (graph construction → community detection)
 - **Dependency**: Better graph quality → better communities
@@ -728,18 +752,21 @@ The community detection system is functional with recent improvements:
 - **Timing**: Can start this PLAN in parallel, but validates together
 
 **PLAN_ENTITY-RESOLUTION-REFACTOR.md**:
+
 - **Status**: Paused (Priorities 0-3 and 3.5 complete)
 - **Relationship**: Upstream (entity quality → graph quality → community quality)
 - **Dependency**: Stable entity IDs, accurate source_count feed into communities
 - **Timing**: Entity resolution foundational work complete
 
 **PLAN_EXTRACTION-QUALITY-ENHANCEMENT.md**:
+
 - **Status**: Paused (Priority 0-1 complete)
 - **Relationship**: Upstream (extraction quality → all downstream stages)
 - **Dependency**: Ontology canonical predicates used for edge weighting
 - **Timing**: Ontology validated and excellent (100% canonical ratio)
 
 **PLAN_STRUCTURED-LLM-DEVELOPMENT.md**:
+
 - **Status**: Paused (foundation complete)
 - **Relationship**: Meta (methodology for this PLAN)
 - **Dependency**: Use IMPLEMENTATION_START_POINT.md, IMPLEMENTATION_END_POINT.md, IMPLEMENTATION_RESUME.md
@@ -748,22 +775,26 @@ The community detection system is functional with recent improvements:
 ### Code References
 
 **Current Implementation**:
+
 - `business/agents/graphrag/community_detection.py` - Detection agent to refactor
 - `business/agents/graphrag/community_summarization.py` - Summarization agent to refactor
 - `business/stages/graphrag/community_detection.py` - Stage orchestration to refactor
 - `core/models/graphrag.py` - CommunitySummary model
 
 **Dependencies**:
+
 - `core/libraries/ontology/loader.py` - Load canonical predicates for weighting
 - `core/libraries/concurrency.py` - TPM tracking for summarization
 - `business/services/graphrag/indexes.py` - Index management
 - `core/libraries/database.py` - Batch operations
 
 **Tests**:
+
 - `tests/business/agents/graphrag/test_community_detection.py` (if exists, else create)
 - `tests/business/stages/graphrag/test_community_detection_stage.py` (if exists, else create)
 
 **Technical References** (READ THESE):
+
 - `documentation/technical/COMMUNITY-DETECTION.md` - Algorithm guide (comprehensive)
 - `documentation/technical/COMMUNITY-DETECTION-ALGORITHMS.md` - Algorithm comparison
 - `documentation/technical/SEMANTIC-ENTITIES-RELATIONSHIPS.md` - Graph density best practices
@@ -771,6 +802,7 @@ The community detection system is functional with recent improvements:
 ### External Dependencies
 
 **New Dependencies to Add**:
+
 - `tiktoken>=0.5.0` - Exact token counting
 - `graspologic>=3.0.0` (optional) - Proper hierarchical Leiden
 - Optional: `hdbscan>=0.8.0` - For embedding-guided refinement
@@ -781,12 +813,14 @@ The community detection system is functional with recent improvements:
 **Source**: ChatGPT review of community_detection.py and community_summarization.py (November 6, 2025)
 
 **Critical Issues** (Priority 0):
+
 1. Non-deterministic IDs → Achievement 0.1
 2. No run provenance → Achievement 0.2
 3. Graph drift undetected → Achievement 0.3
 4. Token estimation inaccurate → Achievement 2.1
 
 **High-Value Improvements** (Priority 1-2):
+
 1. Ontology-aware weighting → Achievement 1.1, 1.2
 2. Size management → Achievement 1.3
 3. Quality metrics → Achievement 1.4
@@ -794,6 +828,7 @@ The community detection system is functional with recent improvements:
 5. Predicate profiles → Achievement 2.3
 
 **Advanced Features** (Priority 3-6):
+
 1. Multi-resolution → Achievement 3.1
 2. Alternative detectors → Achievement 3.2, 3.3, 4.1
 3. Ensemble → Achievement 4.2
@@ -856,6 +891,7 @@ The community detection system is functional with recent improvements:
 1. **Review This Plan** - Confirm scope, priorities, and approach
 
 2. **Read Technical References** - Understand algorithms and best practices:
+
    - `documentation/technical/COMMUNITY-DETECTION.md`
    - `documentation/technical/COMMUNITY-DETECTION-ALGORITHMS.md`
    - `documentation/technical/SEMANTIC-ENTITIES-RELATIONSHIPS.md`
@@ -863,11 +899,13 @@ The community detection system is functional with recent improvements:
 3. **Add Dependencies** - Add `tiktoken`, optionally `graspologic` to requirements.txt
 
 4. **Create SUBPLAN_01**: Achievement 0.1 (Stable Community IDs)
+
    - Design hash-based ID generation
    - Write tests first (same graph → same IDs)
    - Implement ID generator
 
 5. **Create SUBPLAN_02**: Achievement 0.2 (Run Metadata)
+
    - Design run metadata schema
    - Create graphrag_runs collection
    - Implement params_hash computation
@@ -886,7 +924,7 @@ The community detection system is functional with recent improvements:
 
 1. **Read IMPLEMENTATION_START_POINT.md** - Refresh on methodology
 2. **Review this PLAN** completely
-3. **Read technical references** (COMMUNITY-DETECTION*.md files)
+3. **Read technical references** (COMMUNITY-DETECTION\*.md files)
 4. **Select Achievement 0.1** (highest priority)
 5. **Create SUBPLAN_COMMUNITY-DETECTION-REFACTOR_01.md**
 6. **Create EXECUTION_TASK_COMMUNITY-DETECTION-REFACTOR_01_01.md**
@@ -926,6 +964,7 @@ The community detection system is functional with recent improvements:
 15. [ ] No regression in community quality
 
 **Partial Completion Option**:
+
 - Priority 0-1 complete: Foundation solid (stable, reproducible, ontology-aware)
 - Priority 0-2 complete: Intelligent system (+ better summarization)
 - Priority 0-3 complete: Production-ready (+ multi-resolution, alternatives)
@@ -965,9 +1004,11 @@ The community detection system is functional with recent improvements:
 ## 🔥 Critical Dependencies
 
 **Blocking**:
+
 - None - Can start immediately
 
 **Benefits from** (better inputs):
+
 - PLAN_GRAPH-CONSTRUCTION-REFACTOR.md Priority 0-1: Better graph quality → better communities
 - PLAN_ENTITY-RESOLUTION-REFACTOR.md Priorities 0-3: Stable entities → stable graph
 - PLAN_EXTRACTION-QUALITY-ENHANCEMENT.md Priority 1: Ontology for edge weighting
@@ -1004,4 +1045,3 @@ The community detection system is functional with recent improvements:
 
 **Status**: PLAN Created and Ready  
 **Next**: Review plan, read technical references, create first SUBPLAN (Achievement 0.1 - Stable Community IDs)
-
