@@ -221,6 +221,13 @@ This report documents the comprehensive validation of the GraphRAG pipeline afte
 
 **Total Scripts Created**: 8 professional query scripts
 
+**Update**: After consolidation with `app/scripts/`, total scripts now: 19
+
+- 8 query scripts (new)
+- 5 analysis scripts (consolidated from app/scripts)
+- 3 testing scripts (consolidated from app/scripts)
+- 3 utility scripts (consolidated from app/scripts)
+
 ---
 
 ### Priority 4: Observability Validation

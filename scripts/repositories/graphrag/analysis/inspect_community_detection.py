@@ -2,19 +2,8 @@
 """
 Inspect Community Detection Results
 
-Detailed inspection of community detection output.
-"""
-
-import sys
-import os
-
-# Add project root to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
-"""
-Inspect Community Detection Algorithm Output
-
-This script investigates what hierarchical_leiden returns and how
-our code processes it to understand why we're getting single-entity communities.
+Detailed inspection of community detection output. This script investigates what
+hierarchical_leiden returns and how our code processes it to understand community structure.
 """
 
 import os
@@ -23,7 +12,8 @@ from collections import defaultdict, Counter
 from dotenv import load_dotenv
 
 # Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../'))
+sys.path.insert(0, project_root)
 
 from dependencies.database.mongodb import get_mongo_client
 from core.config.paths import DB_NAME

@@ -12,7 +12,8 @@ from collections import defaultdict, Counter
 from dotenv import load_dotenv
 
 # Add project root to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../'))
+sys.path.insert(0, project_root)
 
 from dependencies.database.mongodb import get_mongo_client
 from core.config.paths import DB_NAME

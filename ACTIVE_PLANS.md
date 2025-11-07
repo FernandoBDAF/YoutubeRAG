@@ -16,7 +16,6 @@
 | [PLAN_ENTITY-RESOLUTION-ANALYSIS.md](PLAN_ENTITY-RESOLUTION-ANALYSIS.md)           | 📋 Ready    | HIGH     | 0/21 (0%)    | 2025-11-06   | Not started                                        |
 | [PLAN_GRAPH-CONSTRUCTION-REFACTOR.md](PLAN_GRAPH-CONSTRUCTION-REFACTOR.md)         | ⏸️ Paused   | HIGH     | 11/17 (65%)  | 2025-11-06   | Priority 4 or Achievement 2.1 (ANN Index)          |
 | [PLAN_COMMUNITY-DETECTION-REFACTOR.md](PLAN_COMMUNITY-DETECTION-REFACTOR.md)       | ⏸️ Paused   | HIGH     | 14/23 (61%)  | 2025-11-06   | Priority 4 or Priority 7 (Testing & Documentation) |
-| [PLAN_GRAPHRAG-PIPELINE-VISUALIZATION.md](PLAN_GRAPHRAG-PIPELINE-VISUALIZATION.md) | ✅ Complete | HIGH     | 30/30 (100%) | 2025-11-07   | COMPLETE - All achievements done                   |
 | [PLAN_STRUCTURED-LLM-DEVELOPMENT.md](PLAN_STRUCTURED-LLM-DEVELOPMENT.md)           | ⏸️ Paused   | CRITICAL | 15/17 (88%)  | 2025-11-07   | Optional: Weaker model test, LLM automation        |
 
 ---
@@ -25,19 +24,19 @@
 
 | Plan                                                                                                                                       | Completed  | Duration | Achievements | Archive                                                                                                  |
 | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | -------- | ------------ | -------------------------------------------------------------------------------------------------------- |
-| [PLAN_CODE-QUALITY-REFACTOR.md](PLAN_CODE-QUALITY-REFACTOR.md)                                                                             | 2025-11-07 | 70 hours | 36/36 (100%) | [archive/code-quality-refactor-nov2025/](documentation/archive/code-quality-refactor-nov2025/)           |
-| [PLAN_GRAPHRAG-PIPELINE-VISUALIZATION.md](PLAN_GRAPHRAG-PIPELINE-VISUALIZATION.md)                                                         | 2025-11-07 | 50 hours | 30/30 (100%) | Root (ready for archive)                                                                                 |
+| [PLAN_CODE-QUALITY-REFACTOR.md](documentation/archive/code-quality-refactor-nov2025/planning/PLAN_CODE-QUALITY-REFACTOR.md)                | 2025-11-07 | 70 hours | 36/36 (100%) | [archive/code-quality-refactor-nov2025/](documentation/archive/code-quality-refactor-nov2025/)                   |
+| [PLAN_GRAPHRAG-PIPELINE-VISUALIZATION.md](documentation/archive/graphrag-pipeline-visualization-nov2025/planning/PLAN_GRAPHRAG-PIPELINE-VISUALIZATION.md) | 2025-11-07 | 50 hours | 30/30 (100%) | [archive/graphrag-pipeline-visualization-nov2025/](documentation/archive/graphrag-pipeline-visualization-nov2025/) |
 | [PLAN_TEST-RUNNER-INFRASTRUCTURE.md](documentation/archive/test-runner-infrastructure-nov2025/planning/PLAN_TEST-RUNNER-INFRASTRUCTURE.md) | 2025-11-06 | 18 hours | 8/8 (100%)   | [archive/test-runner-infrastructure-nov2025/](documentation/archive/test-runner-infrastructure-nov2025/) |
 
 ---
 
 ## 📊 Statistics
 
-**Active/Paused Plans**: 7 (new format) + 6 legacy plans  
+**Active/Paused Plans**: 6 (new format) + 6 legacy plans  
 **Completed Plans (last 30 days)**: 3  
 **Total Achievements Completed**: 132 (includes all partials + Achievements 1.4.5-1.4.9 + 2.4 + CODE-QUALITY 36 + PIPELINE-VIZ 30)  
 **Total Time Invested**: ~208 hours (including all partial completions + Multiple PLANS Protocol + GrammaPlan + CODE-QUALITY 70h + PIPELINE-VIZ 50h)  
-**Average Completion Rate**: 56% (for active/paused plans)  
+**Average Completion Rate**: 57% (for active/paused plans)  
 **Circular Debugging Rate**: 0% (excellent!)  
 **Naming Compliance**: 100% for new work
 
