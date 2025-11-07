@@ -260,8 +260,8 @@ class IngestionPipeline:
         # Find stage spec
         for spec in self.specs:
             if spec.stage == stage_name:
-                # Run single stage using PipelineRunner
-                return PipelineRunner([spec]).run()
+                # Run single stage using PipelineRunner with metrics
+                return PipelineRunner([spec]).run(pipeline_type="ingestion")
 
         raise ValueError(f"Unknown stage: {stage_name}")
 
@@ -272,8 +272,8 @@ class IngestionPipeline:
         # Setup (ensure collections and indexes)
         self.setup()
 
-        # Run pipeline using PipelineRunner
-        exit_code = self.runner.run()
+        # Run pipeline using PipelineRunner with metrics
+        exit_code = self.runner.run(pipeline_type="ingestion")
 
         if exit_code == 0:
             logger.info("Ingestion pipeline completed successfully")

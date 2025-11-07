@@ -1,17 +1,17 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+import argparse
 
 try:
     from business.services.ingestion.transcripts import get_transcript
     from core.config.paths import COLL_RAW_VIDEOS
     from core.base.stage import BaseStage
     from core.models.config import BaseStageConfig
+    from core.libraries.error_handling.decorators import handle_errors
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
-    _sys.path.append(
-        _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", ".."))
-    )
+    _sys.path.append(_os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "..")))
     from business.services.ingestion.transcripts import get_transcript
     from core.config.paths import COLL_RAW_VIDEOS
     from core.base.stage import BaseStage
@@ -25,7 +25,7 @@ class BackfillTranscriptConfig(BaseStageConfig):
     channel_title: Optional[str] = None
 
     @classmethod
-    def from_args_env(cls, args, env, default_db):
+    def from_args_env(cls, args: Any, env: Dict[str, str], default_db: Optional[str]):
         base = BaseStageConfig.from_args_env(args, env, default_db)
         langs = getattr(args, "languages", None) or ["en", "en-US", "en-GB"]
         channel_id = getattr(args, "channel_id", None)
@@ -43,13 +43,13 @@ class BackfillTranscriptStage(BaseStage):
     description = "Fill missing transcript_raw for raw_videos or a single video"
     ConfigCls = BackfillTranscriptConfig
 
-    def build_parser(self, p):
+    def build_parser(self, p: argparse.ArgumentParser) -> None:
         super().build_parser(p)
         p.add_argument("--languages", nargs="*", default=["en", "en-US", "en-GB"])
         p.add_argument("--channel_id", type=str)
         p.add_argument("--channel_title", type=str)
 
-    def iter_docs(self):
+    def iter_docs(self) -> List[Dict[str, Any]]:
         # Read from configured read DB/collection (default raw_videos)
         src_db = self.config.read_db_name or self.config.db_name
         coll = self.get_collection(
@@ -71,7 +71,8 @@ class BackfillTranscriptStage(BaseStage):
             }
         return list(coll.find(q, {"video_id": 1}))
 
-    def handle_doc(self, d):
+    @handle_errors(fallback=None, log_traceback=True, reraise=False)
+    def handle_doc(self, d: Dict[str, Any]) -> None:
         vid = d["video_id"]
         src_db = self.config.read_db_name or self.config.db_name
         dst_db = self.config.write_db_name or self.config.db_name
@@ -82,9 +83,7 @@ class BackfillTranscriptStage(BaseStage):
             self.config.write_coll or COLL_RAW_VIDEOS, io="write", db_name=dst_db
         )
         existing = read_coll.find_one({"video_id": vid}, {"transcript_raw": 1})
-        if (
-            existing.get("transcript_raw") or ""
-        ).strip() and not self.config.upsert_existing:
+        if (existing.get("transcript_raw") or "").strip() and not self.config.upsert_existing:
             self.stats["skipped"] += 1
             self.log(f"Skip existing {vid}")
             return

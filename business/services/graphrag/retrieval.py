@@ -13,8 +13,27 @@ from pymongo.database import Database
 from pymongo.collection import Collection
 from business.services.graphrag.indexes import get_graphrag_collections
 from core.libraries.caching import cached  # Cache entity lookups for performance
+from core.libraries.error_handling.decorators import handle_errors
+from core.libraries.metrics import Counter, Histogram, MetricRegistry
 
 logger = logging.getLogger(__name__)
+
+# Initialize GraphRAG retrieval metrics
+_graphrag_retrieval_calls = Counter(
+    "graphrag_retrieval_calls", "Number of GraphRAG retrieval calls", labels=["method"]
+)
+_graphrag_retrieval_errors = Counter(
+    "graphrag_retrieval_errors", "Number of GraphRAG retrieval errors", labels=["method"]
+)
+_graphrag_retrieval_duration = Histogram(
+    "graphrag_retrieval_duration_seconds", "GraphRAG retrieval call duration", labels=["method"]
+)
+
+# Register metrics
+_registry = MetricRegistry.get_instance()
+_registry.register(_graphrag_retrieval_calls)
+_registry.register(_graphrag_retrieval_errors)
+_registry.register(_graphrag_retrieval_duration)
 
 
 class GraphRAGRetrievalEngine:
@@ -55,6 +74,7 @@ class GraphRAGRetrievalEngine:
 
         logger.info("Initialized GraphRAGRetrievalEngine")
 
+    @handle_errors(fallback=[], log_traceback=True, reraise=False)
     def entity_search(
         self,
         query_entities: List[str],
@@ -74,47 +94,61 @@ class GraphRAGRetrievalEngine:
         Returns:
             List of matching entities
         """
-        logger.info(f"Searching entities: {query_entities}")
+        start_time = time.time()
+        labels = {"method": "entity_search"}
+        _graphrag_retrieval_calls.inc(labels=labels)
+        
+        try:
+            logger.info(f"Searching entities: {query_entities}")
 
-        entities_collection = self.collections["entities"]
+            entities_collection = self.collections["entities"]
 
-        # Build search query
-        search_conditions = []
+            # Build search query
+            search_conditions = []
 
-        for entity in query_entities:
-            search_conditions.append(
-                {
-                    "$or": [
-                        {"name": {"$regex": entity, "$options": "i"}},
-                        {"canonical_name": {"$regex": entity, "$options": "i"}},
-                        {"aliases": {"$regex": entity, "$options": "i"}},
-                    ]
-                }
+            for entity in query_entities:
+                search_conditions.append(
+                    {
+                        "$or": [
+                            {"name": {"$regex": entity, "$options": "i"}},
+                            {"canonical_name": {"$regex": entity, "$options": "i"}},
+                            {"aliases": {"$regex": entity, "$options": "i"}},
+                        ]
+                    }
+                )
+
+            if not search_conditions:
+                duration = time.time() - start_time
+                _graphrag_retrieval_duration.observe(duration, labels=labels)
+                return []
+
+            # Base query
+            query = {
+                "$or": search_conditions,
+                "confidence": {"$gte": min_confidence},
+                "trust_score": {"$gte": min_trust_score},
+            }
+
+            # Add entity type filter
+            if entity_types:
+                query["type"] = {"$in": entity_types}
+
+            # Execute search
+            entities = list(
+                entities_collection.find(query)
+                .sort([("trust_score", -1), ("centrality_score", -1), ("confidence", -1)])
+                .limit(self.entity_search_limit)
             )
 
-        if not search_conditions:
-            return []
-
-        # Base query
-        query = {
-            "$or": search_conditions,
-            "confidence": {"$gte": min_confidence},
-            "trust_score": {"$gte": min_trust_score},
-        }
-
-        # Add entity type filter
-        if entity_types:
-            query["type"] = {"$in": entity_types}
-
-        # Execute search
-        entities = list(
-            entities_collection.find(query)
-            .sort([("trust_score", -1), ("centrality_score", -1), ("confidence", -1)])
-            .limit(self.entity_search_limit)
-        )
-
-        logger.info(f"Found {len(entities)} entities")
-        return entities
+            logger.info(f"Found {len(entities)} entities")
+            duration = time.time() - start_time
+            _graphrag_retrieval_duration.observe(duration, labels=labels)
+            return entities
+        except Exception as e:
+            _graphrag_retrieval_errors.inc(labels=labels)
+            duration = time.time() - start_time
+            _graphrag_retrieval_duration.observe(duration, labels=labels)
+            raise
 
     def relationship_traversal(
         self,
@@ -217,29 +251,42 @@ class GraphRAGRetrievalEngine:
         Returns:
             List of relevant communities
         """
-        logger.info(f"Retrieving communities for {len(entity_ids)} entities")
+        start_time = time.time()
+        labels = {"method": "community_retrieval"}
+        _graphrag_retrieval_calls.inc(labels=labels)
+        
+        try:
+            logger.info(f"Retrieving communities for {len(entity_ids)} entities")
 
-        communities_collection = self.collections["communities"]
+            communities_collection = self.collections["communities"]
 
-        # Build query
-        query = {
-            "entities": {"$in": entity_ids},
-            "coherence_score": {"$gte": min_coherence_score},
-        }
+            # Build query
+            query = {
+                "entities": {"$in": entity_ids},
+                "coherence_score": {"$gte": min_coherence_score},
+            }
 
-        if max_level is not None:
-            query["level"] = {"$lte": max_level}
+            if max_level is not None:
+                query["level"] = {"$lte": max_level}
 
-        # Execute search
-        communities = list(
-            communities_collection.find(query)
-            .sort([("coherence_score", -1), ("entity_count", -1)])
-            .limit(self.community_search_limit)
-        )
+            # Execute search
+            communities = list(
+                communities_collection.find(query)
+                .sort([("coherence_score", -1), ("entity_count", -1)])
+                .limit(self.community_search_limit)
+            )
 
-        logger.info(f"Found {len(communities)} relevant communities")
-        return communities
+            logger.info(f"Found {len(communities)} relevant communities")
+            duration = time.time() - start_time
+            _graphrag_retrieval_duration.observe(duration, labels=labels)
+            return communities
+        except Exception as e:
+            _graphrag_retrieval_errors.inc(labels=labels)
+            duration = time.time() - start_time
+            _graphrag_retrieval_duration.observe(duration, labels=labels)
+            raise
 
+    @handle_errors(fallback={"entities": [], "communities": [], "context": ""}, log_traceback=True, reraise=False)
     def hybrid_graphrag_search(
         self, query: str, query_entities: List[str], top_k: int = 10
     ) -> Dict[str, Any]:
@@ -254,64 +301,75 @@ class GraphRAGRetrievalEngine:
         Returns:
             Dictionary containing search results
         """
-        logger.info(f"Performing hybrid GraphRAG search for: {query}")
-
         start_time = time.time()
+        labels = {"method": "hybrid_graphrag_search"}
+        _graphrag_retrieval_calls.inc(labels=labels)
+        
+        try:
+            logger.info(f"Performing hybrid GraphRAG search for: {query}")
 
-        # 1. Search for entities
-        entities = self.entity_search(query_entities)
+            # 1. Search for entities
+            entities = self.entity_search(query_entities)
 
-        # 2. Get related entities via graph traversal
-        entity_ids = [entity["entity_id"] for entity in entities]
-        related_entities = self.relationship_traversal(entity_ids)
+            # 2. Get related entities via graph traversal
+            entity_ids = [entity["entity_id"] for entity in entities]
+            related_entities = self.relationship_traversal(entity_ids)
 
-        # 3. Get community summaries
-        all_entity_ids = entity_ids + [
-            entity["entity_id"] for entity in related_entities
-        ]
-        communities = self.community_retrieval(all_entity_ids)
+            # 3. Get community summaries
+            all_entity_ids = entity_ids + [
+                entity["entity_id"] for entity in related_entities
+            ]
+            communities = self.community_retrieval(all_entity_ids)
 
-        # 4. Build context
-        context_parts = []
+            # 4. Build context
+            context_parts = []
 
-        # Add entity information
-        if entities:
-            context_parts.append("## Relevant Entities:")
-            for entity in entities[:5]:
-                context_parts.append(
-                    f"- {entity['name']} ({entity['type']}): {entity['description']}"
-                )
+            # Add entity information
+            if entities:
+                context_parts.append("## Relevant Entities:")
+                for entity in entities[:5]:
+                    context_parts.append(
+                        f"- {entity['name']} ({entity['type']}): {entity['description']}"
+                    )
 
-        # Add related entities
-        if related_entities:
-            context_parts.append("\n## Related Entities:")
-            for entity in related_entities[:5]:
-                context_parts.append(
-                    f"- {entity['name']} ({entity['type']}): {entity['description']}"
-                )
+            # Add related entities
+            if related_entities:
+                context_parts.append("\n## Related Entities:")
+                for entity in related_entities[:5]:
+                    context_parts.append(
+                        f"- {entity['name']} ({entity['type']}): {entity['description']}"
+                    )
 
-        # Add community summaries
-        if communities:
-            context_parts.append("\n## Community Context:")
-            for community in communities:
-                context_parts.append(f"### {community['title']}")
-                context_parts.append(community["summary"])
+            # Add community summaries
+            if communities:
+                context_parts.append("\n## Community Context:")
+                for community in communities:
+                    context_parts.append(f"### {community['title']}")
+                    context_parts.append(community["summary"])
 
-        context = "\n".join(context_parts)
+            context = "\n".join(context_parts)
 
-        execution_time = time.time() - start_time
+            execution_time = time.time() - start_time
 
-        logger.info(f"Hybrid search completed in {execution_time:.2f} seconds")
+            logger.info(f"Hybrid search completed in {execution_time:.2f} seconds")
 
-        return {
-            "entities": entities,
-            "related_entities": related_entities,
-            "communities": communities,
-            "context": context,
-            "execution_time": execution_time,
-            "total_entities": len(entities) + len(related_entities),
-            "total_communities": len(communities),
-        }
+            result = {
+                "entities": entities,
+                "related_entities": related_entities,
+                "communities": communities,
+                "context": context,
+                "execution_time": execution_time,
+                "total_entities": len(entities) + len(related_entities),
+                "total_communities": len(communities),
+            }
+            duration = time.time() - start_time
+            _graphrag_retrieval_duration.observe(duration, labels=labels)
+            return result
+        except Exception as e:
+            _graphrag_retrieval_errors.inc(labels=labels)
+            duration = time.time() - start_time
+            _graphrag_retrieval_duration.observe(duration, labels=labels)
+            raise
 
     def get_entity_relationships(
         self, entity_id: str, relationship_types: Optional[List[str]] = None

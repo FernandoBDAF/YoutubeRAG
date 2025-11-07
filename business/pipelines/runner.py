@@ -7,8 +7,36 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from core.libraries.error_handling.decorators import handle_errors
 from core.libraries.error_handling.exceptions import PipelineError
+from core.libraries.metrics import Counter, Histogram, Timer, MetricRegistry
 
 logger = logging.getLogger(__name__)
+
+# Initialize pipeline metrics (shared across all pipelines)
+_pipeline_runs = Counter(
+    "pipeline_runs", "Number of pipeline runs started", labels=["pipeline_type"]
+)
+_pipeline_completed = Counter(
+    "pipeline_completed", "Number of pipeline runs completed", labels=["pipeline_type"]
+)
+_pipeline_failed = Counter(
+    "pipeline_failed", "Number of pipeline runs failed", labels=["pipeline_type"]
+)
+_pipeline_duration = Histogram(
+    "pipeline_duration_seconds", "Pipeline execution duration", labels=["pipeline_type"]
+)
+_pipeline_stage_failures = Counter(
+    "pipeline_stage_failures",
+    "Number of stage failures in pipelines",
+    labels=["pipeline_type", "stage"],
+)
+
+# Register metrics
+_registry = MetricRegistry.get_instance()
+_registry.register(_pipeline_runs)
+_registry.register(_pipeline_completed)
+_registry.register(_pipeline_failed)
+_registry.register(_pipeline_duration)
+_registry.register(_pipeline_stage_failures)
 
 # Stage imports (registry)
 from business.stages.ingestion.clean import CleanStage, CleanConfig
@@ -100,89 +128,123 @@ class PipelineRunner:
         return ref
 
     @handle_errors(log_traceback=True, capture_context=True, reraise=True)
-    def run(self) -> int:
-        """Run all pipeline stages with comprehensive error handling."""
-        exit_codes: List[int] = []
-        totals = {"stages": 0, "failed": 0}
+    def run(self, pipeline_type: str = "unknown") -> int:
+        """Run all pipeline stages with comprehensive error handling and metrics.
 
-        for i, spec in enumerate(self.specs, start=1):
-            try:
-                stage_cls = self._resolve_stage_class(spec.stage)
-                stage = stage_cls()
+        Args:
+            pipeline_type: Type of pipeline (e.g., "ingestion", "graphrag") for metrics labels
+        """
+        # Track pipeline start
+        pipeline_labels = {"pipeline_type": pipeline_type}
+        _pipeline_runs.inc(labels=pipeline_labels)
 
-                # Build config object from the stage's ConfigCls
-                cfg_cls = getattr(stage, "ConfigCls", None)
-                if cfg_cls is None:
-                    raise RuntimeError(f"Stage {stage_cls.__name__} missing ConfigCls")
+        with Timer() as timer:
+            exit_codes: List[int] = []
+            totals = {"stages": 0, "failed": 0}
 
-                if spec.config is None:
-                    config = cfg_cls()  # type: ignore
-                else:
-                    if not isinstance(spec.config, cfg_cls):  # type: ignore
-                        raise TypeError(
-                            f"Config type mismatch for stage {stage_cls.__name__}: "
-                            f"expected {cfg_cls.__name__}, got {type(spec.config).__name__}"
+            for i, spec in enumerate(self.specs, start=1):
+                try:
+                    stage_cls = self._resolve_stage_class(spec.stage)
+                    stage = stage_cls()
+
+                    # Build config object from the stage's ConfigCls
+                    cfg_cls = getattr(stage, "ConfigCls", None)
+                    if cfg_cls is None:
+                        raise RuntimeError(f"Stage {stage_cls.__name__} missing ConfigCls")
+
+                    if spec.config is None:
+                        config = cfg_cls()  # type: ignore
+                    else:
+                        if not isinstance(spec.config, cfg_cls):  # type: ignore
+                            raise TypeError(
+                                f"Config type mismatch for stage {stage_cls.__name__}: "
+                                f"expected {cfg_cls.__name__}, got {type(spec.config).__name__}"
+                            )
+                        config = spec.config
+
+                    logger.info(
+                        f"[PIPELINE] Starting stage {i}/{len(self.specs)}: {stage.name}"
+                    )
+                    print(
+                        f"[pipeline] ({i}/{len(self.specs)}) Running {stage.name} with read_db={config.read_db_name or config.db_name} write_db={config.write_db_name or config.db_name}"
+                    )
+
+                    # Run stage with error context
+                    code = stage.run(config)
+
+                    exit_codes.append(code)
+                    totals["stages"] += 1
+
+                    if code != 0:
+                        totals["failed"] += 1
+                        # Track stage failure
+                        _pipeline_stage_failures.inc(
+                            labels={**pipeline_labels, "stage": stage.name}
                         )
-                    config = spec.config
+                        logger.error(
+                            f"[PIPELINE] Stage {stage.name} failed with exit code {code}"
+                        )
+                        print(f"[pipeline] Stage {stage.name} failed with code {code}")
+                        if self.stop_on_error:
+                            print("[pipeline] stop_on_error=True → stopping")
+                            # Track pipeline failure
+                            _pipeline_failed.inc(labels=pipeline_labels)
+                            _pipeline_duration.observe(timer.elapsed(), labels=pipeline_labels)
+                            return code
+                    else:
+                        logger.info(f"[PIPELINE] Stage {stage.name} completed successfully")
 
-                logger.info(
-                    f"[PIPELINE] Starting stage {i}/{len(self.specs)}: {stage.name}"
-                )
-                print(
-                    f"[pipeline] ({i}/{len(self.specs)}) Running {stage.name} with read_db={config.read_db_name or config.db_name} write_db={config.write_db_name or config.db_name}"
-                )
-
-                # Run stage with error context
-                code = stage.run(config)
-
-                exit_codes.append(code)
-                totals["stages"] += 1
-
-                if code != 0:
+                except Exception as e:
+                    # Capture stage execution errors with full context
                     totals["failed"] += 1
+                    stage_name = (
+                        spec.stage
+                        if isinstance(spec.stage, str)
+                        else getattr(spec.stage, "name", "unknown")
+                    )
+
+                    # Track stage failure
+                    _pipeline_stage_failures.inc(
+                        labels={**pipeline_labels, "stage": stage_name}
+                    )
+
                     logger.error(
-                        f"[PIPELINE] Stage {stage.name} failed with exit code {code}"
+                        f"[PIPELINE] Stage {stage_name} crashed: {type(e).__name__}: {e}",
+                        exc_info=True,
                     )
-                    print(f"[pipeline] Stage {stage.name} failed with code {code}")
+
                     if self.stop_on_error:
-                        print("[pipeline] stop_on_error=True → stopping")
-                        return code
-                else:
-                    logger.info(f"[PIPELINE] Stage {stage.name} completed successfully")
+                        # Track pipeline failure
+                        _pipeline_failed.inc(labels=pipeline_labels)
+                        _pipeline_duration.observe(timer.elapsed(), labels=pipeline_labels)
+                        raise PipelineError(
+                            f"Pipeline failed at stage {stage_name}",
+                            context={
+                                "stage": stage_name,
+                                "stage_index": i,
+                                "total_stages": len(self.specs),
+                                "stages_completed": totals["stages"],
+                            },
+                            cause=e,
+                        )
+                    else:
+                        # Continue to next stage
+                        logger.warning(
+                            f"[PIPELINE] Continuing to next stage despite failure"
+                        )
+                        exit_codes.append(1)
 
-            except Exception as e:
-                # Capture stage execution errors with full context
-                totals["failed"] += 1
-                stage_name = (
-                    spec.stage
-                    if isinstance(spec.stage, str)
-                    else getattr(stage, "name", "unknown")
-                )
-
-                logger.error(
-                    f"[PIPELINE] Stage {stage_name} crashed: {type(e).__name__}: {e}",
-                    exc_info=True,
-                )
-
-                if self.stop_on_error:
-                    raise PipelineError(
-                        f"Pipeline failed at stage {stage_name}",
-                        context={
-                            "stage": stage_name,
-                            "stage_index": i,
-                            "total_stages": len(self.specs),
-                            "stages_completed": totals["stages"],
-                        },
-                        cause=e,
-                    )
-                else:
-                    # Continue to next stage
-                    logger.warning(
-                        f"[PIPELINE] Continuing to next stage despite failure"
-                    )
-                    exit_codes.append(1)
-
-        succeeded = totals["stages"] - totals["failed"]
+            succeeded = totals["stages"] - totals["failed"]
+            
+            # Track pipeline completion
+            if totals["failed"] == 0:
+                _pipeline_completed.inc(labels=pipeline_labels)
+            else:
+                _pipeline_failed.inc(labels=pipeline_labels)
+            
+            # Track pipeline duration
+            _pipeline_duration.observe(timer.elapsed(), labels=pipeline_labels)
+        
         logger.info(
             f"[PIPELINE] Completed: {succeeded}/{totals['stages']} stages succeeded, {totals['failed']} failed"
         )

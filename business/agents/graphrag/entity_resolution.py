@@ -10,6 +10,7 @@ import logging
 import re
 from core.libraries.retry import retry_llm_call
 from core.libraries.logging import log_exception
+from core.libraries.error_handling.decorators import handle_errors
 import hashlib
 from typing import Dict, List, Any, Optional, Set, Tuple
 from collections import defaultdict
@@ -91,6 +92,7 @@ class EntityResolutionAgent:
         Provide only the resolved description, nothing else.
         """
 
+    @handle_errors(fallback=[], log_traceback=True, reraise=False)
     def resolve_entities(
         self, extracted_data: List[Dict[str, Any]]
     ) -> List[ResolvedEntity]:

@@ -2,7 +2,7 @@
 
 **Purpose**: Central repository for future implementation ideas discovered during work  
 **Status**: Living Document - Continuously Updated  
-**Last Updated**: November 6, 2025 (Graph Construction Refactor Partial Completion)
+**Last Updated**: November 7, 2025 (Code Quality Refactor Completion + 5 New Backlog Items)
 
 ---
 
@@ -446,6 +446,177 @@
 
 ### High Priority
 
+#### IMPL-TEST-001: Production-Grade Test Coverage
+
+**Theme**: Testing Infrastructure  
+**Effort**: Large (40-60h)  
+**Dependencies**: None  
+**Discovered In**: GrammaPlan Methodology Implementation  
+**Discovered When**: November 7, 2025  
+**Priority**: High  
+**Description**:
+
+- Comprehensive test suite targeting >80% code coverage
+- Docker container for external test management (isolated environment)
+- Integration with existing documentation and testing guides
+- Test categories:
+  - Unit tests for all core libraries
+  - Integration tests for pipeline stages
+  - End-to-end tests for full workflows
+  - Performance/regression tests
+- Test automation and CI/CD integration
+- Coverage reporting and quality gates
+
+**Value**:
+
+- Production-ready code quality
+- Confidence in refactoring and changes
+- Catch regressions early
+- Documentation through tests
+- Faster development cycles
+
+**Why High**:
+
+- Critical for production deployment
+- Foundation for all future work
+- Prevents technical debt accumulation
+- Industry standard practice
+- Enables faster iteration
+
+**Related Documents**:
+
+- Plan: PLAN-LLM-TDD-AND-TESTING.md (test methodology)
+- Guide: documentation/technical/TESTING.md
+- Scripts: scripts/run_tests.py (existing)
+
+---
+
+#### IMPL-METHOD-003: Meta-PLAN Predefined Prompts
+
+**Theme**: Methodology Enhancement  
+**Effort**: Medium (8-12h)  
+**Dependencies**: PLAN_STRUCTURED-LLM-DEVELOPMENT complete ✅  
+**Discovered In**: GrammaPlan Methodology Implementation  
+**Discovered When**: November 7, 2025  
+**Priority**: High  
+**Description**:
+
+- Create standard prompts for LLM to execute entire methodology workflows
+- Prompt categories:
+  - "Create a new PLAN for [feature]" → walks through IMPLEMENTATION_START_POINT
+  - "Resume PLAN_X" → follows IMPLEMENTATION_RESUME protocol
+  - "Complete PLAN_X" → follows IMPLEMENTATION_END_POINT workflow
+  - "Create GrammaPlan for [initiative]" → GrammaPlan creation workflow
+  - "Analyze [code/plan] for [purpose]" → EXECUTION_ANALYSIS creation
+- Integration with IMPLEMENTATION_START_POINT.md
+- Prompt templates with placeholders
+- Examples for each prompt type
+
+**Value**:
+
+- Faster methodology adoption
+- Consistent execution across LLMs
+- Lower barrier to entry
+- Self-documenting processes
+- Reduces human error
+
+**Why High**:
+
+- Directly improves methodology usability
+- Enables autonomous LLM execution
+- Critical for medium-context models
+- High ROI (saves time on every PLAN)
+
+**Related Documents**:
+
+- Plan: PLAN_STRUCTURED-LLM-DEVELOPMENT.md
+- Entry point: IMPLEMENTATION_START_POINT.md
+- Exit point: IMPLEMENTATION_END_POINT.md
+
+---
+
+#### IMPL-METHOD-004: Meta-PLAN Reference Verification
+
+**Theme**: Methodology Maintenance  
+**Effort**: Small (3-4h)  
+**Dependencies**: None  
+**Discovered In**: GrammaPlan Methodology Implementation  
+**Discovered When**: November 7, 2025  
+**Priority**: High  
+**Description**:
+
+- Audit all documentation referencing PLAN_STRUCTURED-LLM-DEVELOPMENT.md
+- Identify documents with:
+  - References to outdated sections
+  - References to moved/renamed files
+  - References to deprecated practices
+  - Missing references to new features (GrammaPlan, MULTIPLE-PLANS-PROTOCOL)
+- Fix broken/outdated references
+- Update cross-references
+- Create audit script for future verification
+
+**Value**:
+
+- Prevents confusion from outdated references
+- Maintains documentation quality
+- Ensures methodology consistency
+- Catches documentation drift
+
+**Why High**:
+
+- Quick win (3-4 hours)
+- High impact on usability
+- Prevents wasted time from outdated docs
+- Foundation for ongoing maintenance
+
+**Related Documents**:
+
+- Plan: PLAN_STRUCTURED-LLM-DEVELOPMENT.md (the meta-PLAN)
+- All methodology documents (START_POINT, END_POINT, RESUME, etc.)
+
+---
+
+#### IMPL-PROTOCOL-001: GrammaPlan Implementation in Dependency System
+
+**Theme**: Methodology Feature  
+**Effort**: Medium (6-8h)  
+**Dependencies**: GrammaPlan concept defined ✅  
+**Discovered In**: GrammaPlan Methodology Implementation  
+**Discovered When**: November 7, 2025  
+**Priority**: High  
+**Description**:
+
+- Implement GrammaPlan tracking in MULTIPLE-PLANS-PROTOCOL.md
+- Add GrammaPlan coordination section to protocol
+- Update ACTIVE_PLANS.md dashboard with GrammaPlan format
+- Create GRAMMAPLAN-TEMPLATE.md (structured template)
+- Add GrammaPlan archiving guidance to IMPLEMENTATION_END_POINT.md
+- Add GrammaPlan creation to IMPLEMENTATION_START_POINT.md
+- Update PLAN_STRUCTURED-LLM-DEVELOPMENT.md with GrammaPlan achievement
+
+**Value**:
+
+- Enables large initiative management
+- Better for medium-context models
+- Supports parallel work streams
+- Reduces cognitive load per PLAN
+
+**Why High**:
+
+- Core methodology feature
+- Needed for current work (CODE-QUALITY could use it)
+- High value for large projects
+- Natural extension of existing methodology
+
+**Related Documents**:
+
+- Protocol: documentation/guides/MULTIPLE-PLANS-PROTOCOL.md
+- Dashboard: ACTIVE_PLANS.md
+- Plan: PLAN_STRUCTURED-LLM-DEVELOPMENT.md
+- Guide: documentation/guides/GRAMMAPLAN-GUIDE.md ✅
+
+---
+
 #### IMPL-001: Weaker Model Compatibility Testing
 
 **Theme**: Methodology Validation  
@@ -474,6 +645,157 @@
 ---
 
 ### Medium Priority
+
+#### IMPL-DOC-002: Documentation Naming Convention Review
+
+**Theme**: Documentation Organization  
+**Effort**: Medium (6-8h)  
+**Dependencies**: None  
+**Discovered In**: GrammaPlan Methodology Implementation  
+**Discovered When**: November 7, 2025  
+**Priority**: Medium  
+**Description**:
+
+- Review entire documentation folder for naming patterns
+- Analyze current naming conventions across all doc types:
+  - Guides (documentation/guides/)
+  - Architecture docs (documentation/architecture/)
+  - Context docs (documentation/context/)
+  - Planning docs (documentation/planning/)
+  - Reference docs (documentation/reference/)
+  - Technical docs (documentation/technical/)
+- Identify inconsistencies and establish patterns
+- Create documentation naming standard document
+- Standardize file and folder naming conventions
+- Update affected documents
+- Create migration guide for future docs
+
+**Value**:
+
+- Consistent documentation structure
+- Easier navigation and discovery
+- Clear purpose from file names
+- Better search/organization
+- Scales as docs grow
+
+**Why Medium**:
+
+- Improves organization significantly
+- Not blocking current work
+- Moderate effort required
+- Foundation for doc scaling
+
+**Related Documents**:
+
+- All documentation folders
+- DOCUMENTATION-PRINCIPLES-AND-PROCESS.md (may need update)
+- IMPL-DOC-001: Documentation Folder Restructuring (related)
+
+---
+
+#### IMPL-DOC-003: GraphRAG Documentation Knowledge Graph
+
+**Theme**: Documentation Enhancement / Innovation  
+**Effort**: Medium (12-16h)  
+**Dependencies**: GraphRAG pipeline working ✅  
+**Discovered In**: GrammaPlan Methodology Implementation  
+**Discovered When**: November 7, 2025  
+**Priority**: Medium  
+**Description**:
+
+- Create GraphRAG instance using current methodology documentation as corpus
+- Extract entities, relationships, and communities from documentation
+- Enable semantic search over methodology docs
+- Use cases:
+  - "Find all documents about testing"
+  - "What's the relationship between PLAN and SUBPLAN?"
+  - "Show me examples of EXECUTION_TASK creation"
+- Integration with documentation system
+- Auto-update as docs change
+- Query interface (CLI or web)
+- Extract insights from documentation structure:
+  - Most referenced documents
+  - Documentation gaps (orphaned concepts)
+  - Redundant information
+  - Relationship patterns
+
+**Value**:
+
+- Advanced documentation search
+- Understanding doc relationships
+- Identifying gaps and redundancies
+- Innovation showcase (dogfooding)
+- Better onboarding experience
+
+**Why Medium**:
+
+- Nice-to-have enhancement
+- Demonstrates GraphRAG capabilities
+- Not critical for current work
+- Moderate complexity
+
+**Related Documents**:
+
+- All methodology documentation
+- GraphRAG pipeline implementation
+- Documentation organization plans
+
+---
+
+#### IMPL-METHOD-005: Meta-PLAN Dependent Documentation Review
+
+**Theme**: Methodology Improvement  
+**Effort**: Medium (6-8h)  
+**Dependencies**: Multiple PLANs executed with methodology  
+**Discovered In**: GrammaPlan Methodology Implementation  
+**Discovered When**: November 7, 2025  
+**Priority**: Medium  
+**Description**:
+
+- Extract all documents that depend on PLAN_STRUCTURED-LLM-DEVELOPMENT.md methodology
+- Review for:
+  - Real-world usage patterns
+  - Common pain points
+  - Methodology gaps
+  - Improvement opportunities
+  - Success patterns
+- Documents to review:
+  - All active/paused PLANs
+  - All SUBPLANs
+  - All EXECUTION_TASKs
+  - EXECUTION_ANALYSIS documents
+  - Archived plans
+- Mine for insights:
+  - What works well?
+  - What's confusing?
+  - What's missing?
+  - What should change?
+- Create improvement recommendations document
+- Prioritize improvements
+- Feed into future meta-PLAN updates
+
+**Value**:
+
+- Data-driven methodology improvement
+- Real usage insights
+- Identifies gaps
+- Continuous improvement
+- Better methodology quality
+
+**Why Medium**:
+
+- Valuable but not urgent
+- Need sufficient usage data first
+- Moderate analysis effort
+- Long-term quality improvement
+
+**Related Documents**:
+
+- Plan: PLAN_STRUCTURED-LLM-DEVELOPMENT.md
+- All PLANs, SUBPLANs, EXECUTION_TASKs
+- Archives with methodology usage
+
+---
 
 #### IMPL-002: Validation & Template Generation Tools
 

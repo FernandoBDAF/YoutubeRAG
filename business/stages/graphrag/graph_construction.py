@@ -18,6 +18,7 @@ from core.models.graphrag import ResolvedRelationship
 from business.services.graphrag.indexes import get_graphrag_collections
 from core.config.paths import COLL_CHUNKS
 from core.libraries.database import batch_insert
+from core.libraries.error_handling.decorators import handle_errors
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
@@ -51,15 +52,9 @@ class GraphConstructionStage(BaseStage):
         super().setup()
 
         # Initialize OpenAI client for LLM operations
-        import os
-        from openai import OpenAI
+        from core.libraries.llm import get_openai_client
 
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise RuntimeError(
-                "OPENAI_API_KEY is required for GraphRAG stages. Set it in .env file."
-            )
-        self.llm_client = OpenAI(api_key=api_key, timeout=60)
+        self.llm_client = get_openai_client(timeout=60)
 
         # Initialize the relationship resolution agent now that we have access to self.config
         self.relationship_agent = RelationshipResolutionAgent(
@@ -218,6 +213,7 @@ class GraphConstructionStage(BaseStage):
         for doc in cursor:
             yield doc
 
+    @handle_errors(fallback=False, log_traceback=True, reraise=False)
     def handle_doc(self, doc: Dict[str, Any]) -> bool:
         """
         Process a single chunk for graph construction and write to database.
@@ -1494,6 +1490,7 @@ class GraphConstructionStage(BaseStage):
 
         return False  # Failure (Achievement 0.3)
 
+    @handle_errors(fallback=[], log_traceback=True, reraise=False)
     def process_batch(
         self, docs: List[Dict[str, Any]]
     ) -> List[Optional[Dict[str, Any]]]:

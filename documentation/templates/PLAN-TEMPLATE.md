@@ -95,6 +95,34 @@
 
 ---
 
+## 🌳 GrammaPlan Consideration
+
+**Was GrammaPlan considered?**: [Yes / No]
+
+**Decision Criteria Checked**:
+
+- [ ] Plan would exceed 800 lines? [Yes/No]
+- [ ] Estimated effort > 80 hours? [Yes/No]
+- [ ] Work spans 3+ domains? [Yes/No]
+- [ ] Natural parallelism opportunities? [Yes/No]
+
+**Decision**: [Single PLAN / GrammaPlan]
+
+**Rationale**:
+
+[FILL: If Single PLAN chosen, explain why:]
+
+- [Reason 1]
+- [Reason 2]
+
+[FILL: If GrammaPlan chosen, see GRAMMAPLAN-TEMPLATE.md]
+
+**See**: `documentation/guides/GRAMMAPLAN-GUIDE.md` for complete criteria and guidance
+
+**Case Study**: EXECUTION_ANALYSIS_CODE-QUALITY-COMPLETION-REVIEW.md analyzes a 1,247-line plan that should have been a GrammaPlan
+
+---
+
 ## 🎯 Desirable Achievements (Priority Order)
 
 [FILL: List WHAT needs to be achieved, not HOW to achieve it. Subplans (HOW) are created on-demand.]
@@ -164,6 +192,15 @@ _None yet - will be added if gaps discovered during execution_
 
 ## 🔄 Subplan Tracking (Updated During Execution)
 
+**Summary Statistics** (update after each EXECUTION_TASK completion):
+
+- **SUBPLANs**: [0] created ([0] complete, [0] in progress, [0] pending)
+- **EXECUTION_TASKs**: [0] created ([0] complete, [0] abandoned)
+- **Total Iterations**: [0] (across all EXECUTION_TASKs)
+- **Average Iterations**: [0.0] per task
+- **Circular Debugging**: [0] incidents (EXECUTION_TASK_XX_YY_02 or higher)
+- **Time Spent**: [0h] (from EXECUTION_TASK completion times)
+
 **Subplans Created for This PLAN**:
 
 _None yet - will be added as subplans are created_
@@ -172,18 +209,25 @@ _None yet - will be added as subplans are created_
 
 ```
 - SUBPLAN_XX: [Achievement addressed] - [Brief description] - Status: [Not Started/In Progress/Complete]
-  └─ EXECUTION_TASK_XX_YY: [Brief description] - Status: [In Progress/Complete/Abandoned]
+  └─ EXECUTION_TASK_XX_YY: [Brief description] - Status: [In Progress/Complete/Abandoned] (N iterations, Xh)
 ```
 
 **Example**:
 
 ```
 - SUBPLAN_01: Achievement 1.1 - Status: Complete ✅
-  └─ EXECUTION_TASK_01_01: First attempt - Status: Complete ✅
-  └─ EXECUTION_TASK_01_02: Second attempt (circular debug recovery) - Status: Complete ✅
+  └─ EXECUTION_TASK_01_01: First attempt - Status: Complete ✅ (3 iterations, 2h)
+  └─ EXECUTION_TASK_01_02: Second attempt (circular debug recovery) - Status: Complete ✅ (5 iterations, 3h)
 ```
 
-[FILL: Update this section as subplans are created. Shows progress at a glance.]
+**Instructions**:
+
+- Add each subplan when created
+- Update status as work progresses
+- **Update summary statistics after each EXECUTION_TASK completion**
+- Track iterations and time from EXECUTION_TASK documents
+
+[FILL: Update this section as subplans are created. Shows progress at a glance. Statistics enable END_POINT quality analysis.]
 
 ---
 
@@ -297,6 +341,83 @@ _None yet - will be added as subplans are created_
 - [Improvement suggested]
 
 [FILL: This section grows during execution. Captures process insights.]
+
+---
+
+## 🎓 Key Learnings (Updated During Execution)
+
+**Technical Learnings**:
+
+1. [Learning 1] - Discovered in: [EXECUTION_TASK_XX_YY] - [Date]
+2. [Learning 2] - Discovered in: [EXECUTION_TASK_XX_YY] - [Date]
+
+**Process Learnings**:
+
+1. [Learning 1] - Discovered in: [EXECUTION_TASK_XX_YY] - [Date]
+2. [Learning 2] - Discovered in: [EXECUTION_TASK_XX_YY] - [Date]
+
+**Code Patterns Discovered**:
+
+1. [Pattern 1] - Applied in: [Files/modules] - [EXECUTION_TASK reference]
+2. [Pattern 2] - Applied in: [Files/modules] - [EXECUTION_TASK reference]
+
+**Instructions**:
+
+- Update this section as you work (don't wait until the end)
+- Extract key learnings from EXECUTION_TASK "Learning Summary" sections
+- Reference the EXECUTION_TASK where each learning was discovered
+- Makes learning extraction easier at IMPLEMENTATION_END_POINT
+
+[FILL: Add learnings incrementally during execution. This makes END_POINT learning extraction much faster and prevents loss of insights.]
+
+---
+
+## ✅ Pre-Completion Review (MANDATORY Before Marking Complete)
+
+**⚠️ DO NOT mark status as "Complete" until this review is done!**
+
+**Review Date**: [YYYY-MM-DD HH:MM UTC]  
+**Reviewer**: [Name/Role]
+
+### END_POINT Compliance Checklist
+
+- [ ] **All achievements met** (verify in "Desirable Achievements" section above)
+- [ ] **Execution statistics complete** (verify in "Subplan Tracking" section)
+  - [ ] All SUBPLAN/EXECUTION_TASK counts accurate
+  - [ ] Total iterations calculated
+  - [ ] Circular debugging incidents counted
+  - [ ] Time spent totaled
+- [ ] **Pre-archiving checklist complete** (from IMPLEMENTATION_END_POINT.md)
+  - [ ] All pending changes accepted in editor
+  - [ ] Test suite passing (if code changes)
+  - [ ] Linters passing (if code changes)
+  - [ ] All changes committed (git status clean)
+- [ ] **Backlog updated** (IMPLEMENTATION_BACKLOG.md has new items extracted)
+  - [ ] All EXECUTION_TASKs reviewed for future work
+  - [ ] At least [3-5] items added to backlog (for plans >20 hours)
+- [ ] **Process improvement analysis done**
+  - [ ] "What worked" documented (in Meta-Learning Space)
+  - [ ] "What didn't work" documented (in Meta-Learning Space)
+  - [ ] Methodology improvements identified
+- [ ] **Learning extraction complete**
+  - [ ] Technical learnings aggregated (in Key Learnings section)
+  - [ ] Process learnings aggregated (in Key Learnings section)
+  - [ ] Relevant documentation updated
+- [ ] **Ready for archiving**
+  - [ ] Archive structure planned (see Archive Plan section below)
+  - [ ] INDEX.md content prepared
+  - [ ] Completion summary drafted
+
+### Sign-Off
+
+**Reviewer**: [Name] - [Date]  
+**Status**: [ ] Pending / [✅] Approved for Completion
+
+**If NOT Approved**: [List missing items that must be completed first]
+
+**Once Approved**: Update PLAN status to "Complete" and proceed with archiving per IMPLEMENTATION_END_POINT.md
+
+[FILL: This review is MANDATORY. Do not skip. Prevents incomplete completions like CODE-QUALITY case study showed.]
 
 ---
 

@@ -182,3 +182,73 @@ def configure_logger_for_component(
     logger.propagate = propagate
 
     return logger
+
+
+def setup_session_logger(
+    session_id: str,
+    log_dir: str = "logs/sessions",
+    level: int = logging.INFO,
+    console_level: Optional[int] = logging.WARNING,
+    verbose: bool = False,
+) -> logging.Logger:
+    """Setup a session-specific logger with file and optional console handlers.
+
+    Creates a dedicated logger for a session (e.g., chat session) that writes
+    to a session-specific log file. Useful for tracking individual user sessions
+    or conversation threads.
+
+    Args:
+        session_id: Unique session identifier (used in logger name and filename)
+        log_dir: Directory for session logs (default: "logs/sessions")
+        level: Logging level for file handler (default: INFO)
+        console_level: Logging level for console handler (default: WARNING, None to disable)
+        verbose: If True, set file level to DEBUG
+
+    Returns:
+        Configured logger instance with session-specific handlers
+
+    Example:
+        logger = setup_session_logger("user-123", log_dir="chat_logs")
+        logger.info("User query received")  # Logs to chat_logs/user-123.log
+    """
+    if verbose:
+        level = logging.DEBUG
+
+    # Create logger with session-specific name
+    logger_name = f"session_{session_id}"
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(level)
+
+    # Avoid duplicate handlers if logger already configured
+    if logger.handlers:
+        return logger
+
+    # Ensure log directory exists
+    log_path = Path(log_dir)
+    log_path.mkdir(parents=True, exist_ok=True)
+
+    # File handler - session-specific log file
+    log_file = log_path / f"{session_id}.log"
+    try:
+        file_handler = logging.FileHandler(str(log_file), encoding="utf-8")
+        file_handler.setLevel(level)
+        file_formatter = logging.Formatter(
+            "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+        file_handler.setFormatter(file_formatter)
+        logger.addHandler(file_handler)
+    except Exception as e:
+        # Fallback to root logger if file creation fails
+        root_logger = logging.getLogger()
+        root_logger.warning(f"Failed to create session log file {log_file}: {e}")
+
+    # Optional console handler with minimal format
+    if console_level is not None:
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(console_level)
+        console_formatter = logging.Formatter("%(levelname)s: %(message)s")
+        console_handler.setFormatter(console_formatter)
+        logger.addHandler(console_handler)
+
+    return logger

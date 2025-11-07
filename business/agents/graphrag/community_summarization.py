@@ -8,6 +8,7 @@ comprehensive summaries of detected communities.
 import logging
 from core.libraries.retry import retry_llm_call
 from core.libraries.logging import log_exception
+from core.libraries.error_handling.decorators import handle_errors
 from typing import Dict, List, Any, Optional, Tuple
 from openai import OpenAI
 from core.models.graphrag import ResolvedEntity, ResolvedRelationship, CommunitySummary
@@ -236,6 +237,7 @@ class CommunitySummarizationAgent:
 
         logger.info(f"Initialized CommunitySummarizationAgent with model {model_name}")
 
+    @handle_errors(fallback={}, log_traceback=True, reraise=False)
     def summarize_communities(
         self,
         communities: Dict[int, Dict[str, Any]],

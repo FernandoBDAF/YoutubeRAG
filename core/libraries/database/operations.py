@@ -5,6 +5,7 @@ Database operation helpers for batch operations and queries.
 import logging
 from typing import Any, Dict, List, Optional, Sequence
 from pymongo.collection import Collection
+from pymongo.database import Database
 from pymongo.errors import BulkWriteError
 
 logger = logging.getLogger(__name__)
@@ -259,3 +260,72 @@ def batch_delete(
         "failed": failed,
         "errors": errors,
     }
+
+
+def get_collection(
+    db: Database,
+    collection_name: str,
+    create_if_missing: bool = False,
+) -> Collection:
+    """Get a MongoDB collection with optional creation.
+
+    Args:
+        db: MongoDB database instance
+        collection_name: Name of the collection
+        create_if_missing: If True, create collection if it doesn't exist
+
+    Returns:
+        Collection instance
+
+    Example:
+        from dependencies.database.mongodb import get_mongo_client
+        from core.config.paths import DB_NAME
+
+        client = get_mongo_client()
+        db = client[DB_NAME]
+        col = get_collection(db, "video_chunks")
+    """
+    collection = db[collection_name]
+
+    if create_if_missing:
+        # Create collection if it doesn't exist (MongoDB creates lazily)
+        # This is a no-op if collection already exists
+        db.create_collection(collection_name, check_exists=True)
+
+    return collection
+
+
+def get_database(
+    client: Any,  # MongoClient type from pymongo
+    db_name: str,
+    create_if_missing: bool = False,
+) -> Database:
+    """Get a MongoDB database with optional creation.
+
+    Args:
+        client: MongoDB client instance
+        db_name: Name of the database
+        create_if_missing: If True, create database if it doesn't exist (MongoDB creates lazily)
+
+    Returns:
+        Database instance
+
+    Example:
+        from dependencies.database.mongodb import get_mongo_client
+        from core.config.paths import DB_NAME
+
+        client = get_mongo_client()
+        db = get_database(client, DB_NAME)
+    """
+    db = client[db_name]
+
+    if create_if_missing:
+        # MongoDB creates databases lazily on first write
+        # This is a no-op if database already exists
+        # We can verify by listing collections (creates if needed)
+        try:
+            db.list_collection_names()
+        except Exception:
+            pass  # Database will be created on first write
+
+    return db

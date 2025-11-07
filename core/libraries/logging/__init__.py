@@ -21,6 +21,7 @@ from core.libraries.logging.setup import (
     get_logger,
     create_timestamped_log_path,
     configure_logger_for_component,
+    setup_session_logger,
 )
 
 from core.libraries.logging.context import (
@@ -64,6 +65,7 @@ __all__ = [
     "get_logger",
     "create_timestamped_log_path",
     "configure_logger_for_component",
+    "setup_session_logger",
     # Context
     "set_log_context",
     "get_log_context",

@@ -1,30 +1,54 @@
 """
 LLM Operations Library - Cross-Cutting Concern.
 
-Provides unified LLM interface, provider abstraction, and helpers.
-Part of the CORE libraries - Tier 2 (simple implementation + TODOs).
+Provides standardized LLM client initialization and call helpers.
+Part of the CORE libraries - Tier 2 (foundational implementation).
 
-TODO: Implement
-- Unified LLM interface (provider-agnostic) (simple)
-- call_llm() helper function
-- Streaming support (TODO)
-- Token counting (TODO)
-- Cost tracking (TODO)
-- Prompt template management (TODO)
+Usage:
+    from core.libraries.llm import get_openai_client, call_llm_simple, call_llm_with_structured_output
 
-Usage (planned):
-    from core.libraries.llm import LLMClient, call_llm
+    # Initialize client
+    client = get_openai_client()
 
-    # Provider-agnostic interface
-    client = LLMClient.get_instance(provider='openai')  # or 'anthropic', etc.
-
-    response = call_llm(
+    # Simple call
+    response = call_llm_simple(
         client,
-        system_prompt="You are...",
-        user_prompt="Extract entities from...",
-        model="gpt-4o-mini",
-        temperature=0.1
+        system_prompt="You are a helpful assistant.",
+        user_prompt="What is Python?",
+        model="gpt-4o-mini"
+    )
+
+    # Structured output
+    from pydantic import BaseModel
+    class EntityModel(BaseModel):
+        name: str
+        type: str
+
+    result = call_llm_with_structured_output(
+        client,
+        system_prompt="Extract entities.",
+        user_prompt="Text: Python is a language.",
+        response_model=EntityModel
     )
 """
 
-__all__ = []  # TODO: Export when implemented
+from core.libraries.llm.client import (
+    get_openai_client,
+    is_openai_available,
+)
+
+from core.libraries.llm.calls import (
+    call_llm,
+    call_llm_simple,
+    call_llm_with_structured_output,
+)
+
+__all__ = [
+    # Client
+    "get_openai_client",
+    "is_openai_available",
+    # Calls
+    "call_llm",
+    "call_llm_simple",
+    "call_llm_with_structured_output",
+]

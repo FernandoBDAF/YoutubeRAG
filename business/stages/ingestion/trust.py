@@ -3,6 +3,7 @@ import logging
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set
+import argparse
 from collections import defaultdict
 
 from dotenv import load_dotenv
@@ -16,13 +17,12 @@ try:
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
-    _sys.path.append(
-        _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", ".."))
-    )
+    _sys.path.append(_os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "..")))
     from dependencies.database.mongodb import get_mongo_client
     from core.base.stage import BaseStage
     from core.models.config import BaseStageConfig
 from core.config.paths import DB_NAME, COLL_CHUNKS
+from core.libraries.error_handling.decorators import handle_errors
 
 logger = logging.getLogger(__name__)
 
@@ -43,12 +43,7 @@ def compute_trust_score(chunk: Dict[str, Any]) -> float:
 
     w1, w2, w3, w4 = 0.4, 0.3, 0.2, 0.1
     code_valid = 1.0 if chunk.get("metadata", {}).get("code_present") else 0.6
-    score = (
-        w1 * consensus
-        + w2 * recency_component
-        + w3 * engagement_component
-        + w4 * code_valid
-    )
+    score = w1 * consensus + w2 * recency_component + w3 * engagement_component + w4 * code_valid
     return max(0.0, min(1.0, score))
 
 
@@ -61,11 +56,9 @@ class TrustConfig(BaseStageConfig):
     neighbors: int = 2
 
     @classmethod
-    def from_args_env(cls, args, env, default_db):
+    def from_args_env(cls, args: Any, env: Dict[str, str], default_db: Optional[str]):
         base = BaseStageConfig.from_args_env(args, env, default_db)
-        use_llm = bool(
-            getattr(args, "llm", False) or (env.get("TRUST_WITH_LLM") == "1")
-        )
+        use_llm = bool(getattr(args, "llm", False) or (env.get("TRUST_WITH_LLM") == "1"))
         auto_llm = (env.get("TRUST_LLM_AUTO", "true") or "true").lower() in {
             "1",
             "true",
@@ -101,16 +94,12 @@ class TrustConfig(BaseStageConfig):
 
 class TrustStage(BaseStage):
     name = "trust"
-    description = (
-        "Compute trust scores with heuristic base and optional LLM for borderline cases"
-    )
+    description = "Compute trust scores with heuristic base and optional LLM for borderline cases"
     ConfigCls = TrustConfig
 
-    def iter_docs(self):
+    def iter_docs(self) -> List[Dict[str, Any]]:
         src_db = self.config.read_db_name or self.config.db_name
-        coll = self.get_collection(
-            self.config.read_coll or COLL_CHUNKS, io="read", db_name=src_db
-        )
+        coll = self.get_collection(self.config.read_coll or COLL_CHUNKS, io="read", db_name=src_db)
         return list(
             coll.find(
                 {},
@@ -126,7 +115,8 @@ class TrustStage(BaseStage):
             )
         )
 
-    def handle_doc(self, c):
+    @handle_errors(fallback=None, log_traceback=True, reraise=False)
+    def handle_doc(self, c: Dict[str, Any]) -> None:
         dst_db = self.config.write_db_name or self.config.db_name
         coll = self.get_collection(
             self.config.write_coll or COLL_CHUNKS, io="write", db_name=dst_db
@@ -273,9 +263,7 @@ class TrustStage(BaseStage):
             for chunk in chunks:
                 chunk_trust_score = chunk.get("trust_score", 0.0)
                 chunk_method = chunk.get("trust_method", "heuristic")
-                resolved_entities = chunk.get("graphrag_resolution", {}).get(
-                    "resolved_entities", 0
-                )
+                resolved_entities = chunk.get("graphrag_resolution", {}).get("resolved_entities", 0)
 
                 # If chunk has resolved entities, distribute trust score
                 if resolved_entities > 0:
@@ -300,9 +288,7 @@ class TrustStage(BaseStage):
                 avg_trust_score = trust_info["trust_score"]
 
                 # Weight by source count and trust score
-                weighted_score = (
-                    avg_trust_score * min(source_count, 5) / 5.0
-                )  # Cap at 5 sources
+                weighted_score = avg_trust_score * min(source_count, 5) / 5.0  # Cap at 5 sources
 
                 aggregated_scores[chunk_id] = {
                     "trust_score": weighted_score,
@@ -311,9 +297,7 @@ class TrustStage(BaseStage):
                     "video_id": trust_info["video_id"],
                 }
 
-            logger.info(
-                f"Generated entity trust scores for {len(aggregated_scores)} entities"
-            )
+            logger.info(f"Generated entity trust scores for {len(aggregated_scores)} entities")
 
             return {
                 "entity_trust_scores": aggregated_scores,
@@ -341,9 +325,7 @@ class TrustStage(BaseStage):
                 "generated_at": time.time(),
             }
 
-    def propagate_trust_to_entities(
-        self, video_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def propagate_trust_to_entities(self, video_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Propagate trust scores from chunks to entities in the GraphRAG collections.
 
@@ -383,9 +365,7 @@ class TrustStage(BaseStage):
                 chunk_trust_scores = []
                 for chunk_id in source_chunks:
                     if chunk_id in entity_trust_scores:
-                        chunk_trust_scores.append(
-                            entity_trust_scores[chunk_id]["trust_score"]
-                        )
+                        chunk_trust_scores.append(entity_trust_scores[chunk_id]["trust_score"])
 
                 if chunk_trust_scores:
                     # Use average trust score from source chunks
@@ -411,9 +391,7 @@ class TrustStage(BaseStage):
                 "propagated_entities": propagated_count,
                 "total_entities": len(entity_trust_scores),
                 "propagation_rate": (
-                    propagated_count / len(entity_trust_scores)
-                    if entity_trust_scores
-                    else 0
+                    propagated_count / len(entity_trust_scores) if entity_trust_scores else 0
                 ),
                 "propagated_at": time.time(),
             }

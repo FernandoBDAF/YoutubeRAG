@@ -2,6 +2,7 @@ from typing import Optional, Dict, Any
 import json
 
 from core.base.agent import BaseAgent, BaseAgentConfig
+from core.libraries.error_handling.decorators import handle_errors
 
 
 class TrustRankAgent(BaseAgent):
@@ -31,6 +32,7 @@ class TrustRankAgent(BaseAgent):
         )
         return system_prompt, user_prompt
 
+    @handle_errors(fallback=lambda *args, **kwargs: {"trust_score": None, "reason": "fallback"}, log_traceback=True, reraise=False)
     def score(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         try:
             system_prompt, user_prompt = self.build_prompts(payload)

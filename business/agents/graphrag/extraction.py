@@ -17,6 +17,7 @@ from core.models.graphrag import (
 )
 from core.libraries.retry import retry_llm_call
 from core.libraries.logging import log_exception
+from core.libraries.error_handling.decorators import handle_errors
 
 logger = logging.getLogger(__name__)
 
@@ -268,6 +269,7 @@ class GraphExtractionAgent:
         {ontology_context}
         """
 
+    @handle_errors(fallback=None, log_traceback=True, reraise=False)
     def extract_from_chunk(self, chunk: Dict[str, Any]) -> Optional[KnowledgeModel]:
         """
         Extract entities and relationships from a single text chunk.
@@ -1163,6 +1165,7 @@ Return only the normalized word (single word, no explanation):"""
         )
         return rel  # Already in correct order
 
+    @handle_errors(fallback=[], log_traceback=True, reraise=False)
     def extract_batch(
         self, chunks: List[Dict[str, Any]]
     ) -> List[Optional[KnowledgeModel]]:

@@ -15,6 +15,7 @@ import json
 import re
 
 from core.base.agent import BaseAgent, BaseAgentConfig
+from core.libraries.error_handling.decorators import handle_errors
 
 
 class EnrichmentAgent(BaseAgent):
@@ -86,6 +87,26 @@ class EnrichmentAgent(BaseAgent):
 
         return system_prompt, user_prompt
 
+    @handle_errors(
+        fallback=lambda: {
+            "summary": "",
+            "entities": [],
+            "concepts": [],
+            "relations": [],
+            "temporal_references": [],
+            "numerical_data": [],
+            "visual_cues": [],
+            "context": {
+                "speaker": None,
+                "sentiment": None,
+                "tone": None,
+                "language": None,
+                "tags": [],
+            },
+        },
+        log_traceback=True,
+        reraise=False,
+    )
     def annotate_chunk_structured(self, chunk_text: str) -> Dict[str, Any]:
         system_prompt, user_prompt = self.build_chunk_structured_prompts(chunk_text)
         out = self.call_model(system_prompt, user_prompt)

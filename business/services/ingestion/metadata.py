@@ -1,8 +1,29 @@
+import time
 from typing import Any, Dict, List, Tuple, Optional
 from statistics import mean
 from pymongo.collection import Collection
 import os
 import re
+
+from core.libraries.error_handling.decorators import handle_errors
+from core.libraries.metrics import Counter, Histogram, MetricRegistry
+
+# Initialize metadata service metrics
+_ingestion_metadata_calls = Counter(
+    "ingestion_metadata_calls", "Number of metadata operations", labels=["operation"]
+)
+_ingestion_metadata_errors = Counter(
+    "ingestion_metadata_errors", "Number of metadata operation errors", labels=["operation"]
+)
+_ingestion_metadata_duration = Histogram(
+    "ingestion_metadata_duration_seconds", "Metadata operation duration", labels=["operation"]
+)
+
+# Register metrics
+_registry = MetricRegistry.get_instance()
+_registry.register(_ingestion_metadata_calls)
+_registry.register(_ingestion_metadata_errors)
+_registry.register(_ingestion_metadata_duration)
 
 
 def top_distinct_values(col: Collection, field: str, limit: int = 50) -> List[Any]:
@@ -29,6 +50,7 @@ def top_distinct_values(col: Collection, field: str, limit: int = 50) -> List[An
         return []
 
 
+@handle_errors(fallback={}, log_traceback=True, reraise=False)
 def build_catalog(col: Collection, limit: int = 50) -> Dict[str, List[Any]]:
     """Build catalog of ALL distinct filterable values (unlimited for quality).
 
@@ -37,130 +59,155 @@ def build_catalog(col: Collection, limit: int = 50) -> Dict[str, List[Any]]:
 
     Note: metadata.tags is excluded (empty in current data; see enrich_agent.py comments for future video-level tagging).
     """
-    catalog: Dict[str, List[Any]] = {}
-    # Filterable fields: removed metadata.tags (empty), relations.predicate/object (not useful)
-    # Added entities.name, relations.subject for better semantic filtering
-    for key in [
-        "context.tags",
-        "concepts.name",
-        "entities.name",
-        "relations.subject",
-    ]:
+    start_time = time.time()
+    labels = {"operation": "build_catalog"}
+    _ingestion_metadata_calls.inc(labels=labels)
+    
+    try:
+        catalog: Dict[str, List[Any]] = {}
+        # Filterable fields: removed metadata.tags (empty), relations.predicate/object (not useful)
+        # Added entities.name, relations.subject for better semantic filtering
+        for key in [
+            "context.tags",
+            "concepts.name",
+            "entities.name",
+            "relations.subject",
+        ]:
+            try:
+                vals = col.distinct(key)
+                cleaned = [v for v in vals if isinstance(v, (str, int, float))]
+                # NO LIMIT - capture ALL values for best planner decisions
+                catalog[key] = cleaned
+            except Exception:
+                catalog[key] = []
+        # Persist full catalog snapshot for debugging (non-blocking best-effort)
         try:
-            vals = col.distinct(key)
-            cleaned = [v for v in vals if isinstance(v, (str, int, float))]
-            # NO LIMIT - capture ALL values for best planner decisions
-            catalog[key] = cleaned
+            from pathlib import Path
+            import json as _json
+
+            # Save full catalog (not trimmed) to see all available filter values
+            Path("chat_logs").mkdir(parents=True, exist_ok=True)
+            Path("chat_logs/catalog_snapshot.json").write_text(
+                _json.dumps(catalog, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
         except Exception:
-            catalog[key] = []
-    # Persist full catalog snapshot for debugging (non-blocking best-effort)
-    try:
-        from pathlib import Path
-        import json as _json
-
-        # Save full catalog (not trimmed) to see all available filter values
-        Path("chat_logs").mkdir(parents=True, exist_ok=True)
-        Path("chat_logs/catalog_snapshot.json").write_text(
-            _json.dumps(catalog, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-    except Exception:
-        pass
-    # Age buckets
-    try:
-        ages = col.distinct("metadata.age_days")
-        ages = [a for a in ages if isinstance(a, (int, float))]
-        buckets = [
-            ("recent", 0, 30),
-            ("quarter", 0, 90),
-            ("year", 0, 365),
-        ]
-        catalog["metadata.age_days:buckets"] = [b[0] for b in buckets]
-    except Exception:
-        catalog["metadata.age_days:buckets"] = []
-    return catalog
+            pass
+        # Age buckets
+        try:
+            ages = col.distinct("metadata.age_days")
+            ages = [a for a in ages if isinstance(a, (int, float))]
+            buckets = [
+                ("recent", 0, 30),
+                ("quarter", 0, 90),
+                ("year", 0, 365),
+            ]
+            catalog["metadata.age_days:buckets"] = [b[0] for b in buckets]
+        except Exception:
+            catalog["metadata.age_days:buckets"] = []
+        duration = time.time() - start_time
+        _ingestion_metadata_duration.observe(duration, labels=labels)
+        return catalog
+    except Exception as e:
+        _ingestion_metadata_errors.inc(labels=labels)
+        duration = time.time() - start_time
+        _ingestion_metadata_duration.observe(duration, labels=labels)
+        raise
 
 
+@handle_errors(fallback={}, log_traceback=True, reraise=False)
 def build_insights(col: Collection, limit: int = 50) -> Dict[str, Any]:
     """Fast, approximate insights using aggregation + sampling (non-blocking).
 
     Avoids N*count_documents loops that can stall the CLI on large corpora.
     """
-    insights: Dict[str, Any] = {}
-    # sample size bounded to keep latency reasonable
+    start_time = time.time()
+    labels = {"operation": "build_insights"}
+    _ingestion_metadata_calls.inc(labels=labels)
+    
     try:
-        sample_size = int(os.getenv("INSIGHTS_SAMPLE_SIZE", "2000"))
-    except Exception:
-        sample_size = 2000
-    sample_size = max(200, min(sample_size, 20000))
+        insights: Dict[str, Any] = {}
+        # sample size bounded to keep latency reasonable
+        try:
+            sample_size = int(os.getenv("INSIGHTS_SAMPLE_SIZE", "2000"))
+        except Exception:
+            sample_size = 2000
+        sample_size = max(200, min(sample_size, 20000))
 
-    def top_counts_array(field: str, out_key: str) -> None:
+        def top_counts_array(field: str, out_key: str) -> None:
+            try:
+                pipeline = [
+                    {"$sample": {"size": sample_size}},
+                    {"$unwind": f"${field}"},
+                    {"$match": {field: {"$type": "string"}}},
+                    {"$group": {"_id": f"${field}", "c": {"$sum": 1}}},
+                    {"$sort": {"c": -1}},
+                    {"$limit": int(limit)},
+                ]
+                rows = list(col.aggregate(pipeline))
+                insights[out_key] = [(str(r.get("_id")), int(r.get("c", 0))) for r in rows]
+            except Exception:
+                insights[out_key] = []
+
+        def top_counts_concepts(out_key: str) -> None:
+            try:
+                pipeline = [
+                    {"$sample": {"size": sample_size}},
+                    {"$unwind": "$concepts"},
+                    {"$match": {"concepts.name": {"$type": "string"}}},
+                    {"$group": {"_id": "$concepts.name", "c": {"$sum": 1}}},
+                    {"$sort": {"c": -1}},
+                    {"$limit": int(limit)},
+                ]
+                rows = list(col.aggregate(pipeline))
+                insights[out_key] = [(str(r.get("_id")), int(r.get("c", 0))) for r in rows]
+            except Exception:
+                insights[out_key] = []
+
+        # Array-based counts via sampling
+        top_counts_array("metadata.tags", "tag_counts")
+        top_counts_array("context.tags", "context_tag_counts")
+        top_counts_concepts("concept_counts")
+
+        # Trust avg via aggregation
         try:
             pipeline = [
+                {"$match": {"trust_score": {"$type": "number"}}},
                 {"$sample": {"size": sample_size}},
-                {"$unwind": f"${field}"},
-                {"$match": {field: {"$type": "string"}}},
-                {"$group": {"_id": f"${field}", "c": {"$sum": 1}}},
-                {"$sort": {"c": -1}},
-                {"$limit": int(limit)},
+                {"$group": {"_id": None, "avg": {"$avg": "$trust_score"}}},
             ]
-            rows = list(col.aggregate(pipeline))
-            insights[out_key] = [(str(r.get("_id")), int(r.get("c", 0))) for r in rows]
+            row = next(iter(col.aggregate(pipeline)), None)
+            insights["trust_avg"] = (
+                round(float(row.get("avg")), 3)
+                if row and row.get("avg") is not None
+                else None
+            )
         except Exception:
-            insights[out_key] = []
+            insights["trust_avg"] = None
 
-    def top_counts_concepts(out_key: str) -> None:
+        # Age days avg via aggregation
         try:
             pipeline = [
+                {"$match": {"metadata.age_days": {"$type": "number"}}},
                 {"$sample": {"size": sample_size}},
-                {"$unwind": "$concepts"},
-                {"$match": {"concepts.name": {"$type": "string"}}},
-                {"$group": {"_id": "$concepts.name", "c": {"$sum": 1}}},
-                {"$sort": {"c": -1}},
-                {"$limit": int(limit)},
+                {"$group": {"_id": None, "avg": {"$avg": "$metadata.age_days"}}},
             ]
-            rows = list(col.aggregate(pipeline))
-            insights[out_key] = [(str(r.get("_id")), int(r.get("c", 0))) for r in rows]
+            row = next(iter(col.aggregate(pipeline)), None)
+            insights["age_days_avg"] = (
+                round(float(row.get("avg")), 1)
+                if row and row.get("avg") is not None
+                else None
+            )
         except Exception:
-            insights[out_key] = []
+            insights["age_days_avg"] = None
 
-    # Array-based counts via sampling
-    top_counts_array("metadata.tags", "tag_counts")
-    top_counts_array("context.tags", "context_tag_counts")
-    top_counts_concepts("concept_counts")
-
-    # Trust avg via aggregation
-    try:
-        pipeline = [
-            {"$match": {"trust_score": {"$type": "number"}}},
-            {"$sample": {"size": sample_size}},
-            {"$group": {"_id": None, "avg": {"$avg": "$trust_score"}}},
-        ]
-        row = next(iter(col.aggregate(pipeline)), None)
-        insights["trust_avg"] = (
-            round(float(row.get("avg")), 3)
-            if row and row.get("avg") is not None
-            else None
-        )
-    except Exception:
-        insights["trust_avg"] = None
-
-    # Age days avg via aggregation
-    try:
-        pipeline = [
-            {"$match": {"metadata.age_days": {"$type": "number"}}},
-            {"$sample": {"size": sample_size}},
-            {"$group": {"_id": None, "avg": {"$avg": "$metadata.age_days"}}},
-        ]
-        row = next(iter(col.aggregate(pipeline)), None)
-        insights["age_days_avg"] = (
-            round(float(row.get("avg")), 1)
-            if row and row.get("avg") is not None
-            else None
-        )
-    except Exception:
-        insights["age_days_avg"] = None
-
-    return insights
+        duration = time.time() - start_time
+        _ingestion_metadata_duration.observe(duration, labels=labels)
+        return insights
+    except Exception as e:
+        _ingestion_metadata_errors.inc(labels=labels)
+        duration = time.time() - start_time
+        _ingestion_metadata_duration.observe(duration, labels=labels)
+        raise
 
 
 def extract_query_keywords(query: str, min_len: int = 3) -> List[str]:
@@ -378,43 +425,59 @@ import os
 from googleapiclient.discovery import build
 
 
+@handle_errors(fallback={"video_id": None}, log_traceback=True, reraise=False)
 def get_youtube_metadata(
     video_id: str, api_key: Optional[str] = None
 ) -> Dict[str, Any]:
-    key = api_key or os.getenv("YOUTUBE_API_KEY")
-    if not key:
-        raise RuntimeError("YOUTUBE_API_KEY is not set")
-    yt = build("youtube", "v3", developerKey=key)
-    resp = (
-        yt.videos()
-        .list(part="snippet,contentDetails,statistics", id=video_id)
-        .execute()
-    )
-    items = resp.get("items", [])
-    if not items:
-        return {"video_id": video_id}
-    it = items[0]
-    snippet = it.get("snippet", {})
-    stats = it.get("statistics", {})
-    content = it.get("contentDetails", {})
-    thumbs = snippet.get("thumbnails", {}) or {}
-    thumb_url = None
-    for key in ["maxres", "standard", "high", "medium", "default"]:
-        if key in thumbs and thumbs[key].get("url"):
-            thumb_url = thumbs[key]["url"]
-            break
-    return {
-        "video_id": it.get("id"),
-        "title": snippet.get("title"),
-        "description": snippet.get("description"),
-        "channel_id": snippet.get("channelId"),
-        "channel_title": snippet.get("channelTitle"),
-        "published_at": snippet.get("publishedAt"),
-        "tags": snippet.get("tags", []) or [],
-        "category_id": snippet.get("categoryId"),
-        "thumbnail_url": thumb_url,
-        "duration": content.get("duration"),
-        "view_count": int(stats.get("viewCount", 0) or 0),
-        "like_count": int(stats.get("likeCount", 0) or 0),
-        "comment_count": int(stats.get("commentCount", 0) or 0),
-    }
+    start_time = time.time()
+    labels = {"operation": "get_youtube_metadata"}
+    _ingestion_metadata_calls.inc(labels=labels)
+    
+    try:
+        key = api_key or os.getenv("YOUTUBE_API_KEY")
+        if not key:
+            raise RuntimeError("YOUTUBE_API_KEY is not set")
+        yt = build("youtube", "v3", developerKey=key)
+        resp = (
+            yt.videos()
+            .list(part="snippet,contentDetails,statistics", id=video_id)
+            .execute()
+        )
+        items = resp.get("items", [])
+        if not items:
+            duration = time.time() - start_time
+            _ingestion_metadata_duration.observe(duration, labels=labels)
+            return {"video_id": video_id}
+        it = items[0]
+        snippet = it.get("snippet", {})
+        stats = it.get("statistics", {})
+        content = it.get("contentDetails", {})
+        thumbs = snippet.get("thumbnails", {}) or {}
+        thumb_url = None
+        for key in ["maxres", "standard", "high", "medium", "default"]:
+            if key in thumbs and thumbs[key].get("url"):
+                thumb_url = thumbs[key]["url"]
+                break
+        result = {
+            "video_id": it.get("id"),
+            "title": snippet.get("title"),
+            "description": snippet.get("description"),
+            "channel_id": snippet.get("channelId"),
+            "channel_title": snippet.get("channelTitle"),
+            "published_at": snippet.get("publishedAt"),
+            "tags": snippet.get("tags", []) or [],
+            "category_id": snippet.get("categoryId"),
+            "thumbnail_url": thumb_url,
+            "duration": content.get("duration"),
+            "view_count": int(stats.get("viewCount", 0) or 0),
+            "like_count": int(stats.get("likeCount", 0) or 0),
+            "comment_count": int(stats.get("commentCount", 0) or 0),
+        }
+        duration = time.time() - start_time
+        _ingestion_metadata_duration.observe(duration, labels=labels)
+        return result
+    except Exception as e:
+        _ingestion_metadata_errors.inc(labels=labels)
+        duration = time.time() - start_time
+        _ingestion_metadata_duration.observe(duration, labels=labels)
+        raise

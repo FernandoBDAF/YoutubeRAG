@@ -1,0 +1,55 @@
+[MASTER]
+# Ignore patterns
+ignore=CVS,.git,__pycache__,tests,venv,.venv,env
+jobs=4
+persistent=yes
+
+[MESSAGES CONTROL]
+# Disable specific warnings
+disable=
+    C0111,  # Missing docstring (we're adding these gradually)
+    C0103,  # Invalid name (some MongoDB field names are snake_case)
+    R0913,  # Too many arguments (some functions need many params)
+    R0914,  # Too many local variables (some complex functions need them)
+    W0212,  # Protected access (needed for some library internals)
+    C0330,  # Wrong hanging indentation (handled by formatter)
+    R0801,  # Similar lines in files (we're working on this)
+    W0511,  # TODO comments (we use them intentionally)
+    C0301,  # Line too long (handled by formatter)
+
+[FORMAT]
+# Formatting options
+max-line-length=100
+indent-string='    '
+indent-after-paren=4
+
+[DESIGN]
+# Design complexity thresholds
+max-args=8
+max-locals=20
+max-returns=6
+max-branches=15
+max-statements=60
+max-attributes=12
+min-public-methods=1
+max-public-methods=25
+
+[TYPECHECK]
+# Generated members (dynamic attributes)
+generated-members=pymongo.*,pydantic.*,openai.*,bson.*
+
+[SIMILARITIES]
+# Minimum lines for similarity detection
+min-similarity-lines=6
+ignore-comments=yes
+ignore-docstrings=yes
+ignore-imports=yes
+
+[BASIC]
+# Naming conventions
+good-names=i,j,k,db,id,_,e,f,q,k,v,ts,lt,gt
+
+[IMPORTS]
+# Import recommendations
+deprecated-modules=optparse,imp
+

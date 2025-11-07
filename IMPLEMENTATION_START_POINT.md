@@ -2,7 +2,7 @@
 
 **Purpose**: Entry point for all new work using structured LLM development methodology  
 **Status**: Foundation Document - Permanent Reference  
-**Last Updated**: November 5, 2025
+**Last Updated**: November 7, 2025 (GrammaPlan support added)
 
 ---
 
@@ -28,13 +28,21 @@
 
 ## 📐 The Structured Methodology - Overview
 
-### Three-Tier Hierarchy
+### Four-Tier Hierarchy (with GrammaPlan)
 
 ```
+GRAMMAPLAN (orchestrates large initiatives - optional)
+  ├─ Coordinates multiple related PLANs
+  ├─ Strategic-level goals (>80 hours, 3+ domains)
+  ├─ Tracks child PLAN completion
+  ├─ Minimal content (~200-300 lines)
+  └─ See "When to Use GrammaPlan" section below
+      ↓
 PLAN (defines WHAT - the achievements)
   ├─ Lists priority-ordered achievements
   ├─ Self-contained (LLM can execute from PLAN alone)
   ├─ Dynamic (can add achievements during execution)
+  ├─ May reference parent GrammaPlan
   └─ Tracks subplans created
       ↓
 SUBPLAN (defines HOW - the approach)
@@ -55,9 +63,10 @@ EXECUTION_TASK (logs execution - the journey)
 
 ### Document Types
 
-1. **PLAN**: What needs to be achieved (achievements list)
-2. **SUBPLAN**: How you'll tackle one achievement (your approach)
-3. **EXECUTION_TASK**: Log of execution (iteration diary)
+1. **GRAMMAPLAN**: Orchestrates multiple PLANs (optional - for large initiatives)
+2. **PLAN**: What needs to be achieved (achievements list)
+3. **SUBPLAN**: How you'll tackle one achievement (your approach)
+4. **EXECUTION_TASK**: Log of execution (iteration diary)
 
 **Not separate types**:
 
@@ -70,7 +79,13 @@ EXECUTION_TASK (logs execution - the journey)
 
 #### Core Document Types
 
+- **GRAMMAPLAN**: `GRAMMAPLAN_<FEATURE>.md` (e.g., `GRAMMAPLAN_CODE-QUALITY.md`)
+  - For large initiatives (>80 hours, 3+ domains)
+  - Orchestrates multiple child PLANs
+  - See "When to Use GrammaPlan" section below
 - **PLAN**: `PLAN_<FEATURE>.md` (e.g., `PLAN_OPTIMIZE-EXTRACTION.md`)
+  - Child PLANs under GrammaPlan: `PLAN_<GRAMMAPLAN-NAME>-<DOMAIN>.md`
+  - Example: `PLAN_CODE-QUALITY-GRAPHRAG.md` (child of GRAMMAPLAN_CODE-QUALITY)
 - **SUBPLAN**: `SUBPLAN_<FEATURE>_<NUMBER>.md` (e.g., `SUBPLAN_OPTIMIZE-EXTRACTION_01.md`)
 - **EXECUTION_TASK**: `EXECUTION_TASK_<FEATURE>_<SUBPLAN>_<EXECUTION>.md`
   - Example: `EXECUTION_TASK_OPTIMIZE-EXTRACTION_01_01.md` (first execution of subplan 01)
@@ -103,6 +118,86 @@ These should be **sections**, not files:
 - Keep short (2-4 words)
 - Be specific and actionable
 - Same across all documents for one feature
+
+---
+
+## 🌳 When to Use GrammaPlan
+
+**GrammaPlan** = GrandMotherPlan = Orchestration document for large initiatives
+
+### Decision Criteria
+
+Use GrammaPlan when **TWO OR MORE** of these apply:
+
+1. **Size**: PLAN would exceed 800 lines
+2. **Duration**: Estimated effort > 80 hours
+3. **Domains**: Work spans 3+ distinct domains/areas
+4. **Achievements**: > 20 achievements in single PLAN
+5. **Parallelism**: Natural opportunities for parallel work
+6. **Context**: Medium-context model deployment
+7. **Long timeline**: Multi-month project
+
+### Quick Decision Tree
+
+```
+Is your planned work large/complex?
+├─ No (< 500 lines, < 40 hours, < 15 achievements)
+│   └─ Use: Single PLAN
+│
+└─ Yes → Check indicators:
+    ├─ PLAN draft is >800 lines? → GrammaPlan RECOMMENDED
+    ├─ Estimated >80 hours? → GrammaPlan RECOMMENDED
+    ├─ Spans 3+ distinct domains? → GrammaPlan RECOMMENDED
+    ├─ Natural parallelism? → GrammaPlan BENEFICIAL
+    └─ Medium-model context strain? → GrammaPlan RECOMMENDED
+```
+
+### When to Use Single PLAN (Not GrammaPlan)
+
+- Focused, single-domain work
+- < 40 hours estimated
+- Clear linear progression
+- Tight integration required
+- Small team (1-2 people)
+- Urgent work
+
+### GrammaPlan Benefits
+
+**For Large Work**:
+- Reduces per-document size by 75% (1200 lines → 200-300 per child)
+- Better for medium-context models
+- Enables parallel work streams
+- Clearer progress tracking
+
+**Example**: PLAN_CODE-QUALITY-REFACTOR at 1,247 lines could split into:
+- GRAMMAPLAN_CODE-QUALITY (~200 lines)
+- 6 child PLANs (~200-300 lines each)
+- Result: 75% reduction in context per session
+
+### How to Create GrammaPlan
+
+1. **Identify need** (use decision criteria above)
+2. **Analyze natural divisions** (domains? phases? components?)
+3. **Create GrammaPlan** (use `documentation/templates/GRAMMAPLAN-TEMPLATE.md`)
+4. **Create child PLANs** (use `documentation/templates/PLAN-TEMPLATE.md`)
+5. **Update ACTIVE_PLANS.md** (add GrammaPlan + children)
+6. **Execute** (work on one child at a time, unless coordinating parallel)
+
+### Key Principle
+
+**GrammaPlan is LEAN**: Keep it ~200-300 lines max. Do NOT replicate child PLAN content. Focus on:
+- Strategic goal
+- Child PLAN tracking
+- Dependencies between children
+- Success criteria (typically "all children complete")
+
+### Full Guide
+
+See `documentation/guides/GRAMMAPLAN-GUIDE.md` for comprehensive guide including:
+- Decomposition patterns (Domain, Phase, Hybrid)
+- Progress tracking formulas
+- Integration strategies
+- Best practices and examples
 
 ---
 

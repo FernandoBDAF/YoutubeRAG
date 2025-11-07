@@ -18,6 +18,7 @@ from core.models.graphrag import KnowledgeModel
 from core.config.paths import COLL_CHUNKS
 from core.libraries.concurrency import run_llm_concurrent
 from core.libraries.rate_limiting import RateLimiter
+from core.libraries.error_handling.decorators import handle_errors
 import json
 
 logger = logging.getLogger(__name__)
@@ -42,15 +43,9 @@ class GraphExtractionStage(BaseStage):
         super().setup()
 
         # Initialize OpenAI client for LLM operations
-        import os
-        from openai import OpenAI
+        from core.libraries.llm import get_openai_client
 
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise RuntimeError(
-                "OPENAI_API_KEY is required for GraphRAG stages. Set it in .env file."
-            )
-        self.llm_client = OpenAI(api_key=api_key, timeout=60)
+        self.llm_client = get_openai_client(timeout=60)
 
         # Initialize the extraction agent now that we have access to self.config
         self.extraction_agent = GraphExtractionAgent(
@@ -98,6 +93,7 @@ class GraphExtractionStage(BaseStage):
         for doc in cursor:
             yield doc
 
+    @handle_errors(fallback=None, log_traceback=True, reraise=False)
     def handle_doc(self, doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Extract entities and relationships from a single chunk and write to database.
@@ -322,6 +318,7 @@ class GraphExtractionStage(BaseStage):
 
         return None
 
+    @handle_errors(fallback=[], log_traceback=True, reraise=False)
     def process_batch(
         self, docs: List[Dict[str, Any]]
     ) -> List[Optional[Dict[str, Any]]]:

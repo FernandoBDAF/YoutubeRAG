@@ -1,5 +1,6 @@
 import os
 from typing import Any, Dict, List, Optional
+import argparse
 from dataclasses import dataclass, field
 
 import re
@@ -11,9 +12,7 @@ try:
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
-    _sys.path.append(
-        _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", ".."))
-    )
+    _sys.path.append(_os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "..")))
     from dependencies.database.mongodb import get_mongo_client
     from core.base.stage import BaseStage
     from core.models.config import BaseStageConfig
@@ -25,6 +24,7 @@ from core.config.paths import (
     COLL_RAW_VIDEOS,
 )
 from core.domain.text import normalize_newlines, sha256_text, seconds_to_hhmmss
+from core.libraries.error_handling.decorators import handle_errors
 import uuid
 from datetime import datetime, timezone
 
@@ -38,25 +38,18 @@ class ChunkConfig(BaseStageConfig):
     semantic_model: Optional[str] = None
 
     @classmethod
-    def from_args_env(cls, args, env, default_db):
+    def from_args_env(cls, args: Any, env: Dict[str, str], default_db: Optional[str]):
         base = BaseStageConfig.from_args_env(args, env, default_db)
         strategy = (
-            (
-                getattr(args, "chunk_strategy", None)
-                or env.get("CHUNK_STRATEGY", "fixed")
-            )
+            (getattr(args, "chunk_strategy", None) or env.get("CHUNK_STRATEGY", "fixed"))
             .strip()
             .lower()
         )
         token_size = int(getattr(args, "token_size", env.get("TOKEN_SIZE", 500)))
         overlap_pct = float(getattr(args, "overlap_pct", env.get("OVERLAP_PCT", 0.15)))
-        split_chars_arg = getattr(args, "split_chars", None) or env.get(
-            "SPLIT_CHARS", "."
-        )
+        split_chars_arg = getattr(args, "split_chars", None) or env.get("SPLIT_CHARS", ".")
         split_chars = [s.strip() for s in str(split_chars_arg).split(",") if s.strip()]
-        semantic_model = getattr(args, "semantic_model", None) or env.get(
-            "SEMANTIC_MODEL"
-        )
+        semantic_model = getattr(args, "semantic_model", None) or env.get("SEMANTIC_MODEL")
         return cls(
             **vars(base),
             chunk_strategy=strategy,
@@ -72,7 +65,7 @@ class ChunkStage(BaseStage):
     description = "Chunk cleaned transcripts (compressed preferred) and upsert to chunks collection"
     ConfigCls = ChunkConfig
 
-    def build_parser(self, p):
+    def build_parser(self, p: argparse.ArgumentParser) -> None:
         super().build_parser(p)
         p.add_argument(
             "--chunk_strategy",
@@ -84,7 +77,7 @@ class ChunkStage(BaseStage):
         p.add_argument("--split_chars", type=str, default=".")
         p.add_argument("--semantic_model", type=str)
 
-    def iter_docs(self):
+    def iter_docs(self) -> List[Dict[str, Any]]:
         # Read from configured read collection (default cleaned_transcripts) on read DB
         src_db = self.config.read_db_name or self.config.db_name
         src_coll_name = self.config.read_coll or COLL_CLEANED
@@ -97,15 +90,14 @@ class ChunkStage(BaseStage):
         }
         if self.config.video_id:
             q.update({"video_id": self.config.video_id})
-        docs = list(
-            coll.find(q, {"video_id": 1, "compressed_text": 1, "cleaned_text": 1})
-        )
+        docs = list(coll.find(q, {"video_id": 1, "compressed_text": 1, "cleaned_text": 1}))
         print(
             f"[chunk] Selected {len(docs)} cleaned doc(s) (video_id={self.config.video_id or 'ALL'})"
         )
         return docs
 
-    def handle_doc(self, doc):
+    @handle_errors(fallback=None, log_traceback=True, reraise=False)
+    def handle_doc(self, doc: Dict[str, Any]) -> None:
         # Write to configured write collection (default video_chunks) on write DB
         dst_db = self.config.write_db_name or self.config.db_name
         chunks_coll_name = self.config.write_coll or COLL_CHUNKS
@@ -113,9 +105,7 @@ class ChunkStage(BaseStage):
         video_id = doc.get("video_id")
         if not video_id:
             return
-        source_text = (
-            doc.get("compressed_text") or doc.get("cleaned_text") or ""
-        ).strip()
+        source_text = (doc.get("compressed_text") or doc.get("cleaned_text") or "").strip()
         if not source_text:
             return
         # Early-exit: skip reprocessing if chunks already exist and upsert_existing is False
@@ -138,9 +128,7 @@ class ChunkStage(BaseStage):
 
                 splitter = TokenTextSplitter(
                     chunk_size=int(self.config.token_size),
-                    chunk_overlap=int(
-                        self.config.token_size * float(self.config.overlap_pct)
-                    ),
+                    chunk_overlap=int(self.config.token_size * float(self.config.overlap_pct)),
                 )
                 chunks_plain = splitter.split_text(source_text)
             elif self.config.chunk_strategy == "recursive":
@@ -149,9 +137,7 @@ class ChunkStage(BaseStage):
                 splitter = RecursiveCharacterTextSplitter(
                     separators=self.config.split_chars or ["."],
                     chunk_size=int(self.config.token_size),
-                    chunk_overlap=int(
-                        self.config.token_size * float(self.config.overlap_pct)
-                    ),
+                    chunk_overlap=int(self.config.token_size * float(self.config.overlap_pct)),
                 )
                 chunks_plain = splitter.split_text(source_text)
             elif self.config.chunk_strategy == "semantic":
@@ -188,9 +174,7 @@ class ChunkStage(BaseStage):
 
             # Fetch raw video metadata from the default db in this case
             src_db = self.config.db_name
-            rv = self.get_collection(
-                COLL_RAW_VIDEOS, io="read", db_name=src_db
-            ).find_one(
+            rv = self.get_collection(COLL_RAW_VIDEOS, io="read", db_name=src_db).find_one(
                 {"video_id": video_id},
                 {
                     "channel_id": 1,
@@ -204,9 +188,7 @@ class ChunkStage(BaseStage):
                 published = rv.get("published_at")
                 if isinstance(published, str):
                     try:
-                        published_dt = datetime.fromisoformat(
-                            published.replace("Z", "+00:00")
-                        )
+                        published_dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
                     except Exception:
                         published_dt = None
                 else:

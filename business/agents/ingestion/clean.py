@@ -1,6 +1,7 @@
 from typing import Optional
 
 from core.base.agent import BaseAgent, BaseAgentConfig
+from core.libraries.error_handling.decorators import handle_errors
 
 
 class TranscriptCleanAgent(BaseAgent):
@@ -50,6 +51,7 @@ class TranscriptCleanAgent(BaseAgent):
         )
         return system_prompt, user_prompt
 
+    @handle_errors(fallback="", log_traceback=True, reraise=False)
     def clean(self, raw_text: str) -> str:
         # Guard against extremely long inputs by trimming with a clear marker.
         # Splitting is handled at the stage level; this trim protects single-call usage.

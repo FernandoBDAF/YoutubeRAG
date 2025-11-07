@@ -44,10 +44,14 @@ from core.libraries.database.operations import (
     batch_insert,
     batch_update,
     batch_delete,
+    get_collection,
+    get_database,
 )
 
 __all__ = [
     "batch_insert",
     "batch_update",
     "batch_delete",
+    "get_collection",
+    "get_database",
 ]

@@ -12,8 +12,27 @@ from collections import defaultdict
 from openai import OpenAI
 from core.models.graphrag import GraphRAGQuery, GraphRAGResponse, KeywordsModel
 from business.services.graphrag.indexes import get_graphrag_collections
+from core.libraries.error_handling.decorators import handle_errors
+from core.libraries.metrics import Counter, Histogram, MetricRegistry
 
 logger = logging.getLogger(__name__)
+
+# Initialize GraphRAG query metrics
+_graphrag_query_calls = Counter(
+    "graphrag_query_calls", "Number of GraphRAG query calls", labels=["method"]
+)
+_graphrag_query_errors = Counter(
+    "graphrag_query_errors", "Number of GraphRAG query errors", labels=["method"]
+)
+_graphrag_query_duration = Histogram(
+    "graphrag_query_duration_seconds", "GraphRAG query call duration", labels=["method"]
+)
+
+# Register metrics
+_registry = MetricRegistry.get_instance()
+_registry.register(_graphrag_query_calls)
+_registry.register(_graphrag_query_errors)
+_registry.register(_graphrag_query_duration)
 
 
 class GraphRAGQueryProcessor:
@@ -81,6 +100,7 @@ Provide only the structured response, nothing else.
 
         logger.info(f"Initialized GraphRAGQueryProcessor with model {model_name}")
 
+    @handle_errors(fallback=None, log_traceback=True, reraise=False)
     def process_query(self, query_text: str, db) -> GraphRAGQuery:
         """
         Process a user query to extract entities and determine intent.
@@ -92,11 +112,12 @@ Provide only the structured response, nothing else.
         Returns:
             GraphRAGQuery object
         """
-        logger.info(f"Processing query: {query_text}")
-
         start_time = time.time()
-
+        labels = {"method": "process_query"}
+        _graphrag_query_calls.inc(labels=labels)
+        
         try:
+            logger.info(f"Processing query: {query_text}")
             # Extract entities from query
             extracted_entities = self._extract_query_entities(query_text)
 
@@ -120,9 +141,14 @@ Provide only the structured response, nothing else.
                 f"Extracted {len(extracted_entities)} entities: {extracted_entities}"
             )
 
+            duration = time.time() - start_time
+            _graphrag_query_duration.observe(duration, labels=labels)
             return query_obj
 
         except Exception as e:
+            _graphrag_query_errors.inc(labels=labels)
+            duration = time.time() - start_time
+            _graphrag_query_duration.observe(duration, labels=labels)
             logger.error(f"Error processing query: {e}")
             # Return basic query object on error
             return GraphRAGQuery(

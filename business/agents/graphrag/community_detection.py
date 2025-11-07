@@ -17,6 +17,7 @@ from collections import defaultdict
 import networkx as nx
 from networkx.algorithms import community as nx_community
 from core.models.graphrag import ResolvedEntity, ResolvedRelationship
+from core.libraries.error_handling.decorators import handle_errors
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,7 @@ class CommunityDetectionAgent:
             f"resolution={resolution_parameter}, min_size={min_cluster_size}"
         )
 
+    @handle_errors(fallback={"communities": {}, "levels": 0, "total_communities": 0}, log_traceback=True, reraise=False)
     def detect_communities(
         self, entities: List[ResolvedEntity], relationships: List[ResolvedRelationship]
     ) -> Dict[str, Any]:

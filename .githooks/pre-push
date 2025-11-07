@@ -1,0 +1,48 @@
+#!/bin/bash
+# Git pre-push hook to validate code standards
+
+set -e
+
+echo "🔍 Running pre-push validation..."
+
+# Check if Black is installed
+if ! command -v black &> /dev/null; then
+    echo "⚠️  Black not installed. Skipping formatting check."
+    echo "   Install with: pip install black"
+else
+    # Run Black check
+    echo "📝 Checking code formatting..."
+    black --check . || {
+        echo "❌ Code formatting check failed. Run 'black .' to fix."
+        exit 1
+    }
+fi
+
+# Check if isort is installed
+if ! command -v isort &> /dev/null; then
+    echo "⚠️  isort not installed. Skipping import organization check."
+    echo "   Install with: pip install isort"
+else
+    # Run isort check
+    echo "📦 Checking import organization..."
+    isort --check-only . || {
+        echo "❌ Import organization check failed. Run 'isort .' to fix."
+        exit 1
+    }
+fi
+
+# Run import validation
+if [ -f "scripts/validate_imports.py" ]; then
+    echo "✅ Validating imports..."
+    python scripts/validate_imports.py business app core || {
+        echo "❌ Import validation failed."
+        exit 1
+    }
+else
+    echo "⚠️  validate_imports.py not found. Skipping import validation."
+fi
+
+echo "✅ All pre-push checks passed!"
+exit 0
+
+

@@ -1,6 +1,7 @@
 import os
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
+import argparse
 import re
 
 from dotenv import load_dotenv
@@ -13,16 +14,14 @@ try:
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
-    _sys.path.append(
-        _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", ".."))
-    )
+    _sys.path.append(_os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "..")))
     from dependencies.database.mongodb import get_mongo_client
     from core.base.stage import BaseStage
     from core.models.config import BaseStageConfig
 from core.config.paths import DB_NAME, COLL_RAW_VIDEOS, COLL_CLEANED
 from core.domain.text import normalize_newlines
 from core.libraries.concurrency import run_llm_concurrent  # Migrated to core library
-from typing import Optional
+from core.libraries.error_handling.decorators import handle_errors
 
 
 def _normalize_text(text: str) -> str:
@@ -170,7 +169,7 @@ def _llm_clean_text(
     return {"video_id": video_id, "cleaned_text": cleaned_text}
 
 
-def build_embedding_text(chunk):
+def build_embedding_text(chunk: Dict[str, Any]) -> str:
     summary = chunk.get("summary", "")
     entities = ", ".join([e["name"] for e in chunk.get("entities", [])[:3]])
     concepts = ", ".join([c["name"] for c in chunk.get("concepts", [])[:3]])
@@ -190,11 +189,9 @@ class CleanConfig(BaseStageConfig):
     model_name: Optional[str] = None
 
     @classmethod
-    def from_args_env(cls, args, env, default_db):
+    def from_args_env(cls, args: Any, env: Dict[str, str], default_db: Optional[str]):
         base = BaseStageConfig.from_args_env(args, env, default_db)
-        use_llm = bool(
-            getattr(args, "llm", False) or (env.get("CLEAN_WITH_LLM") == "1")
-        )
+        use_llm = bool(getattr(args, "llm", False) or (env.get("CLEAN_WITH_LLM") == "1"))
         return cls(
             **vars(base),
             use_llm=use_llm,
@@ -210,10 +207,10 @@ class CleanStage(BaseStage):
     description = "Clean transcripts into standardized text and paragraphs"
     ConfigCls = CleanConfig
 
-    def build_parser(self, p):
+    def build_parser(self, p: argparse.ArgumentParser) -> None:
         super().build_parser(p)
 
-    def iter_docs(self):
+    def iter_docs(self) -> List[Dict[str, Any]]:
         # Read from the default DB by default; allow explicit override via read_db_name/read_coll
         src_db = self.config.read_db_name or self.config.db_name
         src_coll_name = self.config.read_coll or COLL_RAW_VIDEOS
@@ -227,7 +224,8 @@ class CleanStage(BaseStage):
             )
         return list(coll.find({}, {"video_id": 1, "transcript_raw": 1}))
 
-    def handle_doc(self, doc):
+    @handle_errors(fallback=None, log_traceback=True, reraise=False)
+    def handle_doc(self, doc: Dict[str, Any]) -> None:
         video_id = doc.get("video_id")
         text = (doc.get("transcript_raw") or "").strip()
         if not video_id or not text:
@@ -252,9 +250,7 @@ class CleanStage(BaseStage):
 
         # Estimate chunks for progress logging
         text_len = len(text)
-        estimated_chunks = max(
-            1, text_len // 8000
-        )  # Rough estimate based on typical chunk size
+        estimated_chunks = max(1, text_len // 8000)  # Rough estimate based on typical chunk size
         self.logger.info(
             f"[clean] Starting LLM cleaning for {video_id} "
             f"(text_len={text_len}, est_chunks={estimated_chunks}, "
@@ -275,10 +271,7 @@ class CleanStage(BaseStage):
 
         elapsed = time.time() - start_time
 
-        if (
-            payload.get("cleaned_text")
-            and not (payload.get("cleaned_text") or "").strip()
-        ):
+        if payload.get("cleaned_text") and not (payload.get("cleaned_text") or "").strip():
             self.log(f"No cleaned text for {video_id}")
             return
         if not self.config.dry_run:

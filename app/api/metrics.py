@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 class MetricsHandler(BaseHTTPRequestHandler):
     """HTTP handler for /metrics endpoint."""
 
+    @handle_errors(log_traceback=True, reraise=False)
     def do_GET(self):
         """Handle GET requests."""
         if self.path == "/metrics":
@@ -40,6 +41,7 @@ class MetricsHandler(BaseHTTPRequestHandler):
         pass
 
 
+@handle_errors(log_traceback=True, reraise=True)
 def start_metrics_server(port: int = 9091, host: str = "0.0.0.0"):
     """Start HTTP server for Prometheus metrics scraping.
 

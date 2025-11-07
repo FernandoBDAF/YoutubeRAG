@@ -7,12 +7,34 @@ Part of the BUSINESS layer - chat feature business logic.
 
 import uuid
 import logging
+import time
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from dependencies.database.mongodb import get_mongo_client
 from core.config.paths import DB_NAME, COLL_MEMORY_LOGS
+from core.libraries.error_handling.decorators import handle_errors
+from core.libraries.metrics import Counter, Histogram, MetricRegistry
+
+# Initialize chat memory metrics
+_chat_memory_calls = Counter(
+    "chat_memory_calls", "Number of chat memory operations", labels=["operation"]
+)
+_chat_memory_errors = Counter(
+    "chat_memory_errors", "Number of chat memory operation errors", labels=["operation"]
+)
+_chat_memory_duration = Histogram(
+    "chat_memory_duration_seconds",
+    "Chat memory operation duration",
+    labels=["operation"],
+)
+
+# Register metrics
+_registry = MetricRegistry.get_instance()
+_registry.register(_chat_memory_calls)
+_registry.register(_chat_memory_errors)
+_registry.register(_chat_memory_duration)
 
 
 def generate_session_id() -> str:
@@ -24,6 +46,7 @@ def generate_session_id() -> str:
     return str(uuid.uuid4())
 
 
+@handle_errors(fallback=[], log_traceback=True, reraise=False)
 def load_long_term_memory(session_id: str, limit: int = 20) -> List[Dict[str, Any]]:
     """Load long-term memory logs for a session.
 
@@ -34,15 +57,28 @@ def load_long_term_memory(session_id: str, limit: int = 20) -> List[Dict[str, An
     Returns:
         List of memory log documents, most recent first
     """
-    client = get_mongo_client()
-    db = client[DB_NAME]
-    cur = (
-        db[COLL_MEMORY_LOGS]
-        .find({"session_id": session_id})
-        .sort("created_at", -1)
-        .limit(int(limit))
-    )
-    return list(cur)
+    start_time = time.time()
+    labels = {"operation": "load_long_term_memory"}
+    _chat_memory_calls.inc(labels=labels)
+
+    try:
+        client = get_mongo_client()
+        db = client[DB_NAME]
+        cur = (
+            db[COLL_MEMORY_LOGS]
+            .find({"session_id": session_id})
+            .sort("created_at", -1)
+            .limit(int(limit))
+        )
+        result = list(cur)
+        duration = time.time() - start_time
+        _chat_memory_duration.observe(duration, labels=labels)
+        return result
+    except Exception as e:
+        _chat_memory_errors.inc(labels=labels)
+        duration = time.time() - start_time
+        _chat_memory_duration.observe(duration, labels=labels)
+        raise
 
 
 def setup_chat_logger(session_id: str, log_dir: str = "chat_logs") -> logging.Logger:
@@ -54,33 +90,22 @@ def setup_chat_logger(session_id: str, log_dir: str = "chat_logs") -> logging.Lo
 
     Returns:
         Configured logger instance
+
+    Note:
+        Uses the logging library's setup_session_logger for consistency.
     """
-    logger = logging.getLogger(f"chat_cli_{session_id}")
-    if logger.handlers:
-        return logger
+    from core.libraries.logging import setup_session_logger
 
-    logger.setLevel(logging.INFO)
-
-    # Ensure directory
-    p = Path(log_dir)
-    p.mkdir(parents=True, exist_ok=True)
-
-    # File handler per session
-    fh = logging.FileHandler(p / f"{session_id}.log", encoding="utf-8")
-    fh.setLevel(logging.INFO)
-    fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
-    fh.setFormatter(fmt)
-    logger.addHandler(fh)
-
-    # Optional console handler with minimal format
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.WARNING)
-    ch.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
-    logger.addHandler(ch)
-
-    return logger
+    return setup_session_logger(
+        session_id=session_id,
+        log_dir=log_dir,
+        level=logging.INFO,
+        console_level=logging.WARNING,
+        verbose=False,
+    )
 
 
+@handle_errors(log_traceback=True, reraise=False)
 def persist_turn(
     session_id: str,
     raw_query: str,
@@ -105,31 +130,43 @@ def persist_turn(
         answer: Generated answer
         agent: Agent used for answering (default: "reference_answer")
     """
-    client = get_mongo_client()
-    db = client[DB_NAME]
+    start_time = time.time()
+    labels = {"operation": "persist_turn"}
+    _chat_memory_calls.inc(labels=labels)
 
-    retrieved = [
-        {
-            "video_id": h.get("video_id"),
-            "chunk_id": h.get("chunk_id"),
-            "score": h.get("score") or h.get("search_score"),
-            "keyword_score": h.get("keyword_score"),
-            "vector_score": h.get("vector_score"),
+    try:
+        client = get_mongo_client()
+        db = client[DB_NAME]
+
+        retrieved = [
+            {
+                "video_id": h.get("video_id"),
+                "chunk_id": h.get("chunk_id"),
+                "score": h.get("score") or h.get("search_score"),
+                "keyword_score": h.get("keyword_score"),
+                "vector_score": h.get("vector_score"),
+            }
+            for h in hits
+        ]
+
+        doc = {
+            "session_id": session_id,
+            "user_query_raw": raw_query,
+            "user_query_rewritten": rewritten_query,
+            "mode": mode,
+            "k": int(top_k),
+            "filters": filters or {},
+            "retrieved": retrieved,
+            "answer": answer,
+            "agent": agent,
+            "created_at": datetime.now(timezone.utc),
         }
-        for h in hits
-    ]
 
-    doc = {
-        "session_id": session_id,
-        "user_query_raw": raw_query,
-        "user_query_rewritten": rewritten_query,
-        "mode": mode,
-        "k": int(top_k),
-        "filters": filters or {},
-        "retrieved": retrieved,
-        "answer": answer,
-        "agent": agent,
-        "created_at": datetime.now(timezone.utc),
-    }
-
-    db[COLL_MEMORY_LOGS].insert_one(doc)
+        db[COLL_MEMORY_LOGS].insert_one(doc)
+        duration = time.time() - start_time
+        _chat_memory_duration.observe(duration, labels=labels)
+    except Exception as e:
+        _chat_memory_errors.inc(labels=labels)
+        duration = time.time() - start_time
+        _chat_memory_duration.observe(duration, labels=labels)
+        raise

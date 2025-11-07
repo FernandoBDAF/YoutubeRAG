@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional, Tuple
 
 from core.base.agent import BaseAgent, BaseAgentConfig
+from core.libraries.error_handling.decorators import handle_errors
 
 
 class ReferenceAnswerAgent(BaseAgent):
@@ -56,6 +57,7 @@ class ReferenceAnswerAgent(BaseAgent):
         )
         return system_prompt, user_prompt
 
+    @handle_errors(fallback=lambda *args, **kwargs: args[1][0].get("title", "No answer available") if args[1] else "", log_traceback=True, reraise=False)
     def answer(self, question: str, doc_bundles: List[Dict[str, Any]]) -> str:
         try:
             system_prompt, user_prompt = self.build_prompts(question, doc_bundles)

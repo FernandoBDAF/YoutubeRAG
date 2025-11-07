@@ -12,8 +12,27 @@ from openai import OpenAI
 from core.models.graphrag import GraphRAGResponse, GraphRAGQuery
 from business.services.graphrag.query import GraphRAGQueryProcessor
 from business.services.graphrag.retrieval import GraphRAGRetrievalEngine
+from core.libraries.error_handling.decorators import handle_errors
+from core.libraries.metrics import Counter, Histogram, MetricRegistry
 
 logger = logging.getLogger(__name__)
+
+# Initialize GraphRAG generation metrics
+_graphrag_generation_calls = Counter(
+    "graphrag_generation_calls", "Number of GraphRAG generation calls", labels=["method"]
+)
+_graphrag_generation_errors = Counter(
+    "graphrag_generation_errors", "Number of GraphRAG generation errors", labels=["method"]
+)
+_graphrag_generation_duration = Histogram(
+    "graphrag_generation_duration_seconds", "GraphRAG generation call duration", labels=["method"]
+)
+
+# Register metrics
+_registry = MetricRegistry.get_instance()
+_registry.register(_graphrag_generation_calls)
+_registry.register(_graphrag_generation_errors)
+_registry.register(_graphrag_generation_duration)
 
 
 class GraphRAGGenerationService:
@@ -78,6 +97,7 @@ Provide a comprehensive answer that directly addresses the user's question using
 
         logger.info(f"Initialized GraphRAGGenerationService with model {model_name}")
 
+    @handle_errors(fallback="", log_traceback=True, reraise=False)
     def generate_answer(
         self,
         query: str,
@@ -97,9 +117,13 @@ Provide a comprehensive answer that directly addresses the user's question using
         Returns:
             Generated answer
         """
-        logger.info(f"Generating answer for query: {query}")
-
+        start_time = time.time()
+        labels = {"method": "generate_answer"}
+        _graphrag_generation_calls.inc(labels=labels)
+        
         try:
+            logger.info(f"Generating answer for query: {query}")
+
             # Prepare the prompt
             prompt = f"""
 Context Information:
@@ -123,12 +147,17 @@ Please provide a comprehensive answer using the context information above.
             answer = response.choices[0].message.content.strip()
 
             logger.info(f"Generated answer with {len(answer)} characters")
+            duration = time.time() - start_time
+            _graphrag_generation_duration.observe(duration, labels=labels)
             return answer
-
         except Exception as e:
+            _graphrag_generation_errors.inc(labels=labels)
+            duration = time.time() - start_time
+            _graphrag_generation_duration.observe(duration, labels=labels)
             logger.error(f"Error generating answer: {e}")
             return "I apologize, but I encountered an error while generating an answer. Please try again."
 
+    @handle_errors(fallback=None, log_traceback=True, reraise=False)
     def process_query_with_generation(
         self, query_text: str, db, use_traditional_rag: bool = False
     ) -> GraphRAGResponse:
@@ -143,11 +172,12 @@ Please provide a comprehensive answer using the context information above.
         Returns:
             GraphRAGResponse object
         """
-        logger.info(f"Processing query with generation: {query_text}")
-
         start_time = time.time()
-
+        labels = {"method": "process_query_with_generation"}
+        _graphrag_generation_calls.inc(labels=labels)
+        
         try:
+            logger.info(f"Processing query with generation: {query_text}")
             # Initialize components if not provided
             if not self.query_processor:
                 self.query_processor = GraphRAGQueryProcessor(
@@ -193,10 +223,14 @@ Please provide a comprehensive answer using the context information above.
             )
 
             logger.info(f"Query processing completed in {processing_time:.2f} seconds")
+            duration = time.time() - start_time
+            _graphrag_generation_duration.observe(duration, labels=labels)
             return response
 
         except Exception as e:
-            processing_time = time.time() - start_time
+            _graphrag_generation_errors.inc(labels=labels)
+            duration = time.time() - start_time
+            _graphrag_generation_duration.observe(duration, labels=labels)
             logger.error(f"Error processing query: {e}")
 
             return GraphRAGResponse(

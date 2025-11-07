@@ -17,10 +17,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dependencies.database.mongodb import get_mongo_client
 from core.config.paths import DB_NAME
+from core.libraries.error_handling.decorators import handle_errors
 
 load_dotenv()
 
 
+@handle_errors(log_traceback=True, reraise=True)
 def analyze_graph_structure():
     """Analyze the GraphRAG knowledge graph structure."""
     client = get_mongo_client()

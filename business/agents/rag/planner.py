@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import json
 
 from core.base.agent import BaseAgent, BaseAgentConfig
+from core.libraries.error_handling.decorators import handle_errors
 
 
 class PlannerAgent(BaseAgent):

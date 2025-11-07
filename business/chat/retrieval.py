@@ -6,6 +6,7 @@ Part of the BUSINESS layer - chat feature logic.
 """
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from dependencies.database.mongodb import get_mongo_client
@@ -13,8 +14,28 @@ from core.config.paths import DB_NAME, COLL_CHUNKS
 from business.services.rag.retrieval import vector_search, hybrid_search, keyword_search
 from business.services.rag.indexes import ensure_vector_search_index
 from business.services.rag.core import embed_query
+from core.libraries.error_handling.decorators import handle_errors
+from core.libraries.metrics import Counter, Histogram, MetricRegistry
+
+# Initialize chat retrieval metrics
+_chat_retrieval_calls = Counter(
+    "chat_retrieval_calls", "Number of chat retrieval operations", labels=["mode"]
+)
+_chat_retrieval_errors = Counter(
+    "chat_retrieval_errors", "Number of chat retrieval operation errors", labels=["mode"]
+)
+_chat_retrieval_duration = Histogram(
+    "chat_retrieval_duration_seconds", "Chat retrieval operation duration", labels=["mode"]
+)
+
+# Register metrics
+_registry = MetricRegistry.get_instance()
+_registry.register(_chat_retrieval_calls)
+_registry.register(_chat_retrieval_errors)
+_registry.register(_chat_retrieval_duration)
 
 
+@handle_errors(fallback=[], log_traceback=True, reraise=False)
 def run_retrieval(
     mode: str,
     query_text: str,
@@ -37,30 +58,46 @@ def run_retrieval(
         - When filters present, falls back to vector search
         - Ensures indexes exist on first call
     """
-    client = get_mongo_client()
-    db = client[DB_NAME]
-    col = db[COLL_CHUNKS]
+    start_time = time.time()
+    labels = {"mode": mode}
+    _chat_retrieval_calls.inc(labels=labels)
+    
+    try:
+        from core.libraries.database import get_database, get_collection
 
-    # Ensure indexes exist once at first retrieval (silent if exists)
-    prev_level = logging.getLogger("pymongo").level
-    logging.getLogger("pymongo").setLevel(logging.WARNING)
-    ensure_vector_search_index(col)
-    logging.getLogger("pymongo").setLevel(prev_level)
+        client = get_mongo_client()
+        db = get_database(client, DB_NAME)
+        col = get_collection(db, COLL_CHUNKS)
 
-    # Use hybrid only when no filters (knnBeta + $search filters use different syntax)
-    # When filters present, use vector-only $vectorSearch which accepts our filter format
-    if mode == "hybrid" and not filters:
-        # hybrid_search expects both query_text and query_vector
-        qvec = embed_query(query_text)
-        return hybrid_search(
-            col, query_text=query_text, query_vector=qvec, top_k=top_k, filters=None
-        )
-    elif mode == "keyword":
-        return keyword_search(col, query_text=query_text, top_k=top_k, filters=filters)
-    else:
-        # vector or auto->vector by default; also used when filters are present
-        qvec = embed_query(query_text)
-        return vector_search(col, qvec, k=top_k, filters=filters)
+        # Ensure indexes exist once at first retrieval (silent if exists)
+        prev_level = logging.getLogger("pymongo").level
+        logging.getLogger("pymongo").setLevel(logging.WARNING)
+        ensure_vector_search_index(col)
+        logging.getLogger("pymongo").setLevel(prev_level)
+
+        # Use hybrid only when no filters (knnBeta + $search filters use different syntax)
+        # When filters present, use vector-only $vectorSearch which accepts our filter format
+        if mode == "hybrid" and not filters:
+            # hybrid_search expects both query_text and query_vector
+            qvec = embed_query(query_text)
+            result = hybrid_search(
+                col, query_text=query_text, query_vector=qvec, top_k=top_k, filters=None
+            )
+        elif mode == "keyword":
+            result = keyword_search(col, query_text=query_text, top_k=top_k, filters=filters)
+        else:
+            # vector or auto->vector by default; also used when filters are present
+            qvec = embed_query(query_text)
+            result = vector_search(col, qvec, k=top_k, filters=filters)
+        
+        duration = time.time() - start_time
+        _chat_retrieval_duration.observe(duration, labels=labels)
+        return result
+    except Exception as e:
+        _chat_retrieval_errors.inc(labels=labels)
+        duration = time.time() - start_time
+        _chat_retrieval_duration.observe(duration, labels=labels)
+        raise
 
 
 def normalize_context_blocks(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

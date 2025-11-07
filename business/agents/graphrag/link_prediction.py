@@ -9,6 +9,7 @@ import numpy as np
 from typing import List, Dict, Any, Tuple, Optional
 import networkx as nx
 from collections import defaultdict
+from core.libraries.error_handling.decorators import handle_errors
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ class GraphLinkPredictionAgent:
         self.max_predictions_per_entity = max_predictions_per_entity
         self.use_structural_features = use_structural_features
 
+    @handle_errors(fallback=[], log_traceback=True, reraise=False)
     def predict_missing_links(
         self,
         entities: List[Dict[str, Any]],

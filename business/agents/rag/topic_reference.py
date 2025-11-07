@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional, Tuple
 
 from core.base.agent import BaseAgent, BaseAgentConfig
+from core.libraries.error_handling.decorators import handle_errors
 
 
 class TopicReferenceAgent(BaseAgent):
@@ -70,6 +71,7 @@ class TopicReferenceAgent(BaseAgent):
         )
         return system_prompt, user_prompt
 
+    @handle_errors(fallback=lambda self, question, topic_bundles: self._fallback(topic_bundles), log_traceback=True, reraise=False)
     def answer(self, question: str, topic_bundles: List[Dict[str, Any]]) -> str:
         try:
             system_prompt, user_prompt = self.build_prompts(question, topic_bundles)

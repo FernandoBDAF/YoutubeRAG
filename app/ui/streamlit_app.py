@@ -3,6 +3,8 @@ from typing import Any, Dict, List
 import streamlit as st
 from dotenv import load_dotenv
 
+from core.libraries.error_handling.decorators import handle_errors
+
 from business.services.rag.utils import get_mongo_client
 from business.services.rag.filters import build_filters
 from business.services.rag.ui_utils import rows_from_hits, render_table_and_csv
@@ -27,6 +29,7 @@ def init_state() -> None:
         st.session_state["session_id"] = sid
 
 
+@handle_errors(log_traceback=True, reraise=False)
 def main() -> None:
     load_dotenv()
     init_state()

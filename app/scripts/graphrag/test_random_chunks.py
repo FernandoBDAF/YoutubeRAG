@@ -10,6 +10,8 @@ import random
 from pymongo import MongoClient
 from dotenv import load_dotenv
 
+from core.libraries.error_handling.decorators import handle_errors
+
 load_dotenv()
 
 mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
@@ -19,6 +21,7 @@ client = MongoClient(mongo_uri)
 db = client[db_name]
 
 
+@handle_errors(log_traceback=True, reraise=False)
 def get_random_chunks(collection_name="video_chunks", num_chunks=12, seed=42):
     """
     Select random chunks from the dataset, ensuring diversity across videos.

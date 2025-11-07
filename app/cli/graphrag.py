@@ -33,96 +33,31 @@ def setup_logging(verbose: bool = False, log_file: str = None, stage: str = None
     """
     Set up logging configuration for GraphRAG pipeline.
 
-    Enhanced version matching main.py pattern to avoid issues encountered
-    during ingestion pipeline testing.
-
     Args:
         verbose: Enable verbose (DEBUG) logging
         log_file: Optional path to log file (default: logs/pipeline/graphrag_STAGE_TIMESTAMP.log)
         stage: Optional stage name to include in log filename
+
+    Note:
+        Uses the core logging library's setup_logging function for consistency.
     """
-    from pathlib import Path
-    from datetime import datetime
+    from core.libraries.logging import setup_logging as core_setup_logging, create_timestamped_log_path
 
-    log_level = logging.DEBUG if verbose else logging.INFO
-
-    # Silence noisy third-party loggers FIRST (before any imports happen)
-    # Only show warnings/errors from these libraries, even in verbose mode
-    noisy_loggers = [
-        "numba",
-        "graspologic",
-        "pymongo",
-        "urllib3",
-        "httpx",
-        "httpcore",
-        "openai",
-        "numba.core",
-        "numba.core.ssa",
-        "numba.core.byteflow",
-        "numba.core.interpreter",
-    ]
-    for logger_name in noisy_loggers:
-        logging.getLogger(logger_name).setLevel(logging.WARNING)
-
-    # Create log directory if needed
+    # Create default log file path if not provided
     if log_file is None:
-        log_dir = Path("logs/pipeline")
-        log_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        # Include stage name if provided
-        if stage:
-            log_file = str(log_dir / f"graphrag_{stage}_{timestamp}.log")
-        else:
-            log_file = str(log_dir / f"graphrag_{timestamp}.log")
+        prefix = f"graphrag_{stage}" if stage else "graphrag"
+        log_file = create_timestamped_log_path(
+            base_dir="logs/pipeline",
+            prefix=prefix,
+            extension="log"
+        )
 
-    # Configure logging with both console and file handlers
-    handlers = [
-        logging.StreamHandler(sys.stdout),  # Console output
-    ]
-
-    # Add file handler if log file is specified
-    log_file_path = None
-    log_file_error = None
-    try:
-        # Resolve to absolute path for better error handling
-        log_path = Path(log_file).resolve()
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(str(log_path), encoding="utf-8")
-        handlers.append(file_handler)
-        log_file_path = str(log_path)
-    except Exception as e:
-        # Non-fatal: continue without file logging
-        # We'll log this after basicConfig is set up
-        log_file_error = str(e)
-
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=handlers,
-        force=True,  # Override any existing configuration
+    # Use core library's setup_logging function
+    core_setup_logging(
+        verbose=verbose,
+        log_file=log_file,
+        silence_third_party=True,
     )
-
-    # Re-apply silencing after basicConfig (in case it was reset)
-    for logger_name in noisy_loggers:
-        logging.getLogger(logger_name).setLevel(logging.WARNING)
-
-    # httpx at INFO for LLM visibility
-    logging.getLogger("httpx").setLevel(logging.INFO)
-
-    logger = logging.getLogger(__name__)
-    if log_file_path:
-        logger.info(
-            f"Logging configured: level={logging.getLevelName(log_level)}, file={log_file_path}"
-        )
-    else:
-        if log_file and log_file_error:
-            logger.warning(
-                f"Failed to create log file '{log_file}': {log_file_error}. Continuing with console logging only."
-            )
-        logger.info(
-            f"Logging configured: level={logging.getLevelName(log_level)}, file=console only"
-        )
 
 
 def create_config_from_args(args) -> GraphRAGPipelineConfig:

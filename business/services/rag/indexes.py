@@ -1,8 +1,27 @@
 from typing import Final, Dict, Any
 import os
-from pymongo.collection import Collection
 import time
+from pymongo.collection import Collection
 from pymongo.errors import OperationFailure
+from core.libraries.error_handling.decorators import handle_errors
+from core.libraries.metrics import Counter, Histogram, MetricRegistry
+
+# Initialize index service metrics
+_rag_index_calls = Counter(
+    "rag_index_calls", "Number of index operations", labels=["operation"]
+)
+_rag_index_errors = Counter(
+    "rag_index_errors", "Number of index operation errors", labels=["operation"]
+)
+_rag_index_duration = Histogram(
+    "rag_index_duration_seconds", "Index operation duration", labels=["operation"]
+)
+
+# Register metrics
+_registry = MetricRegistry.get_instance()
+_registry.register(_rag_index_calls)
+_registry.register(_rag_index_errors)
+_registry.register(_rag_index_duration)
 
 
 # Canonical Vector Index configuration (single source of truth)
@@ -17,6 +36,7 @@ def get_vector_index_name() -> str:
     return INDEX_NAME
 
 
+@handle_errors(fallback=None, log_traceback=True, reraise=False)
 def ensure_vector_search_index(collection: Collection) -> None:
     """Ensure an Atlas Vector Search index exists for $vectorSearch.
 
@@ -30,13 +50,19 @@ def ensure_vector_search_index(collection: Collection) -> None:
         }
       }
     """
-    db = collection.database
-    # Probe existing search indexes (Atlas returns both search and vectorSearch here)
+    start_time = time.time()
+    labels = {"operation": "ensure_vector_search_index"}
+    _rag_index_calls.inc(labels=labels)
+    
     try:
+        db = collection.database
+        # Probe existing search indexes (Atlas returns both search and vectorSearch here)
         cur = collection.list_search_indexes()
         for idx in cur:
             if idx.get("name") == INDEX_NAME:
                 # Silent return if exists (no need to spam terminal)
+                duration = time.time() - start_time
+                _rag_index_duration.observe(duration, labels=labels)
                 return
     except Exception:
         pass
@@ -75,13 +101,19 @@ def ensure_vector_search_index(collection: Collection) -> None:
         print(f"createSearchIndexes result: {res}")
         # Brief wait to allow readiness
         time.sleep(2)
+        duration = time.time() - start_time
+        _rag_index_duration.observe(duration, labels=labels)
     except Exception as e:
+        _rag_index_errors.inc(labels=labels)
+        duration = time.time() - start_time
+        _rag_index_duration.observe(duration, labels=labels)
         print(
             "Warning: Failed to create vectorSearch index via createSearchIndexes. "
             f"Please create it in Atlas UI. Error: {e}"
         )
 
 
+@handle_errors(fallback=None, log_traceback=True, reraise=False)
 def ensure_hybrid_search_index(collection: Collection) -> None:
     """Ensure an Atlas Search (type: 'search') index for hybrid/keyword.
 
@@ -94,9 +126,13 @@ def ensure_hybrid_search_index(collection: Collection) -> None:
 
     Docs: https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/
     """
-    db = collection.database
-    # Check if search index exists and is queryable; if failed/non-queryable, drop it
+    start_time = time.time()
+    labels = {"operation": "ensure_hybrid_search_index"}
+    _rag_index_calls.inc(labels=labels)
+    
     try:
+        db = collection.database
+        # Check if search index exists and is queryable; if failed/non-queryable, drop it
         cur = list(collection.list_search_indexes())
         for idx in cur:
             if idx.get("name") == SEARCH_INDEX_NAME:
@@ -105,6 +141,8 @@ def ensure_hybrid_search_index(collection: Collection) -> None:
                 status = idx.get("status") or idx.get("state")
                 if queryable is True:
                     # Silent return if exists and queryable
+                    duration = time.time() - start_time
+                    _rag_index_duration.observe(duration, labels=labels)
                     return
                 # Non-queryable or failed → drop and recreate
                 try:
@@ -179,7 +217,12 @@ def ensure_hybrid_search_index(collection: Collection) -> None:
         res = db.command(cmd_knn)
         print("createSearchIndexes (search: knnVector+similarity) result:", res)
         time.sleep(2)
+        duration = time.time() - start_time
+        _rag_index_duration.observe(duration, labels=labels)
     except Exception as e:
+        _rag_index_errors.inc(labels=labels)
+        duration = time.time() - start_time
+        _rag_index_duration.observe(duration, labels=labels)
         print(
             "Warning: Failed to create search index for hybrid via createSearchIndexes. "
             f"Please create it in Atlas UI. Error: {e}"

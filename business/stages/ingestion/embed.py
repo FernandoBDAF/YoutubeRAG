@@ -1,7 +1,8 @@
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+import argparse
 
 import requests
 
@@ -22,6 +23,7 @@ except ModuleNotFoundError:
 from dependencies.llm.rate_limit import RateLimiter
 from core.config.paths import COLL_CHUNKS, VECTOR_DIM
 from business.stages.ingestion.clean import build_embedding_text
+from core.libraries.error_handling.decorators import handle_errors
 
 
 def embed_texts(texts: List[str]) -> List[List[float]]:
@@ -109,7 +111,7 @@ class EmbedConfig(BaseStageConfig):
     emit_multi_vectors: bool = False
 
     @classmethod
-    def from_args_env(cls, args, env, default_db):
+    def from_args_env(cls, args: Any, env: Dict[str, str], default_db: Optional[str]):
         base = BaseStageConfig.from_args_env(args, env, default_db)
         src = getattr(args, "embed_source", None) or env.get("EMBED_SOURCE", "chunk")
         src = str(src).strip().lower()
@@ -153,7 +155,7 @@ class EmbedStage(BaseStage):
     description = "Generate embeddings for existing chunks without embeddings"
     ConfigCls = EmbedConfig
 
-    def build_parser(self, p):
+    def build_parser(self, p: argparse.ArgumentParser) -> None:
         super().build_parser(p)
         p.add_argument("--embed_source", choices=["chunk", "summary"], default="chunk")
         p.add_argument("--use_hybrid_embedding_text", action="store_true")
@@ -170,7 +172,7 @@ class EmbedStage(BaseStage):
         )
         p.add_argument("--emit_multi_vectors", action="store_true")
 
-    def iter_docs(self):
+    def iter_docs(self) -> List[Dict[str, Any]]:
         q: Dict[str, Any] = {"embedding": {"$exists": False}}
         if self.config.video_id:
             q["video_id"] = self.config.video_id
@@ -197,7 +199,8 @@ class EmbedStage(BaseStage):
         )
         return docs
 
-    def handle_doc(self, doc):
+    @handle_errors(fallback=None, log_traceback=True, reraise=False)
+    def handle_doc(self, doc: Dict[str, Any]) -> None:
         dst_db = self.config.write_db_name or self.config.db_name
         coll = self.get_collection(
             self.config.write_coll or COLL_CHUNKS, io="write", db_name=dst_db

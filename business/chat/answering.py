@@ -5,11 +5,31 @@ This module handles answer generation for chat using different agents and modes.
 Part of the BUSINESS layer - chat feature logic.
 """
 
+import time
 from typing import Any, Dict, List
 
 from business.agents.rag.reference_answer import ReferenceAnswerAgent
 from business.agents.rag.topic_reference import TopicReferenceAgent
 from business.services.rag.generation import answer_with_openai
+from core.libraries.error_handling.decorators import handle_errors
+from core.libraries.metrics import Counter, Histogram, MetricRegistry
+
+# Initialize chat answering metrics
+_chat_answering_calls = Counter(
+    "chat_answering_calls", "Number of chat answering operations", labels=["operation"]
+)
+_chat_answering_errors = Counter(
+    "chat_answering_errors", "Number of chat answering operation errors", labels=["operation"]
+)
+_chat_answering_duration = Histogram(
+    "chat_answering_duration_seconds", "Chat answering operation duration", labels=["operation"]
+)
+
+# Register metrics
+_registry = MetricRegistry.get_instance()
+_registry.register(_chat_answering_calls)
+_registry.register(_chat_answering_errors)
+_registry.register(_chat_answering_duration)
 
 
 def _merge_hits_by_doc(
@@ -79,7 +99,7 @@ def _anchor_from_chunk(c: Dict[str, Any]) -> Dict[str, Any]:
                     start_sec = parts[0] * 3600 + parts[1] * 60 + parts[2]
                 elif len(parts) == 2:
                     start_sec = parts[0] * 60 + parts[1]
-            except Exception:
+            except (ValueError, IndexError):
                 start_sec = None
 
     ts_param = f"&t={int(start_sec)}" if isinstance(start_sec, (int, float)) else ""
@@ -143,6 +163,7 @@ def build_reference_bundles(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return bundles
 
 
+@handle_errors(fallback="", log_traceback=True, reraise=False)
 def answer_with_context(
     contexts: List[Dict[str, Any]],
     rewritten_query: str,
@@ -158,9 +179,22 @@ def answer_with_context(
     Returns:
         Generated answer string
     """
-    # Optionally prepend a tiny conversational hint into the question
-    history_hint = "\n\nRecent context:\n" + "\n".join(
-        f"{m['role']}: {m['content'][:140]}" for m in short_term_msgs[-4:]
-    )
-    question = rewritten_query + history_hint
-    return answer_with_openai(contexts, question)
+    start_time = time.time()
+    labels = {"operation": "answer_with_context"}
+    _chat_answering_calls.inc(labels=labels)
+    
+    try:
+        # Optionally prepend a tiny conversational hint into the question
+        history_hint = "\n\nRecent context:\n" + "\n".join(
+            f"{m['role']}: {m['content'][:140]}" for m in short_term_msgs[-4:]
+        )
+        question = rewritten_query + history_hint
+        result = answer_with_openai(contexts, question)
+        duration = time.time() - start_time
+        _chat_answering_duration.observe(duration, labels=labels)
+        return result
+    except Exception as e:
+        _chat_answering_errors.inc(labels=labels)
+        duration = time.time() - start_time
+        _chat_answering_duration.observe(duration, labels=labels)
+        raise

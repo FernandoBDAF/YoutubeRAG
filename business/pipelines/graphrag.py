@@ -194,8 +194,8 @@ class GraphRAGPipeline:
         # Find stage spec
         for spec in self.specs:
             if spec.stage == stage_name:
-                # Run single stage using PipelineRunner
-                return PipelineRunner([spec]).run()
+                # Run single stage using PipelineRunner with metrics
+                return PipelineRunner([spec]).run(pipeline_type="graphrag")
 
         raise ValueError(f"Unknown stage: {stage_name}")
 
@@ -214,9 +214,9 @@ class GraphRAGPipeline:
             self.setup()
             logger.info("[PIPELINE] Setup complete")
 
-            # Run pipeline using PipelineRunner
+            # Run pipeline using PipelineRunner with metrics
             logger.info(f"[PIPELINE] Starting {len(self.specs)} stages")
-            exit_code = self.runner.run()
+            exit_code = self.runner.run(pipeline_type="graphrag")
 
             if exit_code == 0:
                 logger.info("GraphRAG pipeline completed successfully")

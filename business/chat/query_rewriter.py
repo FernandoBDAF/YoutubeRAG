@@ -8,9 +8,29 @@ Part of the BUSINESS layer - chat feature logic.
 import os
 import json
 import logging
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from dependencies.llm.openai import get_openai_client
+from core.libraries.llm import get_openai_client
+from core.libraries.error_handling.decorators import handle_errors
+from core.libraries.metrics import Counter, Histogram, MetricRegistry
+
+# Initialize chat query rewriter metrics
+_chat_query_rewriter_calls = Counter(
+    "chat_query_rewriter_calls", "Number of query rewrite operations", labels=["operation"]
+)
+_chat_query_rewriter_errors = Counter(
+    "chat_query_rewriter_errors", "Number of query rewrite operation errors", labels=["operation"]
+)
+_chat_query_rewriter_duration = Histogram(
+    "chat_query_rewriter_duration_seconds", "Query rewrite operation duration", labels=["operation"]
+)
+
+# Register metrics
+_registry = MetricRegistry.get_instance()
+_registry.register(_chat_query_rewriter_calls)
+_registry.register(_chat_query_rewriter_errors)
+_registry.register(_chat_query_rewriter_duration)
 
 
 def is_openai_available() -> bool:
@@ -18,10 +38,20 @@ def is_openai_available() -> bool:
 
     Returns:
         True if OPENAI_API_KEY is set
+
+    Note:
+        Uses the LLM library's is_openai_available for consistency.
     """
-    return bool(os.getenv("OPENAI_API_KEY"))
+    from core.libraries.llm import is_openai_available as llm_is_openai_available
+
+    return llm_is_openai_available()
 
 
+@handle_errors(
+    fallback=lambda *args, **kwargs: (args[0], args[3], args[4], None),
+    log_traceback=True,
+    reraise=False,
+)
 def rewrite_query(
     user_query: str,
     short_term_msgs: List[Dict[str, str]],
@@ -54,10 +84,16 @@ def rewrite_query(
     Note:
         Falls back to identity rewrite when OpenAI is not configured.
     """
-    if not is_openai_available():
-        return user_query, default_mode, default_k, None
-
+    start_time = time.time()
+    labels = {"operation": "rewrite_query"}
+    _chat_query_rewriter_calls.inc(labels=labels)
+    
     try:
+        if not is_openai_available():
+            duration = time.time() - start_time
+            _chat_query_rewriter_duration.observe(duration, labels=labels)
+            return user_query, default_mode, default_k, None
+
         client = get_openai_client()
 
         # Build memory snippets (truncate for safety)
@@ -191,9 +227,12 @@ def rewrite_query(
         if not isinstance(filters, dict):
             filters = None
 
-        return rq, tool, k, filters
-
+        result = (rq, tool, k, filters)
+        duration = time.time() - start_time
+        _chat_query_rewriter_duration.observe(duration, labels=labels)
+        return result
     except Exception as e:
-        if logger:
-            logger.warning(f"rewrite:failed error={str(e)}")
-        return user_query, default_mode, default_k, None
+        _chat_query_rewriter_errors.inc(labels=labels)
+        duration = time.time() - start_time
+        _chat_query_rewriter_duration.observe(duration, labels=labels)
+        raise

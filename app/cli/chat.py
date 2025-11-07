@@ -7,6 +7,8 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from core.libraries.error_handling.decorators import handle_errors
+
 try:
     from bson import ObjectId  # type: ignore
     from bson.decimal128 import Decimal128  # type: ignore
@@ -650,6 +652,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+@handle_errors(log_traceback=True, reraise=True)
 def run_cli() -> None:
     args = parse_args()
     session_id = args.session or generate_session_id()

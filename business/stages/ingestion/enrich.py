@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple, Optional
+import argparse
 
 from dotenv import load_dotenv
 from pymongo import MongoClient
@@ -18,9 +19,7 @@ try:
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
-    _sys.path.append(
-        _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", ".."))
-    )
+    _sys.path.append(_os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "..")))
     from dependencies.database.mongodb import get_mongo_client
     from core.base.stage import BaseStage
     from core.models.config import BaseStageConfig
@@ -39,6 +38,7 @@ from core.config.paths import (
 
 from core.domain.enrichment import normalize_enrich_payload_for_chunk
 from business.stages.ingestion.clean import build_embedding_text
+from core.libraries.error_handling.decorators import handle_errors
 
 
 """LLM-only enrichment stage: no heuristic fallback paths.
@@ -65,7 +65,7 @@ class EnrichConfig(BaseStageConfig):
     model_name: Optional[str] = None
 
     @classmethod
-    def from_args_env(cls, args, env, default_db):
+    def from_args_env(cls, args: Any, env: Dict[str, str], default_db: Optional[str]):
         base = BaseStageConfig.from_args_env(args, env, default_db)
         # Map ENRICH_MAX into base.max if no CLI max given
         if getattr(base, "max", None) is None:
@@ -78,20 +78,14 @@ class EnrichConfig(BaseStageConfig):
         qps_cli = getattr(args, "llm_qps", None)
         model_cli = getattr(args, "model_name", None)
         llm_retries = int(
-            retries_cli
-            if retries_cli is not None
-            else (env.get("LLM_RETRIES", "3") or 3)
+            retries_cli if retries_cli is not None else (env.get("LLM_RETRIES", "3") or 3)
         )
         llm_backoff_s = float(
-            backoff_cli
-            if backoff_cli is not None
-            else (env.get("LLM_BACKOFF_S", "5.0") or 5.0)
+            backoff_cli if backoff_cli is not None else (env.get("LLM_BACKOFF_S", "5.0") or 5.0)
         )
         llm_qps_env = env.get("LLM_QPS")
         llm_qps = (
-            float(qps_cli)
-            if qps_cli is not None
-            else (float(llm_qps_env) if llm_qps_env else None)
+            float(qps_cli) if qps_cli is not None else (float(llm_qps_env) if llm_qps_env else None)
         )
         model_name = model_cli or env.get("OPENAI_MODEL")
         return cls(
@@ -109,7 +103,7 @@ class EnrichStage(BaseStage):
     description = "Enrich cleaned transcripts into segments with tags and metadata"
     ConfigCls = EnrichConfig
 
-    def build_parser(self, p):
+    def build_parser(self, p: argparse.ArgumentParser) -> None:
         super().build_parser(p)
         # Optional LLM tuning flags
         p.add_argument("--llm_retries", type=int)
@@ -117,7 +111,7 @@ class EnrichStage(BaseStage):
         p.add_argument("--llm_qps", type=float)
         p.add_argument("--model_name", type=str)
 
-    def iter_docs(self):
+    def iter_docs(self) -> List[Dict[str, Any]]:
         # When upserting existing, reprocess all chunks for the selection (ignore summary filter)
         if self.config.upsert_existing:
             q: Dict[str, Any] = {}
@@ -142,7 +136,8 @@ class EnrichStage(BaseStage):
         )
         return docs
 
-    def handle_doc(self, doc):
+    @handle_errors(fallback=None, log_traceback=True, reraise=False)
+    def handle_doc(self, doc: Dict[str, Any]) -> None:
         # Write to configured write collection (default video_chunks) on write DB
         dst_db = self.config.write_db_name or self.config.db_name
         dst_coll_name = self.config.write_coll or COLL_CHUNKS
@@ -155,9 +150,7 @@ class EnrichStage(BaseStage):
             raise RuntimeError("Missing identifiers for chunk enrichment")
         if not text:
             raise RuntimeError(f"No chunk_text for chunk_id={chunk_id}")
-        print(
-            f"[enrich] Start video_id={video_id} chunk_id={chunk_id} text_len={len(text)}"
-        )
+        print(f"[enrich] Start video_id={video_id} chunk_id={chunk_id} text_len={len(text)}")
         source = "llm"
         text = normalize_newlines(text)
         # LLM-only enrichment (single call)
@@ -193,18 +186,9 @@ class EnrichStage(BaseStage):
             for r in payload.get("relations", []) or []:
                 r["confidence_level"] = _disc(r.get("confidence", 0.0))
             # quality_score (weighted mean)
-            ents = [
-                float(e.get("relevance", 0.0) or 0.0)
-                for e in payload.get("entities", [])
-            ]
-            cons = [
-                float(c.get("confidence", 0.0) or 0.0)
-                for c in payload.get("concepts", [])
-            ]
-            rels = [
-                float(r.get("confidence", 0.0) or 0.0)
-                for r in payload.get("relations", [])
-            ]
+            ents = [float(e.get("relevance", 0.0) or 0.0) for e in payload.get("entities", [])]
+            cons = [float(c.get("confidence", 0.0) or 0.0) for c in payload.get("concepts", [])]
+            rels = [float(r.get("confidence", 0.0) or 0.0) for r in payload.get("relations", [])]
 
             def _avg(xs):
                 return (sum(xs) / len(xs)) if xs else None
@@ -246,9 +230,7 @@ class EnrichStage(BaseStage):
         except Exception:
             pass
         payload["provenance"] = prov
-        print(
-            f"[enrich] Upserting structured fields for chunk_id={chunk_id} into {dst_coll_name}"
-        )
+        print(f"[enrich] Upserting structured fields for chunk_id={chunk_id} into {dst_coll_name}")
         # Always produce embedding_text from enriched content
         try:
             payload["embedding_text"] = build_embedding_text(
@@ -270,9 +252,7 @@ class EnrichStage(BaseStage):
         # Override to enable LLM concurrency across chunks
         if config is None:
             self.parse_args()
-            self.config = self.ConfigCls.from_args_env(
-                self.args, dict(os.environ), DB_NAME
-            )
+            self.config = self.ConfigCls.from_args_env(self.args, dict(os.environ), DB_NAME)
         else:
             self.config = config
         self.setup()
@@ -287,9 +267,7 @@ class EnrichStage(BaseStage):
                 self.finalize()
                 return 0
 
-            texts = [
-                normalize_newlines((d.get("chunk_text") or "").strip()) for d in docs
-            ]
+            texts = [normalize_newlines((d.get("chunk_text") or "").strip()) for d in docs]
 
             print(
                 f"[enrich] Launching concurrent LLM calls for {total} chunk(s) (workers={int(self.config.concurrency or 8)})"
@@ -312,9 +290,7 @@ class EnrichStage(BaseStage):
 
             chunks_coll_name = self.config.write_coll or COLL_CHUNKS
             dst_db = self.config.write_db_name or self.config.db_name
-            chunks_coll = self.get_collection(
-                chunks_coll_name, io="write", db_name=dst_db
-            )
+            chunks_coll = self.get_collection(chunks_coll_name, io="write", db_name=dst_db)
             for idx, (doc, structured) in enumerate(zip(docs, results), start=1):
                 video_id = doc.get("video_id")
                 chunk_id = doc.get("chunk_id")
@@ -324,17 +300,12 @@ class EnrichStage(BaseStage):
                     continue
                 payload = normalize_enrich_payload_for_chunk(structured or {})
                 payload.setdefault("provenance", {})
-                prov = (
-                    payload["provenance"]
-                    if isinstance(payload["provenance"], dict)
-                    else {}
-                )
+                prov = payload["provenance"] if isinstance(payload["provenance"], dict) else {}
                 prov.update(
                     {
                         "source_pipeline_stage": "enrich_agent_v2",
                         "version": "2.0",
-                        "model_used": os.getenv("OPENAI_DEFAULT_MODEL")
-                        or "gpt-4o-mini",
+                        "model_used": os.getenv("OPENAI_DEFAULT_MODEL") or "gpt-4o-mini",
                     }
                 )
                 try:
@@ -349,9 +320,7 @@ class EnrichStage(BaseStage):
                 print(
                     f"[enrich] Upserting {idx}/{total} chunk_id={chunk_id} into {chunks_coll_name}"
                 )
-                chunks_coll.update_one(
-                    {"chunk_id": chunk_id}, {"$set": payload}, upsert=True
-                )
+                chunks_coll.update_one({"chunk_id": chunk_id}, {"$set": payload}, upsert=True)
                 self.stats["updated"] += 1
 
             self.finalize()

@@ -1,0 +1,36 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.1.1
+    hooks:
+      - id: black
+        language_version: python3.9
+        args: [--line-length=100]
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: [--profile=black, --line-length=100]
+
+  - repo: local
+    hooks:
+      - id: validate-imports
+        name: Validate Python Imports
+        entry: python scripts/validate_imports.py
+        language: system
+        pass_filenames: false
+        always_run: false
+        stages: [commit, push]
+
+      - id: pylint
+        name: Run Pylint
+        entry: bash -c 'pylint --rcfile=.pylintrc business app core --fail-under=8.0 || true'
+        language: system
+        pass_filenames: false
+        always_run: false
+        stages: [push]  # Only on push, not every commit (too slow)
+
+default_language_version:
+  python: python3.9
+
+

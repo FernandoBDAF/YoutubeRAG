@@ -3,6 +3,7 @@ import logging
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+import argparse
 
 from dotenv import load_dotenv
 from pymongo import MongoClient
@@ -14,13 +15,12 @@ try:
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
-    _sys.path.append(
-        _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", ".."))
-    )
+    _sys.path.append(_os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "..")))
     from dependencies.database.mongodb import get_mongo_client
     from core.base.stage import BaseStage
     from core.models.config import BaseStageConfig
 from core.config.paths import DB_NAME, COLL_CHUNKS
+from core.libraries.error_handling.decorators import handle_errors
 import os
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ class RedundancyConfig(BaseStageConfig):
     use_llm: bool = False
 
     @classmethod
-    def from_args_env(cls, args, env, default_db):
+    def from_args_env(cls, args: Any, env: Dict[str, str], default_db: Optional[str]):
         base = BaseStageConfig.from_args_env(args, env, default_db)
         use_llm = bool(
             getattr(args, "llm", False)
@@ -77,9 +77,7 @@ class RedundancyConfig(BaseStageConfig):
 
         threshold = _getf(["REDUNDANCY_THRESHOLD", "DEDUP_THRESHOLD"], 0.92)
         llm_margin = _getf(["REDUNDANCY_LLM_MARGIN", "DEDUP_LLM_MARGIN"], 0.03)
-        nonadj_fallback = _getb(
-            ["REDUNDANCY_NONADJ_FALLBACK", "DEDUP_NONADJ_FALLBACK"], True
-        )
+        nonadj_fallback = _getb(["REDUNDANCY_NONADJ_FALLBACK", "DEDUP_NONADJ_FALLBACK"], True)
         adj_override = _getf(["REDUNDANCY_ADJ_OVERRIDE", "DEDUP_ADJ_OVERRIDE"], 0.975)
         skip_adjacent = _getb(["REDUNDANCY_SKIP_ADJACENT", "DEDUP_SKIP_ADJACENT"], True)
         return cls(
@@ -95,16 +93,12 @@ class RedundancyConfig(BaseStageConfig):
 
 class RedundancyStage(BaseStage):
     name = "redundancy"
-    description = (
-        "Mark redundant chunks using cosine, adjacency guard, and optional LLM."
-    )
+    description = "Mark redundant chunks using cosine, adjacency guard, and optional LLM."
     ConfigCls = RedundancyConfig
 
-    def iter_docs(self):
+    def iter_docs(self) -> List[Dict[str, Any]]:
         src_db = self.config.read_db_name or self.config.db_name
-        coll = self.get_collection(
-            self.config.read_coll or COLL_CHUNKS, io="read", db_name=src_db
-        )
+        coll = self.get_collection(self.config.read_coll or COLL_CHUNKS, io="read", db_name=src_db)
         chunks = list(coll.find({}, {"video_id": 1, "chunk_id": 1, "embedding": 1}))
         by_video: Dict[str, List[Dict[str, Any]]] = {}
         for c in chunks:
@@ -117,13 +111,12 @@ class RedundancyStage(BaseStage):
                 f"Selected {total_chunks} chunk(s) across {video_count} video(s) for redundancy analysis"
             )
         else:
-            logger.debug(
-                f"Processing {total_chunks} chunks across {video_count} videos"
-            )
+            logger.debug(f"Processing {total_chunks} chunks across {video_count} videos")
 
         return [{"video_id": vid, "items": items} for vid, items in by_video.items()]
 
-    def handle_doc(self, group):
+    @handle_errors(fallback=None, log_traceback=True, reraise=False)
+    def handle_doc(self, group: Dict[str, Any]) -> None:
         video_id = group.get("video_id")
         items = group.get("items", [])
         if not items:
@@ -131,9 +124,7 @@ class RedundancyStage(BaseStage):
 
         # Get collection once for all chunk processing
         src_db = self.config.read_db_name or self.config.db_name
-        coll = self.get_collection(
-            self.config.read_coll or COLL_CHUNKS, io="write", db_name=src_db
-        )
+        coll = self.get_collection(self.config.read_coll or COLL_CHUNKS, io="write", db_name=src_db)
 
         for i, ci in enumerate(items):
             vi = ci.get("embedding", [])
@@ -153,17 +144,12 @@ class RedundancyStage(BaseStage):
 
                     def _suffix_num(cid: str) -> int:
                         parts = (cid or "").split(":")
-                        return (
-                            int(parts[-1])
-                            if parts and parts[-1].isdigit()
-                            else -(10**9)
-                        )
+                        return int(parts[-1]) if parts and parts[-1].isdigit() else -(10**9)
 
                     this_n = _suffix_num(str(ci.get("chunk_id")))
                     best_n = _suffix_num(str(best.get("chunk_id")))
                     best_is_adj = (
-                        ci.get("video_id") == best.get("video_id")
-                        and abs(this_n - best_n) == 1
+                        ci.get("video_id") == best.get("video_id") and abs(this_n - best_n) == 1
                     )
                 except Exception:
                     best_is_adj = False
@@ -177,10 +163,7 @@ class RedundancyStage(BaseStage):
                         s = cosine(vi, vj)
                         try:
                             n = _suffix_num(str(cj.get("chunk_id")))
-                            if (
-                                ci.get("video_id") == cj.get("video_id")
-                                and abs(this_n - n) == 1
-                            ):
+                            if ci.get("video_id") == cj.get("video_id") and abs(this_n - n) == 1:
                                 continue
                         except Exception:
                             pass
@@ -194,9 +177,7 @@ class RedundancyStage(BaseStage):
             reason = "high_sim" if best_score >= self.config.threshold else None
             is_dup = best_score >= self.config.threshold
             # Trigger LLM only for borderline cases around threshold
-            borderline = (
-                abs(best_score - self.config.threshold) <= self.config.llm_margin
-            )
+            borderline = abs(best_score - self.config.threshold) <= self.config.llm_margin
             if self.config.use_llm and best is not None and borderline:
                 try:
                     from agents.dedup_agent import DeduplicateAgent
@@ -234,11 +215,7 @@ class RedundancyStage(BaseStage):
                     def _suffix_num(cid: str) -> int:
                         # chunk_id format: <video_id>:NNNN
                         parts = (cid or "").split(":")
-                        return (
-                            int(parts[-1])
-                            if parts and parts[-1].isdigit()
-                            else -(10**9)
-                        )
+                        return int(parts[-1]) if parts and parts[-1].isdigit() else -(10**9)
 
                     this_n = _suffix_num(str(ci.get("chunk_id")))
                     best_n = _suffix_num(str(best.get("chunk_id")))
@@ -273,11 +250,7 @@ class RedundancyStage(BaseStage):
                     {"video_id": ci.get("video_id"), "chunk_id": chunk_id},
                     {"is_redundant": 1, "redundancy_score": 1},
                 )
-                if (
-                    existing
-                    and "is_redundant" in existing
-                    and "redundancy_score" in existing
-                ):
+                if existing and "is_redundant" in existing and "redundancy_score" in existing:
                     logger.info(
                         f"[redundancy] Skipping {chunk_id} (video={video_id}): "
                         f"already has is_redundant={existing.get('is_redundant')}, "
@@ -306,11 +279,7 @@ class RedundancyStage(BaseStage):
                         # store only peer chunk_id (no double video_id)
                         "duplicate_of": (
                             primary_chunk_id
-                            if (
-                                is_dup
-                                and primary_chunk_id
-                                and primary_chunk_id != chunk_id
-                            )
+                            if (is_dup and primary_chunk_id and primary_chunk_id != chunk_id)
                             else None
                         ),
                         "redundancy_score": float(best_score),
@@ -332,9 +301,7 @@ class RedundancyStage(BaseStage):
                 f"Redundancy pass done for video {video_id} (llm={self.config.use_llm}, chunks={len(items)})"
             )
 
-    def get_entity_canonicalization_signals(
-        self, video_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def get_entity_canonicalization_signals(self, video_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Export entity canonicalization signals for GraphRAG.
 
@@ -403,13 +370,9 @@ class RedundancyStage(BaseStage):
                     )
 
                 # Create entity grouping hints based on high similarity
-                if (
-                    redundancy_score >= 0.8
-                ):  # High similarity threshold for entity grouping
+                if redundancy_score >= 0.8:  # High similarity threshold for entity grouping
                     entity_grouping_hints[chunk_id] = {
-                        "high_similarity_chunks": (
-                            [duplicate_of] if duplicate_of else []
-                        ),
+                        "high_similarity_chunks": ([duplicate_of] if duplicate_of else []),
                         "similarity_score": redundancy_score,
                         "grouping_confidence": min(redundancy_score, 1.0),
                     }
@@ -439,9 +402,7 @@ class RedundancyStage(BaseStage):
                 "generated_at": time.time(),
             }
 
-    def get_chunk_similarity_matrix(
-        self, video_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def get_chunk_similarity_matrix(self, video_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Get chunk similarity matrix for GraphRAG entity resolution.
 
@@ -463,9 +424,7 @@ class RedundancyStage(BaseStage):
                 query["video_id"] = video_id
 
             chunks = list(
-                coll.find(
-                    query, {"video_id": 1, "chunk_id": 1, "embedding": 1, "text": 1}
-                )
+                coll.find(query, {"video_id": 1, "chunk_id": 1, "embedding": 1, "text": 1})
             )
 
             similarity_matrix = {}

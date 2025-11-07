@@ -9,6 +9,7 @@ their descriptions using LLM-based summarization.
 import logging
 from core.libraries.retry import retry_llm_call
 from core.libraries.logging import log_exception
+from core.libraries.error_handling.decorators import handle_errors
 from typing import Dict, List, Any, Optional, Set
 from collections import defaultdict
 from openai import OpenAI
@@ -67,6 +68,7 @@ class RelationshipResolutionAgent:
         Provide only the resolved description, nothing else.
         """
 
+    @handle_errors(fallback=[], log_traceback=True, reraise=False)
     def resolve_relationships(
         self,
         extracted_data: List[Dict[str, Any]],

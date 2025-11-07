@@ -1,5 +1,6 @@
 from typing import List
 from business.services.rag.indexes import ensure_vector_search_index
+from core.libraries.error_handling.decorators import handle_errors
 
 
 REQUIRED_COLLECTIONS: List[str] = [
@@ -13,6 +14,7 @@ REQUIRED_COLLECTIONS: List[str] = [
 ]
 
 
+@handle_errors(log_traceback=True, reraise=False)
 def ensure_collections_and_indexes(db) -> None:
     """Create base collections and the Vector Search index if missing.
 
@@ -52,6 +54,7 @@ def ensure_collections_and_indexes(db) -> None:
         print(f"Warning: could not ensure vector index via code: {e}")
 
 
+@handle_errors(log_traceback=True, reraise=False)
 def wait_for_index_ready(
     index_name: str, timeout_s: int = 300, poll_s: int = 5
 ) -> None:

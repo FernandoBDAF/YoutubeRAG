@@ -1,9 +1,9 @@
 # Multiple PLANS Protocol
 
-**Purpose**: Guide for managing multiple active/paused PLANs simultaneously  
+**Purpose**: Guide for managing multiple active/paused PLANs simultaneously (including GrammaPlan orchestration)  
 **Status**: Permanent Reference  
-**Last Updated**: 2025-11-06 23:00 UTC  
-**Related**: IMPLEMENTATION_START_POINT.md, IMPLEMENTATION_RESUME.md, ACTIVE_PLANS.md
+**Last Updated**: 2025-11-07 (GrammaPlan support added)  
+**Related**: IMPLEMENTATION_START_POINT.md, IMPLEMENTATION_RESUME.md, ACTIVE_PLANS.md, GRAMMAPLAN-GUIDE.md
 
 ---
 
@@ -912,6 +912,141 @@ Before creating a new PLAN:
 
 ---
 
+## 🌳 GrammaPlan Coordination
+
+### What is GrammaPlan?
+
+**GrammaPlan** (GrandMotherPlan) = Orchestration document for large initiatives that coordinates multiple child PLANs.
+
+**When to Use**: See `documentation/guides/GRAMMAPLAN-GUIDE.md` for full criteria. Use when PLAN would exceed 800 lines OR >80 hours OR spans 3+ domains.
+
+### GrammaPlan vs Multiple Plans Protocol
+
+**Key Relationship**: GrammaPlan **uses** Multiple Plans Protocol for child coordination.
+
+**Differences**:
+
+| Aspect          | Multiple Plans Protocol                    | GrammaPlan                          |
+| --------------- | ------------------------------------------ | ----------------------------------- |
+| **Purpose**     | Manage independent PLANs with dependencies | Orchestrate unified initiative      |
+| **Structure**   | Flat (all PLANs are peers)                 | Hierarchical (parent-child)         |
+| **Goal**        | Coordinate parallel work                   | Achieve strategic goal via children |
+| **Typical Use** | 2-5 independent PLANs                      | 1 GrammaPlan + 3-8 child PLANs      |
+
+**When to Use Each**:
+
+- **Multiple Plans Protocol**: Independent PLANs that may have dependencies (e.g., 4 GraphRAG stage refactors)
+- **GrammaPlan**: Large work naturally divided into child PLANs (e.g., Code Quality across 6 domains)
+
+### Child PLAN Coordination
+
+**Use Standard Protocol for Children**:
+
+When coordinating child PLANs within a GrammaPlan, use the dependency tracking format from this protocol:
+
+```markdown
+## Child PLAN Dependencies (in GrammaPlan)
+
+**PLAN_CODE-QUALITY-LIBRARIES.md**:
+
+- **Type**: Hard dependency (provides libraries to all domains)
+- **Relationship**: Sequential (must complete before domains)
+- **Dependency**: Domains need libraries
+- **Status**: In Progress
+- **Timing**: Must complete first
+
+**PLAN_CODE-QUALITY-GRAPHRAG.md**:
+
+- **Type**: Soft dependency on Libraries
+- **Relationship**: Parallel (can run with existing libraries)
+- **Dependency**: Benefits from new libraries
+- **Status**: Can proceed
+- **Timing**: After foundation, parallel with other domains
+```
+
+### GrammaPlan Tracking in ACTIVE_PLANS.md
+
+**Format**:
+
+```markdown
+### GrammaPlans
+
+| GrammaPlan                 | Status    | Priority | Completion    | Children        | Next    |
+| -------------------------- | --------- | -------- | ------------- | --------------- | ------- |
+| GRAMMAPLAN_CODE-QUALITY.md | 🚀 Active | HIGH     | 40% (60/150h) | 6 (1✅ 2🔨 3⏸️) | CHILD-3 |
+
+**Child PLANs**:
+
+- [x] PLAN_CODE-QUALITY-FOUNDATION.md (100% - 20/20h) ✅
+- [~] PLAN_CODE-QUALITY-GRAPHRAG.md (80% - 24/30h) 🔨
+- [~] PLAN_CODE-QUALITY-INGESTION.md (60% - 15/25h) 🔨
+- [ ] PLAN_CODE-QUALITY-RAG.md (50% - 10/20h) ⏸️
+- [ ] PLAN_CODE-QUALITY-CHAT.md (0% - 0/15h) ⏸️
+- [ ] PLAN_CODE-QUALITY-CORE.md (0% - 0/20h) ⏸️
+```
+
+### Context Switching with GrammaPlan
+
+**Rule**: Only **ONE child PLAN** should be "In Progress" at a time (unless explicitly coordinating parallel work).
+
+**Workflow**:
+
+1. **Pause Current Child**:
+
+   - Update child PLAN "Current Status"
+   - Commit changes
+   - Mark as "⏸️ Paused" in GrammaPlan
+
+2. **Update GrammaPlan**:
+
+   - Update child status table
+   - Recalculate overall progress
+   - Note which child is next
+
+3. **Resume Next Child**:
+   - Follow IMPLEMENTATION_RESUME.md for child PLAN
+   - Mark as "🔨 In Progress" in GrammaPlan
+   - Update ACTIVE_PLANS.md
+
+### GrammaPlan Completion
+
+**Complete When**:
+
+1. All required child PLANs complete (or explicitly deprioritized)
+2. Integration validated (if applicable)
+3. Strategic goal achieved
+
+**Process**:
+
+1. Mark last child complete
+2. Verify integration across children
+3. Update GrammaPlan status to "Complete"
+4. Follow IMPLEMENTATION_END_POINT for GrammaPlan
+5. Archive GrammaPlan + all children together
+
+### GrammaPlan Archiving
+
+**Structure**:
+
+```
+documentation/archive/grammaplan-[name]-[date]/
+├── INDEX.md
+├── GRAMMAPLAN_[FEATURE].md
+├── planning/
+│   └── PLAN_[FEATURE]-[CHILD-*].md (all children)
+├── subplans/
+│   └── SUBPLAN_* (from all children)
+├── execution/
+│   └── EXECUTION_TASK_* (from all children)
+└── summary/
+    └── GRAMMAPLAN-[FEATURE]-COMPLETE.md
+```
+
+**Key**: Archive GrammaPlan and ALL children together as one cohesive unit.
+
+---
+
 **Status**: Permanent Reference  
 **Created**: 2025-11-06 23:00 UTC  
-**Purpose**: Systematic management of multiple PLANs with dependencies and intersections
+**Updated**: 2025-11-07 (GrammaPlan support added)  
+**Purpose**: Systematic management of multiple PLANs with dependencies and intersections, including GrammaPlan orchestration
