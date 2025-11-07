@@ -1072,6 +1072,154 @@ Items will be organized as:
 
 ---
 
+### Code Quality Refactor - Future Work (November 7, 2025)
+
+**Source**: PLAN_CODE-QUALITY-REFACTOR.md completion  
+**Discovered When**: November 7, 2025
+
+#### IMPL-QUALITY-001: Expand Test Coverage for Metrics Integration
+
+**Theme**: Testing / Code Quality  
+**Effort**: Medium (8-12h)  
+**Dependencies**: None  
+**Priority**: Medium  
+**Discovered In**: EXECUTION_TASK_CODE-QUALITY-REFACTOR_03_01.md, CHECKPOINT_PLAN-CODE-QUALITY-REFACTOR.md  
+**Description**:
+
+- Only 1 test file created (`test_core_metrics.py`) for metrics integration
+- Need comprehensive test coverage for all 22 service/chat files with metrics
+- Should test both structural (metric registration) and functional (metric incrementing) aspects
+- Include error path testing (verify error metrics increment correctly)
+- Test edge cases and boundary conditions
+
+**Why Medium**:
+
+- Not blocking current functionality
+- Important for long-term maintainability
+- Moderate effort (create test files for each service group)
+- Should be done before next major refactor
+
+**Related Documents**:
+
+- PLAN_CODE-QUALITY-REFACTOR.md
+- tests/business/services/rag/test_core_metrics.py
+- CHECKPOINT_PLAN-CODE-QUALITY-REFACTOR.md
+
+---
+
+#### IMPL-QUALITY-002: Complete Remaining Type Hints (5% Gap)
+
+**Theme**: Code Quality / Type Safety  
+**Effort**: Small (2-4h)  
+**Dependencies**: None  
+**Priority**: Low  
+**Discovered In**: PLAN_CODE-QUALITY-REFACTOR.md completion  
+**Description**:
+
+- Current coverage: 95.2% (158/166 functions)
+- ~8 functions remaining without type hints
+- Mostly in GraphRAG agents (2 functions) and some edge cases
+- Should complete to 100% for full type safety
+
+**Why Low**:
+
+- Already at 95.2% (exceeds 90% target)
+- Remaining functions are likely edge cases or private methods
+- Low impact (already very high coverage)
+- Can be done incrementally
+
+**Related Documents**:
+
+- PLAN_CODE-QUALITY-REFACTOR.md
+- business/agents/graphrag/*.py
+
+---
+
+#### IMPL-QUALITY-003: Enhance Docstring Coverage
+
+**Theme**: Documentation / Code Quality  
+**Effort**: Medium (6-10h)  
+**Dependencies**: None  
+**Priority**: Medium  
+**Discovered In**: PLAN_CODE-QUALITY-REFACTOR.md Achievement 8.2  
+**Description**:
+
+- Key functions have docstrings, but comprehensive coverage not achieved
+- Should add docstrings to all public functions following Google/NumPy style
+- Include parameter descriptions, return types, examples where helpful
+- Focus on service functions, agent methods, stage methods
+
+**Why Medium**:
+
+- Improves code maintainability and developer experience
+- Not urgent (key functions already documented)
+- Moderate effort (systematic review and addition)
+- Should be done before next major feature development
+
+**Related Documents**:
+
+- PLAN_CODE-QUALITY-REFACTOR.md
+- All service/agent/stage files
+
+---
+
+#### IMPL-QUALITY-004: Apply Clean Code Principles Systematically
+
+**Theme**: Code Quality / Refactoring  
+**Effort**: Large (20-30h)  
+**Dependencies**: None  
+**Priority**: Low  
+**Discovered In**: PLAN_CODE-QUALITY-REFACTOR.md Achievement 8.3  
+**Description**:
+
+- Clean code principles applied via library patterns, but not systematically
+- Should review function length (target: <50 lines), cyclomatic complexity (target: <10)
+- Refactor complex functions into smaller, focused functions
+- Apply SOLID principles where applicable
+- Improve naming consistency
+
+**Why Low**:
+
+- Code is already functional and maintainable
+- Large effort for incremental improvement
+- Not blocking current work
+- Can be done incrementally during future refactors
+
+**Related Documents**:
+
+- PLAN_CODE-QUALITY-REFACTOR.md
+- All business/ and app/ files
+
+---
+
+#### IMPL-QUALITY-005: Expand Error Handling Coverage to 100%
+
+**Theme**: Error Handling / Code Quality  
+**Effort**: Small (3-5h)  
+**Dependencies**: None  
+**Priority**: Low  
+**Discovered In**: PLAN_CODE-QUALITY-REFACTOR.md Achievement 9.2  
+**Description**:
+
+- Current coverage: 87% (via @handle_errors decorator)
+- ~13% of functions still need error handling
+- Should identify remaining functions and apply @handle_errors
+- Target: 100% coverage for all public functions
+
+**Why Low**:
+
+- Already at 87% (good coverage)
+- Remaining functions likely low-risk or already have try/except
+- Low impact (most critical paths covered)
+- Can be done incrementally
+
+**Related Documents**:
+
+- PLAN_CODE-QUALITY-REFACTOR.md
+- scripts/audit_error_handling.py
+
+---
+
 ## ✅ Completed Items
 
 Items moved here when done, then archived monthly.

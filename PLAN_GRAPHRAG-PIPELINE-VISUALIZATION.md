@@ -261,38 +261,38 @@ The GraphRAG pipeline is working with basic functionality:
 
 ### Priority 0: HIGH - Flexible Pipeline Orchestration
 
-**Achievement 0.1**: Stage Selection & Partial Runs Implemented
+**Achievement 0.1**: Stage Selection & Partial Runs Implemented ✅
 
-- Add `--stages` flag to CLI: specify stage list or range
-- Examples: `--stages extraction,resolution` or `--stages 1-3`
-- Modify `GraphRAGPipeline` to accept stage list
-- Validate stage dependencies (e.g., resolution needs extraction)
-- Test: Can run partial pipeline, dependencies respected
-- Success: Flexible stage execution working
-- Effort: 3-4 hours
-- Files: `business/pipelines/graphrag.py`, `app/cli/graphrag.py`
+- ✅ Add `--stages` flag to CLI: specify stage list or range
+- ✅ Examples: `--stages extraction,resolution` or `--stages 1-3`
+- ✅ Modify `GraphRAGPipeline` to accept stage list
+- ✅ Validate stage dependencies (e.g., resolution needs extraction)
+- ✅ Test: Can run partial pipeline, dependencies respected (14 tests, all passing)
+- ✅ Success: Flexible stage execution working
+- ✅ Effort: 3-4 hours (completed)
+- ✅ Files: `business/pipelines/graphrag.py`, `app/cli/graphrag.py`, `core/config/graphrag.py`, `tests/business/pipelines/test_graphrag_stage_selection.py`
 
-**Achievement 0.2**: Resume from Failure Implemented
+**Achievement 0.2**: Resume from Failure Implemented ✅
 
-- Store pipeline state (last completed stage, checkpoint)
-- Add `--resume` flag to CLI
-- Detect last successful stage from DB
-- Skip completed stages, resume from next
-- Test: Pipeline fails at stage 3 → resume skips 1-2
-- Success: Resume capability working
-- Effort: 3-4 hours
-- Files: `business/pipelines/graphrag.py`
+- ✅ Store pipeline state (last completed stage, checkpoint)
+- ✅ Add `--resume` flag to CLI
+- ✅ Detect last successful stage from DB
+- ✅ Skip completed stages, resume from next
+- ✅ Test: Pipeline fails at stage 3 → resume skips 1-2 (11 tests, all passing)
+- ✅ Success: Resume capability working
+- ✅ Effort: 3-4 hours (completed)
+- ✅ Files: `business/pipelines/graphrag.py`, `app/cli/graphrag.py`, `core/config/graphrag.py`, `tests/business/pipelines/test_graphrag_resume.py`
 
-**Achievement 0.3**: Stage Dependency Validation Implemented
+**Achievement 0.3**: Stage Dependency Validation Implemented ✅
 
-- Define explicit dependencies (resolution depends on extraction, etc.)
-- Validate selected stages have dependencies met
-- Warn if running out of order
-- Auto-include dependencies if needed
-- Test: Selecting resolution without extraction → error or auto-include
-- Success: Safe stage execution
-- Effort: 2-3 hours
-- Files: `business/pipelines/graphrag.py`
+- ✅ Define explicit dependencies (resolution depends on extraction, etc.) - Already in 0.1
+- ✅ Validate selected stages have dependencies met - Already in 0.1
+- ✅ Warn if running out of order - Enhanced in 0.3
+- ✅ Auto-include dependencies if needed - Already in 0.1
+- ✅ Test: Selecting resolution without extraction → error or auto-include (10 tests, all passing)
+- ✅ Success: Safe stage execution
+- ✅ Effort: 2-3 hours (completed)
+- ✅ Files: `business/pipelines/graphrag.py`, `tests/business/pipelines/test_graphrag_dependency_validation.py`
 
 ---
 
@@ -701,7 +701,31 @@ The GraphRAG pipeline is working with basic functionality:
 
 **Subplans Created for This PLAN**:
 
-(Will be updated as subplans are created)
+- **SUBPLAN_01**: Achievement 0.1 (Stage Selection & Partial Runs) - Status: ✅ COMPLETE
+  └─ EXECUTION_TASK_01_01: Implementation complete - Status: ✅ COMPLETE
+
+  - Implemented stage dependencies mapping (STAGE_DEPENDENCIES, STAGE_NAME_MAP, STAGE_ORDER)
+  - Implemented `_parse_stage_selection()` supporting names, ranges, and indices
+  - Implemented `_get_stage_dependencies()` for recursive dependency resolution
+  - Implemented `_validate_stage_dependencies()` for dependency validation
+  - Implemented `_resolve_stage_selection()` with auto-include dependencies
+  - Implemented `_filter_stage_specs()` to filter stage specs
+  - Implemented `run_stages()` method for partial pipeline execution
+  - Added `--stages` CLI argument
+  - Added `selected_stages` config field
+  - Created comprehensive test suite (14 tests, all passing)
+
+- **SUBPLAN_02**: Achievement 0.2 (Resume from Failure) - Status: ✅ COMPLETE
+  └─ EXECUTION_TASK_02_01: Implementation complete - Status: ✅ COMPLETE
+
+  - Implemented `_detect_stage_completion()` to check DB for completion status
+  - Implemented `_get_last_completed_stage()` to find last completed stage
+  - Implemented `_get_stages_to_run()` to filter incomplete stages
+  - Implemented `run_with_resume()` to orchestrate resume logic
+  - Modified `run_full_pipeline()` to support resume parameter
+  - Added `--resume` CLI argument
+  - Added `resume_from_failure` config field
+  - Created comprehensive test suite (11 tests, all passing)
 
 ---
 
@@ -952,19 +976,18 @@ The GraphRAG pipeline is working with basic functionality:
 
 ## 📝 Current Status & Handoff (For Pause/Resume)
 
-**Last Updated**: 2025-11-06 23:15 UTC  
-**Status**: Planning - Not Started
+**Last Updated**: 2025-11-06 23:55 UTC  
+**Status**: 🔄 In Progress
 
-**Completed Achievements**: 0/30+ (0%)
+**Completed Achievements**: 2/30+ (7%)
 
 **Pending Achievements**: All (Priorities 0-8)
 
 **Next Steps**:
 
-1. Review related PLANs (4 upstream dependencies)
-2. Add this PLAN to ACTIVE_PLANS.md
-3. Start with Priority 0 (Flexible Pipeline)
-4. Create SUBPLAN for Achievement 0.1
+1. Continue with Priority 0 (Flexible Pipeline)
+2. Achievement 0.3: Stage Dependency Validation (may already be covered by 0.1)
+3. Move to Priority 1 (Metrics & Observability)
 
 **When Resuming**:
 

@@ -20,6 +20,35 @@ from core.libraries.error_handling.decorators import handle_errors
 
 logger = logging.getLogger(__name__)
 
+# Stage dependencies for GraphRAG pipeline
+# Achievement 0.1: Stage Selection & Partial Runs
+STAGE_DEPENDENCIES = {
+    "graph_extraction": [],  # No dependencies
+    "entity_resolution": ["graph_extraction"],
+    "graph_construction": ["entity_resolution"],
+    "community_detection": ["graph_construction"],
+}
+
+# Stage name mappings (short names to full names)
+STAGE_NAME_MAP = {
+    "extraction": "graph_extraction",
+    "resolution": "entity_resolution",
+    "construction": "graph_construction",
+    "detection": "community_detection",
+    "graph_extraction": "graph_extraction",
+    "entity_resolution": "entity_resolution",
+    "graph_construction": "graph_construction",
+    "community_detection": "community_detection",
+}
+
+# Stage order in pipeline
+STAGE_ORDER = [
+    "graph_extraction",
+    "entity_resolution",
+    "graph_construction",
+    "community_detection",
+]
+
 
 class GraphRAGPipeline:
     """
@@ -60,7 +89,17 @@ class GraphRAGPipeline:
             if config.experiment_id:
                 logger.info(f"📊 Experiment ID: {config.experiment_id}")
 
-        self.specs = self._create_stage_specs()
+        # Achievement 0.1: Stage Selection & Partial Runs
+        # Parse stage selection if provided in config
+        selected_stages = None
+        if hasattr(config, "selected_stages") and config.selected_stages:
+            selected_stages = self._resolve_stage_selection(
+                self._parse_stage_selection(config.selected_stages),
+                auto_include_deps=True
+            )
+            logger.info(f"🎯 Stage selection: {selected_stages}")
+
+        self.specs = self._create_stage_specs(stage_filter=selected_stages)
         self.runner = PipelineRunner(
             self.specs, stop_on_error=not config.continue_on_error
         )
@@ -128,14 +167,21 @@ class GraphRAGPipeline:
 
         logger.info(f"📊 Experiment metadata tracked: {self.config.experiment_id}")
 
-    def _create_stage_specs(self) -> List[StageSpec]:
+    def _create_stage_specs(self, stage_filter: Optional[List[str]] = None) -> List[StageSpec]:
         """
         Create stage specifications for the GraphRAG pipeline using registry keys.
+
+        Achievement 0.1: Stage Selection & Partial Runs
+        - If stage_filter is provided, only include those stages
+        - Maintains original stage order
+
+        Args:
+            stage_filter: Optional list of stage names to include
 
         Returns:
             List of stage specifications
         """
-        return [
+        all_specs = [
             StageSpec(
                 stage="graph_extraction",  # ✅ Use registry key
                 config=self.config.extraction_config,
@@ -153,6 +199,18 @@ class GraphRAGPipeline:
                 config=self.config.detection_config,
             ),
         ]
+
+        if stage_filter is None:
+            return all_specs
+
+        # Filter specs based on selection, maintaining order
+        filtered_specs = []
+        for spec in all_specs:
+            stage_name = spec.stage if isinstance(spec.stage, str) else spec.stage.name
+            if stage_name in stage_filter:
+                filtered_specs.append(spec)
+
+        return filtered_specs
 
     def setup(self) -> None:
         """
@@ -199,9 +257,425 @@ class GraphRAGPipeline:
 
         raise ValueError(f"Unknown stage: {stage_name}")
 
+    def _parse_stage_selection(self, stage_input: Optional[str]) -> Optional[List[str]]:
+        """
+        Parse stage selection input into list of stage names.
+
+        Achievement 0.1: Stage Selection & Partial Runs
+
+        Supports formats:
+        - "extraction,resolution" (comma-separated names)
+        - "1-3" (range)
+        - "1,3,4" (indices)
+        - "graph_extraction,entity_resolution" (full names)
+
+        Args:
+            stage_input: Stage selection string or None
+
+        Returns:
+            List of stage names or None (all stages)
+        """
+        if not stage_input or not stage_input.strip():
+            return None
+
+        stage_input = stage_input.strip()
+        stages = []
+
+        # Check for range format (e.g., "1-3")
+        if "-" in stage_input and "," not in stage_input:
+            try:
+                start, end = map(int, stage_input.split("-"))
+                if start < 1 or end > len(STAGE_ORDER) or start > end:
+                    raise ValueError(
+                        f"Invalid stage range: {stage_input}. "
+                        f"Must be between 1 and {len(STAGE_ORDER)}"
+                    )
+                stages = [STAGE_ORDER[i - 1] for i in range(start, end + 1)]
+            except ValueError as e:
+                raise ValueError(f"Invalid stage range format: {stage_input}. {e}")
+
+        # Check for comma-separated list
+        elif "," in stage_input:
+            parts = [p.strip() for p in stage_input.split(",")]
+            for part in parts:
+                # Check if it's a number (index)
+                try:
+                    idx = int(part)
+                    if idx < 1 or idx > len(STAGE_ORDER):
+                        raise ValueError(
+                            f"Invalid stage index: {idx}. "
+                            f"Must be between 1 and {len(STAGE_ORDER)}"
+                        )
+                    stages.append(STAGE_ORDER[idx - 1])
+                except ValueError:
+                    # Not a number, treat as name
+                    stage_name = STAGE_NAME_MAP.get(part.lower())
+                    if not stage_name:
+                        raise ValueError(
+                            f"Unknown stage name: {part}. "
+                            f"Valid stages: {list(STAGE_NAME_MAP.keys())}"
+                        )
+                    stages.append(stage_name)
+
+        # Single value
+        else:
+            # Check if it's a number
+            try:
+                idx = int(stage_input)
+                if idx < 1 or idx > len(STAGE_ORDER):
+                    raise ValueError(
+                        f"Invalid stage index: {idx}. "
+                        f"Must be between 1 and {len(STAGE_ORDER)}"
+                    )
+                stages = [STAGE_ORDER[idx - 1]]
+            except ValueError:
+                # Not a number, treat as name
+                stage_name = STAGE_NAME_MAP.get(stage_input.lower())
+                if not stage_name:
+                    raise ValueError(
+                        f"Unknown stage name: {stage_input}. "
+                        f"Valid stages: {list(STAGE_NAME_MAP.keys())}"
+                    )
+                stages = [stage_name]
+
+        return stages
+
+    def _get_stage_dependencies(self, stage_name: str) -> List[str]:
+        """
+        Get all dependencies for a stage (recursive).
+
+        Achievement 0.1: Stage Selection & Partial Runs
+
+        Args:
+            stage_name: Name of the stage
+
+        Returns:
+            List of dependency stage names (in dependency order)
+        """
+        deps = STAGE_DEPENDENCIES.get(stage_name, [])
+        # Recursively get dependencies of dependencies
+        all_deps = []
+        for dep in deps:
+            all_deps.extend(self._get_stage_dependencies(dep))
+            if dep not in all_deps:
+                all_deps.append(dep)
+        return all_deps
+
+    def _validate_stage_dependencies(self, selected_stages: List[str]) -> List[str]:
+        """
+        Validate that all dependencies are met for selected stages.
+
+        Achievement 0.1: Stage Selection & Partial Runs
+
+        Args:
+            selected_stages: List of selected stage names
+
+        Returns:
+            List of missing dependency stage names
+        """
+        missing = []
+        selected_set = set(selected_stages)
+
+        for stage in selected_stages:
+            deps = self._get_stage_dependencies(stage)
+            for dep in deps:
+                if dep not in selected_set:
+                    missing.append(dep)
+
+        return missing
+
+    def _warn_out_of_order(self, selected_stages: List[str]) -> None:
+        """
+        Warn if stages are selected out of order.
+
+        Achievement 0.3: Stage Dependency Validation
+
+        Args:
+            selected_stages: List of selected stage names
+        """
+        if len(selected_stages) <= 1:
+            return  # No ordering issue with single or no stages
+
+        # Get indices in STAGE_ORDER
+        stage_indices = {}
+        for idx, stage in enumerate(STAGE_ORDER):
+            stage_indices[stage] = idx
+
+        # Check if selected stages are in order
+        indices = []
+        for stage in selected_stages:
+            if stage in stage_indices:
+                indices.append(stage_indices[stage])
+            else:
+                # Unknown stage, skip ordering check
+                return
+
+        # Check if indices are in ascending order
+        if indices != sorted(indices):
+            logger.warning(
+                f"⚠️  Stages selected out of order: {selected_stages}. "
+                f"Pipeline will run stages in correct order: {[STAGE_ORDER[i] for i in sorted(indices)]}"
+            )
+
+    def _resolve_stage_selection(
+        self, selected_stages: Optional[List[str]], auto_include_deps: bool = True
+    ) -> List[str]:
+        """
+        Resolve stage selection, optionally auto-including dependencies.
+
+        Achievement 0.1: Stage Selection & Partial Runs
+        Achievement 0.3: Stage Dependency Validation (enhanced with warnings)
+
+        Args:
+            selected_stages: List of selected stage names (or None for all)
+            auto_include_deps: If True, auto-include dependencies; if False, raise error
+
+        Returns:
+            Resolved list of stage names (with dependencies if auto_include_deps=True)
+
+        Raises:
+            ValueError: If dependencies are missing and auto_include_deps=False
+        """
+        if selected_stages is None:
+            return STAGE_ORDER.copy()
+
+        # Achievement 0.3: Warn if stages are out of order
+        self._warn_out_of_order(selected_stages)
+
+        # Get all dependencies
+        missing = self._validate_stage_dependencies(selected_stages)
+
+        if missing and not auto_include_deps:
+            raise ValueError(
+                f"Selected stages {selected_stages} are missing dependencies: {missing}. "
+                f"Either include them or use auto_include_deps=True"
+            )
+
+        # Log dependency auto-inclusion if needed
+        if missing and auto_include_deps:
+            logger.info(
+                f"📦 Auto-including missing dependencies for {selected_stages}: {missing}"
+            )
+
+        # Combine selected stages and dependencies, maintaining order
+        all_stages = selected_stages + missing
+        # Remove duplicates while preserving order
+        resolved = []
+        seen = set()
+        for stage in STAGE_ORDER:
+            if stage in all_stages and stage not in seen:
+                resolved.append(stage)
+                seen.add(stage)
+
+        return resolved
+
+    def _filter_stage_specs(self, selected_stages: List[str]) -> List[StageSpec]:
+        """
+        Filter stage specs based on selected stages, maintaining order.
+
+        Achievement 0.1: Stage Selection & Partial Runs
+
+        Args:
+            selected_stages: List of stage names to include
+
+        Returns:
+            Filtered list of stage specs in original order
+        """
+        return self._create_stage_specs(stage_filter=selected_stages)
+
+    def run_stages(self, stage_selection: Optional[str] = None) -> int:
+        """
+        Run selected stages of the pipeline.
+
+        Achievement 0.1: Stage Selection & Partial Runs
+
+        Args:
+            stage_selection: Stage selection string (e.g., "extraction,resolution" or "1-3")
+
+        Returns:
+            Exit code (0 for success, non-zero for failure)
+        """
+        # Parse and resolve stage selection
+        parsed = self._parse_stage_selection(stage_selection)
+        resolved = self._resolve_stage_selection(parsed, auto_include_deps=True)
+
+        logger.info(f"🎯 Running selected stages: {resolved}")
+
+        # Filter specs
+        filtered_specs = self._filter_stage_specs(resolved)
+
+        # Create new runner with filtered specs
+        filtered_runner = PipelineRunner(
+            filtered_specs, stop_on_error=not self.config.continue_on_error
+        )
+
+        # Run filtered pipeline
+        return filtered_runner.run(pipeline_type="graphrag")
+
+    def _detect_stage_completion(self) -> Dict[str, float]:
+        """
+        Detect which stages have completed by checking chunk status in database.
+
+        Achievement 0.2: Resume from Failure
+
+        Checks each stage's completion status by querying chunks collection.
+        Returns completion ratio (0.0 to 1.0) for each stage.
+
+        Returns:
+            Dictionary mapping stage name to completion ratio (0.0-1.0)
+        """
+        from core.config.paths import COLL_CHUNKS
+
+        # Get chunks collection from write_db (where stages write their status)
+        # Use write_db if specified, otherwise use default db
+        db_name = (
+            self.config.extraction_config.write_db_name
+            or self.config.extraction_config.db_name
+            or "mongo_hack"
+        )
+        db = self.client[db_name]
+        collection = db[COLL_CHUNKS]
+
+        # Count total chunks
+        total_chunks = collection.count_documents({})
+        if total_chunks == 0:
+            # No chunks, nothing is complete
+            return {stage: 0.0 for stage in STAGE_ORDER}
+
+        completion_ratios = {}
+
+        # Check each stage's completion status
+        stage_status_fields = {
+            "graph_extraction": "graphrag_extraction.status",
+            "entity_resolution": "graphrag_resolution.status",
+            "graph_construction": "graphrag_construction.status",
+            "community_detection": "graphrag_communities.status",
+        }
+
+        for stage_name in STAGE_ORDER:
+            status_field = stage_status_fields[stage_name]
+            # Count chunks with this stage completed
+            completed_count = collection.count_documents(
+                {status_field: "completed"}
+            )
+            completion_ratios[stage_name] = (
+                completed_count / total_chunks if total_chunks > 0 else 0.0
+            )
+
+        return completion_ratios
+
+    def _get_last_completed_stage(
+        self, completion_ratios: Dict[str, float], threshold: float = 0.95
+    ) -> Optional[str]:
+        """
+        Get the last stage that is considered complete.
+
+        Achievement 0.2: Resume from Failure
+
+        Args:
+            completion_ratios: Dictionary of stage completion ratios
+            threshold: Completion threshold (default 0.95 = 95%)
+
+        Returns:
+            Last completed stage name, or None if no stages are complete
+        """
+        last_completed = None
+        for stage_name in STAGE_ORDER:
+            if completion_ratios.get(stage_name, 0.0) >= threshold:
+                last_completed = stage_name
+            else:
+                # First incomplete stage found, stop
+                break
+
+        return last_completed
+
+    def _get_stages_to_run(
+        self, completion_ratios: Dict[str, float], threshold: float = 0.95
+    ) -> List[str]:
+        """
+        Get list of stages that need to be run (not yet complete).
+
+        Achievement 0.2: Resume from Failure
+
+        Args:
+            completion_ratios: Dictionary of stage completion ratios
+            threshold: Completion threshold (default 0.95 = 95%)
+
+        Returns:
+            List of stage names that need to be run (in order)
+        """
+        stages_to_run = []
+        for stage_name in STAGE_ORDER:
+            if completion_ratios.get(stage_name, 0.0) < threshold:
+                stages_to_run.append(stage_name)
+
+        return stages_to_run
+
+    def run_with_resume(self, completion_threshold: float = 0.95) -> int:
+        """
+        Run pipeline with resume capability - skip completed stages.
+
+        Achievement 0.2: Resume from Failure
+
+        Detects which stages have completed and only runs incomplete stages.
+
+        Args:
+            completion_threshold: Threshold for considering a stage complete (default 0.95)
+
+        Returns:
+            Exit code (0 for success, non-zero for failure)
+        """
+        logger.info("🔄 Resume mode: Detecting completed stages...")
+
+        # Detect stage completion
+        completion_ratios = self._detect_stage_completion()
+
+        # Log completion status
+        for stage_name, ratio in completion_ratios.items():
+            status = "✅ Complete" if ratio >= completion_threshold else "⏳ Incomplete"
+            logger.info(f"  {stage_name}: {ratio:.1%} {status}")
+
+        # Get stages to run
+        stages_to_run = self._get_stages_to_run(completion_ratios, completion_threshold)
+
+        if not stages_to_run:
+            logger.info("✅ All stages already completed. Nothing to run.")
+            return 0
+
+        last_completed = self._get_last_completed_stage(completion_ratios, completion_threshold)
+        if last_completed:
+            logger.info(
+                f"📌 Last completed stage: {last_completed}. "
+                f"Resuming from: {stages_to_run[0]}"
+            )
+        else:
+            logger.info(f"🔄 No stages completed. Running all stages from start.")
+
+        # Convert stage list to selection string
+        stage_selection = ",".join(stages_to_run)
+
+        # Run only incomplete stages
+        logger.info(f"🎯 Running stages: {stage_selection}")
+        return self.run_stages(stage_selection)
+
     @handle_errors(log_traceback=True, capture_context=True, reraise=True)
-    def run_full_pipeline(self) -> int:
-        """Run the complete GraphRAG pipeline with comprehensive error handling."""
+    def run_full_pipeline(self, resume: bool = False) -> int:
+        """
+        Run the complete GraphRAG pipeline with comprehensive error handling.
+
+        Achievement 0.2: Resume from Failure
+        - If resume=True, automatically detects and skips completed stages
+
+        Args:
+            resume: If True, resume from last failure (skip completed stages)
+
+        Returns:
+            Exit code (0 for success, non-zero for failure)
+        """
+        if resume:
+            logger.info("🔄 Running pipeline with resume mode")
+            return self.run_with_resume()
+
         logger.info("Starting full GraphRAG pipeline execution")
 
         with error_context(

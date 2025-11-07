@@ -733,6 +733,12 @@ class GraphRAGPipelineConfig:
     max_processing_time: int = 7200  # 2 hours in seconds
     checkpoint_interval: int = 100  # chunks
 
+    # Achievement 0.1: Stage Selection & Partial Runs
+    selected_stages: Optional[str] = None  # Stage selection string (e.g., "extraction,resolution" or "1-3")
+
+    # Achievement 0.2: Resume from Failure
+    resume_from_failure: bool = False  # If True, resume from last failure (skip completed stages)
+
     # Stage configurations
     extraction_config: GraphExtractionConfig = None
     resolution_config: EntityResolutionConfig = None

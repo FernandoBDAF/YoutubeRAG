@@ -118,6 +118,14 @@ def create_config_from_args(args) -> GraphRAGPipelineConfig:
     if hasattr(args, "log_file") and args.log_file:
         config.log_file = args.log_file
     
+    # Achievement 0.1: Stage Selection & Partial Runs
+    if hasattr(args, "stages") and args.stages:
+        config.selected_stages = args.stages
+
+    # Achievement 0.2: Resume from Failure
+    if hasattr(args, "resume") and args.resume:
+        config.resume_from_failure = True
+    
     # Store experiment_id if provided (for tracking)
     if file_config.get("experiment_id"):
         config.experiment_id = file_config["experiment_id"]
@@ -249,7 +257,24 @@ def main():
             "graph_construction",
             "community_detection",
         ],
-        help="Run specific stage only",
+        help="Run specific stage only (legacy - use --stages for multiple stages)",
+    )
+    parser.add_argument(
+        "--stages",
+        type=str,
+        help=(
+            "Run selected stages (comma-separated names, range, or indices). "
+            "Examples: 'extraction,resolution', '1-3', '1,3,4'. "
+            "Dependencies are automatically included."
+        ),
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Resume from last failure. Automatically detects completed stages "
+            "and skips them, resuming from the first incomplete stage."
+        ),
     )
     parser.add_argument("--status", action="store_true", help="Show pipeline status")
     parser.add_argument(
@@ -355,6 +380,24 @@ def main():
             show_pipeline_status(pipeline)
         elif args.cleanup:
             cleanup_failed_stages(pipeline)
+        elif hasattr(args, "stages") and args.stages:
+            # Achievement 0.1: Stage Selection & Partial Runs
+            logger.info(f"🎯 Running selected stages: {args.stages}")
+            result = pipeline.run_stages(args.stages)
+            if result == 0:
+                logger.info("✅ Selected stages completed successfully")
+            else:
+                logger.error(f"❌ Selected stages failed with exit code {result}")
+            sys.exit(result)
+        elif hasattr(args, "resume") and args.resume:
+            # Achievement 0.2: Resume from Failure
+            logger.info("🔄 Resume mode enabled")
+            result = pipeline.run_full_pipeline(resume=True)
+            if result == 0:
+                logger.info("✅ Pipeline resumed and completed successfully")
+            else:
+                logger.error(f"❌ Pipeline resume failed with exit code {result}")
+            sys.exit(result)
         elif args.stage:
             run_single_stage(pipeline, args.stage)
         else:

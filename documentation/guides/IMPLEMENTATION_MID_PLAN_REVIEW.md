@@ -17,12 +17,14 @@ Long-running PLANs (>20 hours, 5+ priorities, or spanning multiple months) can d
 ## 📋 When to Use This Protocol
 
 **Mandatory Checkpoints**:
+
 - **After 20 hours** of work on a single PLAN
 - **After completing Priority 3** (if plan has 5+ priorities)
 - **After 1 month** of calendar time (even if paused)
 - **Before creating the 10th SUBPLAN** for a single PLAN
 
 **Optional Checkpoints**:
+
 - After major architectural decisions
 - When execution feels "stuck" or inefficient
 - Before transitioning to a new priority level
@@ -155,6 +157,7 @@ Is GrammaPlan now warranted?
 **Review Trigger**: [20 hours / Priority 3 complete / 1 month / 10 SUBPLANs]
 
 **Execution Health**:
+
 - SUBPLANs: [X] created ([Y] complete)
 - EXECUTION_TASKs: [X] created ([Y] complete)
 - Total Iterations: [X] (avg [Y] per task)
@@ -168,11 +171,13 @@ Is GrammaPlan now warranted?
 **Technical Debt**: ✅ None / ⚠️ Minor / 🚨 Significant
 
 **Key Findings**:
+
 1. [Finding 1]
 2. [Finding 2]
 3. [Finding 3]
 
 **Actions Taken**:
+
 1. [Action 1]
 2. [Action 2]
 
@@ -184,12 +189,14 @@ Is GrammaPlan now warranted?
 ## 🎯 When to Skip This Protocol
 
 **Skip if**:
+
 - PLAN < 20 hours total effort
 - PLAN has < 5 priorities
 - PLAN is simple refactor (single domain, clear scope)
 - You're already following END_POINT protocol (plan complete)
 
 **Always use if**:
+
 - PLAN > 40 hours
 - PLAN spanning multiple months
 - Execution feels "off" or inefficient
@@ -223,7 +230,7 @@ Is GrammaPlan now warranted?
 ---
 
 **Version History**:
+
 - 1.0 (2025-11-07): Initial protocol based on CODE-QUALITY completion review learnings
 
 **Status**: Active and ready for use
-
