@@ -2,7 +2,7 @@
 
 **Purpose**: Central repository for future implementation ideas discovered during work  
 **Status**: Living Document - Continuously Updated  
-**Last Updated**: November 7, 2025 (Code Quality Refactor Completion + 5 New Backlog Items)
+**Last Updated**: November 7, 2025 (Pipeline Visualization Complete + 6 New Backlog Items)
 
 ---
 
@@ -48,6 +48,160 @@
 ---
 
 ## 📋 Backlog Items
+
+### Pipeline Visualization Enhancements (November 7, 2025)
+
+**Source**: PLAN_GRAPHRAG-PIPELINE-VISUALIZATION complete  
+**Discovered When**: November 7, 2025
+
+#### IMPL-010: Authentication & Authorization System
+
+**Theme**: Security & Access Control  
+**Effort**: Large (>24h)  
+**Dependencies**: Pipeline visualization system (complete)  
+**Discovered In**: Priority 8 completion, security considerations  
+**Discovered When**: 2025-11-07  
+**Priority**: High  
+**Description**:
+
+- Add authentication layer for all web UIs and API endpoints
+- Implement role-based access control (admin, developer, viewer)
+- API key management for programmatic access
+- Session management and token-based auth
+
+**Why High**:
+
+- Production deployment requires access control
+- Prevents unauthorized pipeline execution
+- Protects sensitive graph data
+- Industry-standard security requirement
+
+**Related Documents**:
+
+- PLAN: `documentation/archive/graphrag-pipeline-visualization-nov2025/planning/PLAN_GRAPHRAG-PIPELINE-VISUALIZATION.md`
+- Guide: `documentation/guides/GRAPHRAG-VISUALIZATION-GUIDE.md`
+
+#### IMPL-011: Advanced Graph Analytics
+
+**Theme**: Graph Analysis & Algorithms  
+**Effort**: Medium (8-24h)  
+**Dependencies**: Graph visualization system (complete)  
+**Discovered In**: Priority 7 completion  
+**Discovered When**: 2025-11-07  
+**Priority**: Medium  
+**Description**:
+
+- Centrality calculations (PageRank, Betweenness, Closeness)
+- Path finding (shortest path between entities)
+- Community overlap detection
+- Anomaly detection in graph structure
+
+**Why Medium**:
+
+- Valuable for advanced analysis
+- NetworkX provides most algorithms
+- Not critical for basic operations
+
+**Related Documents**:
+
+- UI: `app/ui/graph_viewer.html`, `app/ui/graph_statistics.html`
+
+#### IMPL-012: Mobile-Responsive UI Design
+
+**Theme**: User Experience  
+**Effort**: Medium (8-24h)  
+**Dependencies**: All web UIs (complete)  
+**Discovered In**: Priority 8 completion  
+**Discovered When**: 2025-11-07  
+**Priority**: Low  
+**Description**:
+
+- Adapt all 13 dashboards for mobile devices
+- Responsive layouts for tablet and phone
+- Touch-friendly controls
+
+**Why Low**:
+
+- Current desktop design works well
+- Limited mobile use case for pipeline operations
+
+**Related Documents**:
+
+- UIs: All files in `app/ui/`
+
+#### IMPL-013: Real-Time Graph Updates via WebSocket
+
+**Theme**: Real-Time Collaboration  
+**Effort**: Medium (8-24h)  
+**Dependencies**: Graph visualization (complete)  
+**Discovered In**: Priority 1 completion  
+**Discovered When**: 2025-11-07  
+**Priority**: Low  
+**Description**:
+
+- Replace SSE with WebSocket for bi-directional communication
+- Stream graph updates during pipeline execution
+- Multi-user collaboration features
+
+**Why Low**:
+
+- SSE works well for current use case
+- Benefit primarily for collaborative scenarios
+
+**Related Documents**:
+
+- API: `app/api/pipeline_progress.py`
+
+#### IMPL-014: Neo4j Cypher Export
+
+**Theme**: External Tool Integration  
+**Effort**: Small (<8h)  
+**Dependencies**: Export API (complete)  
+**Discovered In**: Priority 7 completion  
+**Discovered When**: 2025-11-07  
+**Priority**: Medium  
+**Description**:
+
+- Add Neo4j Cypher format to export options
+- Generate CREATE statements for nodes and relationships
+- Support batch import format
+
+**Why Medium**:
+
+- Valuable for Neo4j users
+- Straightforward implementation
+- Common request for graph exports
+
+**Related Documents**:
+
+- API: `app/api/export.py`
+
+#### IMPL-015: API Rate Limiting & Throttling
+
+**Theme**: Production Stability  
+**Effort**: Small (<8h)  
+**Dependencies**: All API endpoints (complete)  
+**Discovered In**: Priority 8 completion  
+**Discovered When**: 2025-11-07  
+**Priority**: High  
+**Description**:
+
+- Implement rate limiting per IP address
+- Configurable request limits (requests/minute)
+- Throttling for expensive operations
+- 429 Too Many Requests response
+
+**Why High**:
+
+- Production deployment requires rate limiting
+- Prevents abuse and DoS attacks
+- Industry-standard security practice
+
+**Related Documents**:
+
+- APIs: All files in `app/api/`
+
+---
 
 ### Documentation Organization (November 6, 2025)
 
