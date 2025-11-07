@@ -269,7 +269,7 @@
 
 ## 📚 Related Documents
 
-- **Protocol**: `documentation/guides/MULTIPLE-PLANS-PROTOCOL.md`
+- **Protocol**: `LLM/guides/MULTIPLE-PLANS-PROTOCOL.md`
 - **Resume Guide**: `IMPLEMENTATION_RESUME.md` (Step 2.5, 2.6, 5)
 - **Methodology PLAN**: `PLAN_STRUCTURED-LLM-DEVELOPMENT.md`
 - **Compliance Audit**: `EXECUTION_ANALYSIS_PLAN-COMPLIANCE-AUDIT.md`

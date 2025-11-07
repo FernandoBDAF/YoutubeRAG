@@ -726,7 +726,7 @@ python -m app.cli.graphrag
 
 - [GRAPH-RAG.md](./GRAPH-RAG.md) - Overall GraphRAG architecture
 - [COMMUNITY-DETECTION.md](./COMMUNITY-DETECTION.md) - Community detection algorithms
-- [TPM-RPM-LIMITS-GUIDE.md](../../TPM-RPM-LIMITS-GUIDE.md) - Rate limiting guide (to be archived)
+- Rate limiting guide: See reference documentation for TPM/RPM limits
 
 **Archive**:
 

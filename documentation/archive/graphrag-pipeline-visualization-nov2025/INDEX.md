@@ -12,6 +12,7 @@
 This archive contains all documentation for the GraphRAG Pipeline Visualization implementation - a comprehensive refactor that transformed the GraphRAG pipeline from a batch-oriented sequential processor into a production-grade orchestration system.
 
 **Use for**:
+
 - Reference for API endpoint implementations
 - Examples of web UI development patterns
 - Prometheus/Grafana integration patterns
@@ -20,6 +21,7 @@ This archive contains all documentation for the GraphRAG Pipeline Visualization 
 - Understanding pipeline orchestration architecture
 
 **Current Documentation**:
+
 - **API Reference**: `documentation/api/GRAPHRAG-PIPELINE-API.md`
 - **User Guide**: `documentation/guides/GRAPHRAG-VISUALIZATION-GUIDE.md`
 - **UI Guide**: `app/ui/README.md`
@@ -34,42 +36,50 @@ The GraphRAG Pipeline Visualization system provides a complete suite of tools fo
 **8 Priority Groups, 30 Achievements**:
 
 1. **Priority 0: Flexible Pipeline Orchestration** (3 achievements)
+
    - Stage selection: Run specific stages via CLI (`--stages extraction,resolution`)
    - Resume from failure: Automatically detect and skip completed stages
    - Dependency validation: Auto-include dependencies, warn about out-of-order execution
 
 2. **Priority 1: Metrics & Observability** (3 achievements)
+
    - Prometheus metrics export with 9 metric types
    - Grafana dashboard with 12 panels
    - Real-time SSE progress monitoring
 
 3. **Priority 2: Stage Contribution & Experiments** (6 achievements)
+
    - Stage stats API and flow visualization UI
    - Enhanced experiment comparison with comprehensive metrics
    - Batch experiment runner and visualization
    - Experiment journal system
 
 4. **Priority 3: Graph Visualization** (3 achievements)
+
    - Entity browser with search and filters
    - Relationship viewer with predicate filtering
    - Interactive D3.js graph with zoom/pan/drag
 
 5. **Priority 4: Community Visualization** (3 achievements)
+
    - Community explorer with multi-resolution navigation
    - Community graph rendering
    - Level navigation with statistics
 
 6. **Priority 5: Pipeline Control & API** (3 achievements)
+
    - Pipeline control API (start/stop/resume/status/history)
    - Pipeline status UI with config editor
    - Pipeline history UI with filtering and export
 
 7. **Priority 6: Advanced Visualization** (3 achievements)
+
    - Quality metrics dashboard (per-stage quality)
    - Graph statistics dashboard (degree distribution, types)
    - Performance dashboard (duration, throughput)
 
 8. **Priority 7: Enhanced Features** (3 achievements)
+
    - Ego network visualization (N-hop neighborhoods)
    - Predicate filtering and analysis
    - Multi-format export (JSON, CSV, GraphML, GEXF)
@@ -80,6 +90,7 @@ The GraphRAG Pipeline Visualization system provides a complete suite of tools fo
    - User guide with setup, usage, troubleshooting
 
 **Metrics/Impact**:
+
 - **36 files created**: 12 API modules, 13 web UIs, 3 test files, 3 documentation files, 5 supporting files
 - **~12,000 lines of code**: APIs, UIs, tests, documentation
 - **25+ REST endpoints**: Complete API for pipeline control and data access
@@ -92,19 +103,23 @@ The GraphRAG Pipeline Visualization system provides a complete suite of tools fo
 ## Archive Contents
 
 ### planning/ (1 file)
+
 - `PLAN_GRAPHRAG-PIPELINE-VISUALIZATION.md` - Master plan with all 30 achievements
 
 ### subplans/ (3 files)
+
 - `SUBPLAN_GRAPHRAG-PIPELINE-VISUALIZATION_01.md` - Achievement 0.1 (Stage Selection & Partial Runs)
 - `SUBPLAN_GRAPHRAG-PIPELINE-VISUALIZATION_02.md` - Achievement 0.2 (Resume from Failure)
 - `SUBPLAN_GRAPHRAG-PIPELINE-VISUALIZATION_03.md` - Achievement 0.3 (Stage Dependency Validation)
 
 ### execution/ (3 files)
+
 - `EXECUTION_TASK_GRAPHRAG-PIPELINE-VISUALIZATION_01_01.md` - Stage selection implementation
 - `EXECUTION_TASK_GRAPHRAG-PIPELINE-VISUALIZATION_02_01.md` - Resume from failure implementation
 - `EXECUTION_TASK_GRAPHRAG-PIPELINE-VISUALIZATION_03_01.md` - Dependency validation implementation
 
 ### summary/ (1 file)
+
 - `EXECUTION_ANALYSIS_PIPELINE-VISUALIZATION-COMPLETE.md` - Complete implementation analysis with metrics and learnings
 
 **Note**: Priorities 1-8 (27 achievements) were implemented directly without separate SUBPLANs/EXECUTION_TASKs. Implementation details are documented in the PLAN's "Subplan Tracking" section.
@@ -114,11 +129,13 @@ The GraphRAG Pipeline Visualization system provides a complete suite of tools fo
 ## Key Documents
 
 **Start Here**:
+
 1. `INDEX.md` (this file) - Overview and navigation
 2. `planning/PLAN_GRAPHRAG-PIPELINE-VISUALIZATION.md` - Complete plan with all achievements and implementation details
 3. `summary/EXECUTION_ANALYSIS_PIPELINE-VISUALIZATION-COMPLETE.md` - What was accomplished
 
 **Deep Dive**:
+
 1. `subplans/SUBPLAN_01.md` - Stage selection approach
 2. `subplans/SUBPLAN_02.md` - Resume from failure approach
 3. `subplans/SUBPLAN_03.md` - Dependency validation approach
@@ -127,6 +144,7 @@ The GraphRAG Pipeline Visualization system provides a complete suite of tools fo
 6. `execution/EXECUTION_TASK_03_01.md` - Dependency validation journey
 
 **Current Code**:
+
 - APIs: `app/api/pipeline_control.py`, `app/api/entities.py`, `app/api/communities.py`, etc. (12 files)
 - UIs: `app/ui/pipeline_control.html`, `app/ui/graph_viewer.html`, etc. (13 files)
 - Tests: `tests/app/api/test_pipeline_control.py`, etc. (3 files)
@@ -155,6 +173,7 @@ The GraphRAG Pipeline Visualization system provides a complete suite of tools fo
 ### Files Created (36 files)
 
 **API Modules (12 files)**:
+
 - `app/api/pipeline_control.py` - Pipeline start/stop/resume/status/history
 - `app/api/pipeline_progress.py` - Real-time SSE streaming
 - `app/api/pipeline_stats.py` - Per-stage statistics
@@ -169,6 +188,7 @@ The GraphRAG Pipeline Visualization system provides a complete suite of tools fo
 - `business/services/observability/prometheus_metrics.py` - Prometheus metrics service
 
 **Web UI Dashboards (13 files)**:
+
 - `app/ui/pipeline_control.html` - Pipeline control interface
 - `app/ui/pipeline_monitor.html` - Real-time progress monitor
 - `app/ui/pipeline_history.html` - Execution history browser
@@ -184,18 +204,21 @@ The GraphRAG Pipeline Visualization system provides a complete suite of tools fo
 - `app/ui/performance_dashboard.html` - Performance monitoring
 
 **Tests (3 files)**:
+
 - `tests/app/api/test_pipeline_control.py` - Pipeline control tests
 - `tests/app/api/test_ego_network.py` - Ego network tests
 - `tests/app/api/test_export.py` - Export tests
 - Plus 3 existing test files for Priority 0 (stage selection, resume, dependency validation)
 
 **Documentation (4 files)**:
+
 - `documentation/api/GRAPHRAG-PIPELINE-API.md` - REST API reference
 - `documentation/guides/GRAPHRAG-VISUALIZATION-GUIDE.md` - User guide
 - `app/ui/README.md` - UI comprehensive guide
 - `documentation/experiments/JOURNAL-2025.md` - Experiment journal template
 
 **Supporting Files (4 files)**:
+
 - `observability/grafana/dashboards/graphrag-pipeline.json` - Grafana dashboard
 - `scripts/run_experiments.py` - Batch experiment runner
 - `business/services/observability/__init__.py` - Package init
@@ -212,7 +235,8 @@ The GraphRAG Pipeline Visualization system provides a complete suite of tools fo
 
 ## Testing
 
-**Test Files**: 
+**Test Files**:
+
 - `tests/business/pipelines/test_graphrag_stage_selection.py` (14 tests)
 - `tests/business/pipelines/test_graphrag_resume.py` (11 tests)
 - `tests/business/pipelines/test_graphrag_dependency_validation.py` (10 tests)
@@ -223,6 +247,7 @@ The GraphRAG Pipeline Visualization system provides a complete suite of tools fo
 **Total Tests**: 50+ tests (35 pipeline tests + 15 API tests)
 
 **Coverage**:
+
 - Pipeline orchestration: 100% (stage selection, resume, dependency validation)
 - API endpoints: Core functionality tested (start/stop/status, ego network, export formats)
 - Integration: Existing pipeline tests validate end-to-end
@@ -278,6 +303,7 @@ The GraphRAG Pipeline Visualization system provides a complete suite of tools fo
 ## Next Steps
 
 **Production Deployment**:
+
 1. Follow `documentation/guides/GRAPHRAG-VISUALIZATION-GUIDE.md` for deployment
 2. Start API servers (supervisord or similar)
 3. Configure Nginx to serve UI
@@ -285,12 +311,14 @@ The GraphRAG Pipeline Visualization system provides a complete suite of tools fo
 5. Import Grafana dashboard from `observability/grafana/dashboards/graphrag-pipeline.json`
 
 **Production Validation**:
+
 1. Use `PLAN_GRAPHRAG-VALIDATION.md` (currently active) for systematic validation
 2. Test all 13 dashboards
 3. Verify API endpoints
 4. Load test with production data
 
 **Future Enhancements** (see `IMPLEMENTATION_BACKLOG.md`):
+
 - Authentication and authorization
 - Advanced graph analytics (centrality, path finding)
 - Real-time WebSocket updates
@@ -323,10 +351,10 @@ documentation/archive/graphrag-pipeline-visualization-nov2025/
 ---
 
 **Archive Complete**: 9 files preserved  
-**Reference from**: 
+**Reference from**:
+
 - `documentation/api/GRAPHRAG-PIPELINE-API.md`
 - `documentation/guides/GRAPHRAG-VISUALIZATION-GUIDE.md`
 - `app/ui/README.md`
 - `CHANGELOG.md` (2025-11-07 entry)
 - `ACTIVE_PLANS.md` (Recently Completed section)
-

@@ -1,524 +1,650 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GraphRAG Pipeline Control</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #1e1e1e;
-            color: #e0e0e0;
-            padding: 20px;
-        }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, sans-serif;
+        background: #1e1e1e;
+        color: #e0e0e0;
+        padding: 20px;
+      }
 
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
 
-        h1 {
-            color: #4a9eff;
-            margin-bottom: 20px;
-        }
+      h1 {
+        color: #4a9eff;
+        margin-bottom: 20px;
+      }
 
-        .section {
-            background: #2d2d2d;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
+      .section {
+        background: #2d2d2d;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+      }
 
-        .section h2 {
-            color: #4a9eff;
-            margin-bottom: 15px;
-        }
+      .section h2 {
+        color: #4a9eff;
+        margin-bottom: 15px;
+      }
 
-        .controls {
-            display: flex;
-            gap: 15px;
-            align-items: center;
-            flex-wrap: wrap;
-            margin-bottom: 20px;
-        }
+      .controls {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+      }
 
-        .control-group {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
+      .control-group {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
 
-        label {
-            color: #aaa;
-            font-size: 14px;
-        }
+      label {
+        color: #aaa;
+        font-size: 14px;
+      }
 
-        input, select, textarea, button {
-            background: #3d3d3d;
-            color: #e0e0e0;
-            border: 1px solid #555;
-            padding: 8px 12px;
-            border-radius: 5px;
-            font-size: 14px;
-        }
+      input,
+      select,
+      textarea,
+      button {
+        background: #3d3d3d;
+        color: #e0e0e0;
+        border: 1px solid #555;
+        padding: 8px 12px;
+        border-radius: 5px;
+        font-size: 14px;
+      }
 
-        textarea {
-            width: 100%;
-            min-height: 150px;
-            font-family: monospace;
-            resize: vertical;
-        }
+      textarea {
+        width: 100%;
+        min-height: 150px;
+        font-family: monospace;
+        resize: vertical;
+      }
 
-        button {
-            background: #4a9eff;
-            border: none;
-            cursor: pointer;
-        }
+      button {
+        background: #4a9eff;
+        border: none;
+        cursor: pointer;
+      }
 
-        button:hover {
-            background: #357abd;
-        }
+      button:hover {
+        background: #357abd;
+      }
 
-        button.danger {
-            background: #f44336;
-        }
+      button.danger {
+        background: #f44336;
+      }
 
-        button.danger:hover {
-            background: #d32f2f;
-        }
+      button.danger:hover {
+        background: #d32f2f;
+      }
 
-        .status-display {
-            background: #3d3d3d;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
+      .status-display {
+        background: #3d3d3d;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+      }
 
-        .status-indicator {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 8px;
-        }
+      .status-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+      }
 
-        .status-idle { background: #888; }
-        .status-starting { background: #ff9800; animation: pulse 2s infinite; }
-        .status-running { background: #4a9eff; animation: pulse 2s infinite; }
-        .status-completed { background: #4caf50; }
-        .status-failed { background: #f44336; }
-        .status-cancelled { background: #888; }
+      .status-idle {
+        background: #888;
+      }
+      .status-starting {
+        background: #ff9800;
+        animation: pulse 2s infinite;
+      }
+      .status-running {
+        background: #4a9eff;
+        animation: pulse 2s infinite;
+      }
+      .status-completed {
+        background: #4caf50;
+      }
+      .status-failed {
+        background: #f44336;
+      }
+      .status-cancelled {
+        background: #888;
+      }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
         }
+        50% {
+          opacity: 0.7;
+        }
+      }
 
-        .progress-bar {
-            width: 100%;
-            height: 20px;
-            background: #3d3d3d;
-            border-radius: 10px;
-            overflow: hidden;
-            margin-top: 10px;
-        }
+      .progress-bar {
+        width: 100%;
+        height: 20px;
+        background: #3d3d3d;
+        border-radius: 10px;
+        overflow: hidden;
+        margin-top: 10px;
+      }
 
-        .progress-fill {
-            height: 100%;
-            background: #4a9eff;
-            transition: width 0.3s;
-        }
+      .progress-fill {
+        height: 100%;
+        background: #4a9eff;
+        transition: width 0.3s;
+      }
 
-        .log-viewer {
-            background: #1e1e1e;
-            border: 1px solid #555;
-            border-radius: 5px;
-            padding: 15px;
-            font-family: monospace;
-            font-size: 12px;
-            max-height: 400px;
-            overflow-y: auto;
-            color: #ccc;
-        }
+      .log-viewer {
+        background: #1e1e1e;
+        border: 1px solid #555;
+        border-radius: 5px;
+        padding: 15px;
+        font-family: monospace;
+        font-size: 12px;
+        max-height: 400px;
+        overflow-y: auto;
+        color: #ccc;
+      }
 
-        .log-entry {
-            margin-bottom: 5px;
-        }
+      .log-entry {
+        margin-bottom: 5px;
+      }
 
-        .log-entry.error {
-            color: #ff6b6b;
-        }
+      .log-entry.error {
+        color: #ff6b6b;
+      }
 
-        .log-entry.warning {
-            color: #ffa726;
-        }
+      .log-entry.warning {
+        color: #ffa726;
+      }
 
-        .log-entry.info {
-            color: #4a9eff;
-        }
+      .log-entry.info {
+        color: #4a9eff;
+      }
 
-        .error {
-            background: #4a2d2d;
-            border: 2px solid #f44336;
-            border-radius: 8px;
-            padding: 15px;
-            color: #ff6b6b;
-            margin-bottom: 20px;
-        }
+      .error {
+        background: #4a2d2d;
+        border: 2px solid #f44336;
+        border-radius: 8px;
+        padding: 15px;
+        color: #ff6b6b;
+        margin-bottom: 20px;
+      }
 
-        .success {
-            background: #2d4a2d;
-            border: 2px solid #4caf50;
-            border-radius: 8px;
-            padding: 15px;
-            color: #4caf50;
-            margin-bottom: 20px;
-        }
+      .success {
+        background: #2d4a2d;
+        border: 2px solid #4caf50;
+        border-radius: 8px;
+        padding: 15px;
+        color: #4caf50;
+        margin-bottom: 20px;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="container">
-        <h1>GraphRAG Pipeline Control</h1>
-        
-        <div id="error" class="error" style="display: none;"></div>
-        <div id="success" class="success" style="display: none;"></div>
+      <h1>GraphRAG Pipeline Control</h1>
 
-        <div class="section">
-            <h2>Current Pipeline Status</h2>
-            <div class="status-display" id="statusDisplay">
-                <div>
-                    <span class="status-indicator status-idle"></span>
-                    <span id="statusText">No pipeline running</span>
-                </div>
-                <div id="statusDetails" style="margin-top: 10px; color: #aaa; font-size: 13px;"></div>
-                <div class="progress-bar" id="progressBar" style="display: none;">
-                    <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
-                </div>
-            </div>
-            <div class="controls">
-                <button onclick="refreshStatus()">Refresh Status</button>
-                <button class="danger" onclick="cancelPipeline()" id="cancelBtn" style="display: none;">Cancel Pipeline</button>
-                <button onclick="resumePipeline()" id="resumeBtn" style="display: none;">Resume Pipeline</button>
-            </div>
-        </div>
+      <div id="error" class="error" style="display: none"></div>
+      <div id="success" class="success" style="display: none"></div>
 
-        <div class="section">
-            <h2>Start New Pipeline</h2>
-            <div class="controls">
-                <div class="control-group">
-                    <label>Database:</label>
-                    <input type="text" id="dbName" placeholder="mongo_hack" value="mongo_hack" style="width: 150px;">
-                </div>
-                <div class="control-group">
-                    <label>Experiment ID:</label>
-                    <input type="text" id="experimentId" placeholder="Optional experiment ID" style="width: 200px;">
-                </div>
-                <div class="control-group">
-                    <label>Stages:</label>
-                    <input type="text" id="selectedStages" placeholder="extraction,resolution,construction,detection" style="width: 300px;">
-                </div>
-                <div class="control-group">
-                    <label>
-                        <input type="checkbox" id="resumeCheckbox">
-                        Resume from failure
-                    </label>
-                </div>
-            </div>
-            <div style="margin-top: 15px;">
-                <label>Configuration (JSON):</label>
-                <textarea id="configJson" placeholder='{"extraction": {"read_db_name": "mongo_hack", "write_db_name": "graphrag_exp1"}, "detection": {"algorithm": "louvain", "resolution": 1.0}}'></textarea>
-            </div>
-            <div class="controls" style="margin-top: 15px;">
-                <button onclick="startPipeline()">Start Pipeline</button>
-                <button onclick="loadDefaultConfig()">Load Default Config</button>
-            </div>
+      <div class="section">
+        <h2>Current Pipeline Status</h2>
+        <div class="status-display" id="statusDisplay">
+          <div>
+            <span class="status-indicator status-idle"></span>
+            <span id="statusText">No pipeline running</span>
+          </div>
+          <div
+            id="statusDetails"
+            style="margin-top: 10px; color: #aaa; font-size: 13px"
+          ></div>
+          <div class="progress-bar" id="progressBar" style="display: none">
+            <div
+              class="progress-fill"
+              id="progressFill"
+              style="width: 0%"
+            ></div>
+          </div>
         </div>
+        <div class="controls">
+          <button onclick="refreshStatus()">Refresh Status</button>
+          <button
+            class="danger"
+            onclick="cancelPipeline()"
+            id="cancelBtn"
+            style="display: none"
+          >
+            Cancel Pipeline
+          </button>
+          <button
+            onclick="resumePipeline()"
+            id="resumeBtn"
+            style="display: none"
+          >
+            Resume Pipeline
+          </button>
+        </div>
+      </div>
 
-        <div class="section">
-            <h2>Pipeline Logs</h2>
-            <div class="log-viewer" id="logViewer">
-                <div class="log-entry info">Ready. Start a pipeline to see logs.</div>
-            </div>
-            <div class="controls" style="margin-top: 10px;">
-                <button onclick="clearLogs()">Clear Logs</button>
-                <label>
-                    <input type="checkbox" id="autoRefresh" checked>
-                    Auto-refresh (5s)
-                </label>
-            </div>
+      <div class="section">
+        <h2>Start New Pipeline</h2>
+        <div class="controls">
+          <div class="control-group">
+            <label>Database:</label>
+            <input
+              type="text"
+              id="dbName"
+              placeholder="mongo_hack"
+              value="mongo_hack"
+              style="width: 150px"
+            />
+          </div>
+          <div class="control-group">
+            <label>Experiment ID:</label>
+            <input
+              type="text"
+              id="experimentId"
+              placeholder="Optional experiment ID"
+              style="width: 200px"
+            />
+          </div>
+          <div class="control-group">
+            <label>Stages:</label>
+            <input
+              type="text"
+              id="selectedStages"
+              placeholder="extraction,resolution,construction,detection"
+              style="width: 300px"
+            />
+          </div>
+          <div class="control-group">
+            <label>
+              <input type="checkbox" id="resumeCheckbox" />
+              Resume from failure
+            </label>
+          </div>
         </div>
+        <div style="margin-top: 15px">
+          <label>Configuration (JSON):</label>
+          <textarea
+            id="configJson"
+            placeholder='{"extraction": {"read_db_name": "mongo_hack", "write_db_name": "graphrag_exp1"}, "detection": {"algorithm": "louvain", "resolution": 1.0}}'
+          ></textarea>
+        </div>
+        <div class="controls" style="margin-top: 15px">
+          <button onclick="startPipeline()">Start Pipeline</button>
+          <button onclick="loadDefaultConfig()">Load Default Config</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Pipeline Logs</h2>
+        <div class="log-viewer" id="logViewer">
+          <div class="log-entry info">Ready. Start a pipeline to see logs.</div>
+        </div>
+        <div class="controls" style="margin-top: 10px">
+          <button onclick="clearLogs()">Clear Logs</button>
+          <label>
+            <input type="checkbox" id="autoRefresh" checked />
+            Auto-refresh (5s)
+          </label>
+        </div>
+      </div>
     </div>
 
     <script>
-        let currentPipelineId = null;
-        let autoRefreshInterval = null;
-        const API_BASE = window.location.origin || 'http://localhost:8000';
+      let currentPipelineId = null;
+      let autoRefreshInterval = null;
+      // Always use the API server on port 8000 (not the origin of the HTML file)
+      const API_BASE = "http://localhost:8000";
 
-        function addLog(message, type = 'info') {
-            const logViewer = document.getElementById('logViewer');
-            const entry = document.createElement('div');
-            entry.className = `log-entry ${type}`;
-            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-            logViewer.appendChild(entry);
-            logViewer.scrollTop = logViewer.scrollHeight;
+      function addLog(message, type = "info") {
+        const logViewer = document.getElementById("logViewer");
+        const entry = document.createElement("div");
+        entry.className = `log-entry ${type}`;
+        entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        logViewer.appendChild(entry);
+        logViewer.scrollTop = logViewer.scrollHeight;
+      }
+
+      function clearLogs() {
+        document.getElementById("logViewer").innerHTML = "";
+      }
+
+      function showError(message) {
+        const errorDiv = document.getElementById("error");
+        errorDiv.textContent = message;
+        errorDiv.style.display = "block";
+        setTimeout(() => {
+          errorDiv.style.display = "none";
+        }, 5000);
+      }
+
+      function showSuccess(message) {
+        const successDiv = document.getElementById("success");
+        successDiv.textContent = message;
+        successDiv.style.display = "block";
+        setTimeout(() => {
+          successDiv.style.display = "none";
+        }, 3000);
+      }
+
+      async function startPipeline() {
+        const dbName = document.getElementById("dbName").value.trim();
+        const experimentId = document
+          .getElementById("experimentId")
+          .value.trim();
+        const selectedStages = document
+          .getElementById("selectedStages")
+          .value.trim();
+        const resumeFromFailure =
+          document.getElementById("resumeCheckbox").checked;
+        const configJsonText = document
+          .getElementById("configJson")
+          .value.trim();
+
+        if (!dbName) {
+          showError("Please enter a database name");
+          return;
         }
 
-        function clearLogs() {
-            document.getElementById('logViewer').innerHTML = '';
+        let config = {};
+        if (configJsonText) {
+          try {
+            config = JSON.parse(configJsonText);
+          } catch (e) {
+            showError(`Invalid JSON configuration: ${e.message}`);
+            return;
+          }
         }
 
-        function showError(message) {
-            const errorDiv = document.getElementById('error');
-            errorDiv.textContent = message;
-            errorDiv.style.display = 'block';
-            setTimeout(() => {
-                errorDiv.style.display = 'none';
-            }, 5000);
+        // Build config
+        if (!config.extraction) config.extraction = {};
+        if (!config.extraction.read_db_name)
+          config.extraction.read_db_name = dbName;
+        if (!config.extraction.write_db_name)
+          config.extraction.write_db_name = dbName;
+
+        if (selectedStages) {
+          config.selected_stages = selectedStages;
+        }
+        if (resumeFromFailure) {
+          config.resume_from_failure = true;
+        }
+        if (experimentId) {
+          config.experiment_id = experimentId;
         }
 
-        function showSuccess(message) {
-            const successDiv = document.getElementById('success');
-            successDiv.textContent = message;
-            successDiv.style.display = 'block';
-            setTimeout(() => {
-                successDiv.style.display = 'none';
-            }, 3000);
-        }
-
-        async function startPipeline() {
-            const dbName = document.getElementById('dbName').value.trim();
-            const experimentId = document.getElementById('experimentId').value.trim();
-            const selectedStages = document.getElementById('selectedStages').value.trim();
-            const resumeFromFailure = document.getElementById('resumeCheckbox').checked;
-            const configJsonText = document.getElementById('configJson').value.trim();
-
-            if (!dbName) {
-                showError('Please enter a database name');
-                return;
+        try {
+          const response = await fetch(
+            `${API_BASE}/api/pipeline/start?db_name=${dbName}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                config: config,
+                pipeline_id: experimentId || undefined,
+              }),
             }
+          );
 
-            let config = {};
-            if (configJsonText) {
-                try {
-                    config = JSON.parse(configJsonText);
-                } catch (e) {
-                    showError(`Invalid JSON configuration: ${e.message}`);
-                    return;
-                }
-            }
-
-            // Build config
-            if (!config.extraction) config.extraction = {};
-            if (!config.extraction.read_db_name) config.extraction.read_db_name = dbName;
-            if (!config.extraction.write_db_name) config.extraction.write_db_name = dbName;
-
-            if (selectedStages) {
-                config.selected_stages = selectedStages;
-            }
-            if (resumeFromFailure) {
-                config.resume_from_failure = true;
-            }
-            if (experimentId) {
-                config.experiment_id = experimentId;
-            }
-
+          if (!response.ok) {
+            const errorText = await response.text();
+            let errorMsg;
             try {
-                const response = await fetch(`${API_BASE}/api/pipeline/start?db_name=${dbName}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        config: config,
-                        pipeline_id: experimentId || undefined,
-                    }),
-                });
-
-                const result = await response.json();
-                if (result.error) {
-                    showError(result.error);
-                    return;
-                }
-
-                currentPipelineId = result.pipeline_id;
-                showSuccess(`Pipeline started: ${result.pipeline_id}`);
-                addLog(`Pipeline started: ${result.pipeline_id}`, 'info');
-                refreshStatus();
-            } catch (error) {
-                showError(`Error starting pipeline: ${error.message}`);
-                addLog(`Error: ${error.message}`, 'error');
+              const errorJson = JSON.parse(errorText);
+              errorMsg =
+                errorJson.error ||
+                `HTTP ${response.status}: ${response.statusText}`;
+            } catch {
+              errorMsg = `HTTP ${response.status}: ${
+                response.statusText
+              }. Response: ${errorText.substring(0, 200)}`;
             }
+            throw new Error(errorMsg);
+          }
+
+          const result = await response.json();
+          if (result.error) {
+            showError(result.error);
+            return;
+          }
+
+          currentPipelineId = result.pipeline_id;
+          showSuccess(`Pipeline started: ${result.pipeline_id}`);
+          addLog(`Pipeline started: ${result.pipeline_id}`, "info");
+          refreshStatus();
+        } catch (error) {
+          const errorMsg = error.message || "Unknown error";
+          showError(`Error starting pipeline: ${errorMsg}`);
+          addLog(`Error: ${errorMsg}`, "error");
+          console.error("Pipeline start error:", error);
+        }
+      }
+
+      async function refreshStatus() {
+        if (!currentPipelineId) {
+          document.getElementById("statusText").textContent =
+            "No pipeline running";
+          document.getElementById("statusDetails").textContent = "";
+          document.getElementById("cancelBtn").style.display = "none";
+          document.getElementById("resumeBtn").style.display = "none";
+          document.getElementById("progressBar").style.display = "none";
+          return;
         }
 
-        async function refreshStatus() {
-            if (!currentPipelineId) {
-                document.getElementById('statusText').textContent = 'No pipeline running';
-                document.getElementById('statusDetails').textContent = '';
-                document.getElementById('cancelBtn').style.display = 'none';
-                document.getElementById('resumeBtn').style.display = 'none';
-                document.getElementById('progressBar').style.display = 'none';
-                return;
-            }
+        const dbName =
+          document.getElementById("dbName").value.trim() || "mongo_hack";
 
-            const dbName = document.getElementById('dbName').value.trim() || 'mongo_hack';
-
+        try {
+          const response = await fetch(
+            `${API_BASE}/api/pipeline/status?pipeline_id=${currentPipelineId}&db_name=${dbName}`
+          );
+          if (!response.ok) {
+            const errorText = await response.text();
+            let errorMsg;
             try {
-                const response = await fetch(`${API_BASE}/api/pipeline/status?pipeline_id=${currentPipelineId}&db_name=${dbName}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-
-                const status = await response.json();
-                updateStatusDisplay(status);
-            } catch (error) {
-                addLog(`Error refreshing status: ${error.message}`, 'error');
+              const errorJson = JSON.parse(errorText);
+              errorMsg =
+                errorJson.error ||
+                `HTTP ${response.status}: ${response.statusText}`;
+            } catch {
+              errorMsg = `HTTP ${response.status}: ${
+                response.statusText
+              }. Response: ${errorText.substring(0, 200)}`;
             }
+            throw new Error(errorMsg);
+          }
+
+          const status = await response.json();
+          updateStatusDisplay(status);
+        } catch (error) {
+          addLog(`Error refreshing status: ${error.message}`, "error");
+        }
+      }
+
+      function updateStatusDisplay(status) {
+        const statusText = document.getElementById("statusText");
+        const statusDetails = document.getElementById("statusDetails");
+        const statusIndicator = statusText.previousElementSibling;
+        const cancelBtn = document.getElementById("cancelBtn");
+        const resumeBtn = document.getElementById("resumeBtn");
+        const progressBar = document.getElementById("progressBar");
+        const progressFill = document.getElementById("progressFill");
+
+        // Update status indicator
+        statusIndicator.className = `status-indicator status-${
+          status.status || "idle"
+        }`;
+        statusText.textContent = `Status: ${status.status || "unknown"}`;
+
+        // Update details
+        let details = [];
+        if (status.started_at)
+          details.push(
+            `Started: ${new Date(status.started_at).toLocaleString()}`
+          );
+        if (status.completed_at)
+          details.push(
+            `Completed: ${new Date(status.completed_at).toLocaleString()}`
+          );
+        if (status.pipeline_id) details.push(`ID: ${status.pipeline_id}`);
+        statusDetails.textContent = details.join(" | ");
+
+        // Show/hide buttons
+        if (status.status === "running" || status.status === "starting") {
+          cancelBtn.style.display = "inline-block";
+          resumeBtn.style.display = "none";
+          progressBar.style.display = "block";
+          progressFill.style.width = "50%"; // Placeholder
+        } else if (status.status === "failed") {
+          cancelBtn.style.display = "none";
+          resumeBtn.style.display = "inline-block";
+          progressBar.style.display = "none";
+        } else {
+          cancelBtn.style.display = "none";
+          resumeBtn.style.display = "none";
+          progressBar.style.display = "none";
+        }
+      }
+
+      async function cancelPipeline() {
+        if (!currentPipelineId) return;
+
+        try {
+          const response = await fetch(`${API_BASE}/api/pipeline/cancel`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              pipeline_id: currentPipelineId,
+            }),
+          });
+
+          const result = await response.json();
+          if (result.error) {
+            showError(result.error);
+          } else {
+            showSuccess("Pipeline cancellation requested");
+            addLog("Pipeline cancellation requested", "warning");
+            refreshStatus();
+          }
+        } catch (error) {
+          showError(`Error cancelling pipeline: ${error.message}`);
+        }
+      }
+
+      async function resumePipeline() {
+        const dbName = document.getElementById("dbName").value.trim();
+        const selectedStages = document
+          .getElementById("selectedStages")
+          .value.trim();
+
+        let config = {
+          extraction: {
+            read_db_name: dbName,
+            write_db_name: dbName,
+          },
+          resume_from_failure: true,
+        };
+
+        if (selectedStages) {
+          config.selected_stages = selectedStages;
         }
 
-        function updateStatusDisplay(status) {
-            const statusText = document.getElementById('statusText');
-            const statusDetails = document.getElementById('statusDetails');
-            const statusIndicator = statusText.previousElementSibling;
-            const cancelBtn = document.getElementById('cancelBtn');
-            const resumeBtn = document.getElementById('resumeBtn');
-            const progressBar = document.getElementById('progressBar');
-            const progressFill = document.getElementById('progressFill');
-
-            // Update status indicator
-            statusIndicator.className = `status-indicator status-${status.status || 'idle'}`;
-            statusText.textContent = `Status: ${status.status || 'unknown'}`;
-
-            // Update details
-            let details = [];
-            if (status.started_at) details.push(`Started: ${new Date(status.started_at).toLocaleString()}`);
-            if (status.completed_at) details.push(`Completed: ${new Date(status.completed_at).toLocaleString()}`);
-            if (status.pipeline_id) details.push(`ID: ${status.pipeline_id}`);
-            statusDetails.textContent = details.join(' | ');
-
-            // Show/hide buttons
-            if (status.status === 'running' || status.status === 'starting') {
-                cancelBtn.style.display = 'inline-block';
-                resumeBtn.style.display = 'none';
-                progressBar.style.display = 'block';
-                progressFill.style.width = '50%'; // Placeholder
-            } else if (status.status === 'failed') {
-                cancelBtn.style.display = 'none';
-                resumeBtn.style.display = 'inline-block';
-                progressBar.style.display = 'none';
-            } else {
-                cancelBtn.style.display = 'none';
-                resumeBtn.style.display = 'none';
-                progressBar.style.display = 'none';
+        try {
+          const response = await fetch(
+            `${API_BASE}/api/pipeline/resume?db_name=${dbName}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                config: config,
+                pipeline_id: currentPipelineId,
+              }),
             }
+          );
+
+          const result = await response.json();
+          if (result.error) {
+            showError(result.error);
+          } else {
+            currentPipelineId = result.pipeline_id;
+            showSuccess(`Pipeline resumed: ${result.pipeline_id}`);
+            addLog(`Pipeline resumed: ${result.pipeline_id}`, "info");
+            refreshStatus();
+          }
+        } catch (error) {
+          showError(`Error resuming pipeline: ${error.message}`);
         }
+      }
 
-        async function cancelPipeline() {
-            if (!currentPipelineId) return;
+      function loadDefaultConfig() {
+        const dbName =
+          document.getElementById("dbName").value.trim() || "mongo_hack";
+        const defaultConfig = {
+          extraction: {
+            read_db_name: dbName,
+            write_db_name: dbName,
+          },
+          detection: {
+            algorithm: "louvain",
+            resolution: 1.0,
+          },
+        };
+        document.getElementById("configJson").value = JSON.stringify(
+          defaultConfig,
+          null,
+          2
+        );
+      }
 
-            try {
-                const response = await fetch(`${API_BASE}/api/pipeline/cancel`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        pipeline_id: currentPipelineId,
-                    }),
-                });
-
-                const result = await response.json();
-                if (result.error) {
-                    showError(result.error);
-                } else {
-                    showSuccess('Pipeline cancellation requested');
-                    addLog('Pipeline cancellation requested', 'warning');
-                    refreshStatus();
-                }
-            } catch (error) {
-                showError(`Error cancelling pipeline: ${error.message}`);
-            }
+      // Auto-refresh
+      document.getElementById("autoRefresh").addEventListener("change", (e) => {
+        if (e.target.checked) {
+          autoRefreshInterval = setInterval(refreshStatus, 5000);
+        } else {
+          if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+          }
         }
+      });
 
-        async function resumePipeline() {
-            const dbName = document.getElementById('dbName').value.trim();
-            const selectedStages = document.getElementById('selectedStages').value.trim();
-
-            let config = {
-                extraction: {
-                    read_db_name: dbName,
-                    write_db_name: dbName,
-                },
-                resume_from_failure: true,
-            };
-
-            if (selectedStages) {
-                config.selected_stages = selectedStages;
-            }
-
-            try {
-                const response = await fetch(`${API_BASE}/api/pipeline/resume?db_name=${dbName}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        config: config,
-                        pipeline_id: currentPipelineId,
-                    }),
-                });
-
-                const result = await response.json();
-                if (result.error) {
-                    showError(result.error);
-                } else {
-                    currentPipelineId = result.pipeline_id;
-                    showSuccess(`Pipeline resumed: ${result.pipeline_id}`);
-                    addLog(`Pipeline resumed: ${result.pipeline_id}`, 'info');
-                    refreshStatus();
-                }
-            } catch (error) {
-                showError(`Error resuming pipeline: ${error.message}`);
-            }
-        }
-
-        function loadDefaultConfig() {
-            const dbName = document.getElementById('dbName').value.trim() || 'mongo_hack';
-            const defaultConfig = {
-                extraction: {
-                    read_db_name: dbName,
-                    write_db_name: dbName,
-                },
-                detection: {
-                    algorithm: "louvain",
-                    resolution: 1.0,
-                },
-            };
-            document.getElementById('configJson').value = JSON.stringify(defaultConfig, null, 2);
-        }
-
-        // Auto-refresh
-        document.getElementById('autoRefresh').addEventListener('change', (e) => {
-            if (e.target.checked) {
-                autoRefreshInterval = setInterval(refreshStatus, 5000);
-            } else {
-                if (autoRefreshInterval) {
-                    clearInterval(autoRefreshInterval);
-                    autoRefreshInterval = null;
-                }
-            }
-        });
-
-        // Initial setup
-        if (document.getElementById('autoRefresh').checked) {
-            autoRefreshInterval = setInterval(refreshStatus, 5000);
-        }
+      // Initial setup
+      if (document.getElementById("autoRefresh").checked) {
+        autoRefreshInterval = setInterval(refreshStatus, 5000);
+      }
     </script>
-</body>
+  </body>
 </html>
-

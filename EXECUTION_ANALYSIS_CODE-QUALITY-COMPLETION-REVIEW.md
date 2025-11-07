@@ -702,7 +702,7 @@
 
 **Decision**: [Single PLAN / GrammaPlan]
 
-**See**: documentation/guides/GRAMMAPLAN-GUIDE.md for criteria
+**See**: LLM/guides/GRAMMAPLAN-GUIDE.md for criteria
 ```
 
 **Impact**: Explicit decision-making, prevents missing GrammaPlan opportunities

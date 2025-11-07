@@ -46,6 +46,7 @@ python scripts/repositories/<domain>/<script>.py [options]
 ### Examples
 
 **Query Scripts**:
+
 ```bash
 # Query entities with filters
 python scripts/repositories/graphrag/query_entities.py --entity-type PERSON --limit 10
@@ -58,6 +59,7 @@ python scripts/repositories/rag/query_chunks.py --video-id VIDEO123 --limit 20
 ```
 
 **Analysis Scripts**:
+
 ```bash
 # Analyze graph structure (requires networkx)
 python scripts/repositories/graphrag/analysis/analyze_graph_structure.py
@@ -70,6 +72,7 @@ python scripts/repositories/graphrag/analysis/monitor_density.py
 ```
 
 **Utility Scripts**:
+
 ```bash
 # Check data across all databases
 python scripts/repositories/utilities/check_data.py

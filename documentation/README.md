@@ -90,11 +90,9 @@ How to use and deploy:
 
 ### Project Documentation
 
-**[PROJECT.md](PROJECT.md)** - Project overview and goals  
-**[TECHNICAL-CONCEPTS.md](TECHNICAL-CONCEPTS.md)** - Core concepts explained  
-**[USE-CASE.md](USE-CASE.md)** - Use cases and scenarios  
-**[BACKLOG.md](BACKLOG.md)** - Project backlog and TODOs  
-**[RECENT-UPDATES.md](RECENT-UPDATES.md)** - Recent changes summary
+**Methodology**: See `/LLM-METHODOLOGY.md` for LLM development methodology  
+**Backlog**: See `/LLM/protocols/IMPLEMENTATION_BACKLOG.md` for methodology backlog  
+**Recent Updates**: See `RECENT-UPDATES.md` and `CHANGELOG.md` for changes
 
 ---
 

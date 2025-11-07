@@ -8,31 +8,33 @@
 
 ## 🚀 Active Plans
 
-| Plan                                                                               | Status      | Priority | Completion   | Last Updated | Next Achievement                                   |
-| ---------------------------------------------------------------------------------- | ----------- | -------- | ------------ | ------------ | -------------------------------------------------- |
-| [PLAN_GRAPHRAG-VALIDATION.md](PLAN_GRAPHRAG-VALIDATION.md)                         | 🚀 Active   | HIGH     | 0/13 (0%)    | 2025-11-07   | Achievement 0.1: Test Environment Prepared         |
-| [PLAN_EXTRACTION-QUALITY-ENHANCEMENT.md](PLAN_EXTRACTION-QUALITY-ENHANCEMENT.md)   | ⏸️ Paused   | HIGH     | 4/13 (31%)   | 2025-11-06   | Priority 2: Ontology Enhancement                   |
-| [PLAN_ENTITY-RESOLUTION-REFACTOR.md](PLAN_ENTITY-RESOLUTION-REFACTOR.md)           | ⏸️ Paused   | HIGH     | 17/31 (55%)  | 2025-11-06   | Priority 4: Performance Optimizations              |
-| [PLAN_ENTITY-RESOLUTION-ANALYSIS.md](PLAN_ENTITY-RESOLUTION-ANALYSIS.md)           | 📋 Ready    | HIGH     | 0/21 (0%)    | 2025-11-06   | Not started                                        |
-| [PLAN_GRAPH-CONSTRUCTION-REFACTOR.md](PLAN_GRAPH-CONSTRUCTION-REFACTOR.md)         | ⏸️ Paused   | HIGH     | 11/17 (65%)  | 2025-11-06   | Priority 4 or Achievement 2.1 (ANN Index)          |
-| [PLAN_COMMUNITY-DETECTION-REFACTOR.md](PLAN_COMMUNITY-DETECTION-REFACTOR.md)       | ⏸️ Paused   | HIGH     | 14/23 (61%)  | 2025-11-06   | Priority 4 or Priority 7 (Testing & Documentation) |
-| [PLAN_STRUCTURED-LLM-DEVELOPMENT.md](PLAN_STRUCTURED-LLM-DEVELOPMENT.md)           | ⏸️ Paused   | CRITICAL | 15/17 (88%)  | 2025-11-07   | Optional: Weaker model test, LLM automation        |
+| Plan                                                                             | Status    | Priority | Completion  | Last Updated | Next Achievement                                   |
+| -------------------------------------------------------------------------------- | --------- | -------- | ----------- | ------------ | -------------------------------------------------- |
+| [PLAN_API-REVIEW-AND-TESTING.md](PLAN_API-REVIEW-AND-TESTING.md)                 | 🚀 Active | HIGH     | 0/15 (0%)   | 2025-11-07   | Achievement 0.1: API Code Review Complete          |
+| [PLAN_LLM-V2-BACKLOG.md](PLAN_LLM-V2-BACKLOG.md)                                 | 🚀 Active | CRITICAL | 0/5 (0%)    | 2025-11-07   | Achievement 0.1: Reference Verification            |
+| [PLAN_GRAPHRAG-VALIDATION.md](PLAN_GRAPHRAG-VALIDATION.md)                       | ⏸️ Paused | HIGH     | 0/13 (0%)   | 2025-11-07   | Achievement 0.1: Test Environment Prepared         |
+| [PLAN_EXTRACTION-QUALITY-ENHANCEMENT.md](PLAN_EXTRACTION-QUALITY-ENHANCEMENT.md) | ⏸️ Paused | HIGH     | 4/13 (31%)  | 2025-11-06   | Priority 2: Ontology Enhancement                   |
+| [PLAN_ENTITY-RESOLUTION-REFACTOR.md](PLAN_ENTITY-RESOLUTION-REFACTOR.md)         | ⏸️ Paused | HIGH     | 17/31 (55%) | 2025-11-06   | Priority 4: Performance Optimizations              |
+| [PLAN_ENTITY-RESOLUTION-ANALYSIS.md](PLAN_ENTITY-RESOLUTION-ANALYSIS.md)         | 📋 Ready  | HIGH     | 0/21 (0%)   | 2025-11-06   | Not started                                        |
+| [PLAN_GRAPH-CONSTRUCTION-REFACTOR.md](PLAN_GRAPH-CONSTRUCTION-REFACTOR.md)       | ⏸️ Paused | HIGH     | 11/17 (65%) | 2025-11-06   | Priority 4 or Achievement 2.1 (ANN Index)          |
+| [PLAN_COMMUNITY-DETECTION-REFACTOR.md](PLAN_COMMUNITY-DETECTION-REFACTOR.md)     | ⏸️ Paused | HIGH     | 14/23 (61%) | 2025-11-06   | Priority 4 or Priority 7 (Testing & Documentation) |
+| [PLAN_STRUCTURED-LLM-DEVELOPMENT.md](PLAN_STRUCTURED-LLM-DEVELOPMENT.md)         | ⏸️ Paused | CRITICAL | 15/17 (88%) | 2025-11-07   | Optional: Weaker model test, LLM automation        |
 
 ---
 
 ## ✅ Recently Completed
 
-| Plan                                                                                                                                       | Completed  | Duration | Achievements | Archive                                                                                                  |
-| ------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | -------- | ------------ | -------------------------------------------------------------------------------------------------------- |
-| [PLAN_CODE-QUALITY-REFACTOR.md](documentation/archive/code-quality-refactor-nov2025/planning/PLAN_CODE-QUALITY-REFACTOR.md)                | 2025-11-07 | 70 hours | 36/36 (100%) | [archive/code-quality-refactor-nov2025/](documentation/archive/code-quality-refactor-nov2025/)                   |
+| Plan                                                                                                                                                      | Completed  | Duration | Achievements | Archive                                                                                                            |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------- | ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| [PLAN_CODE-QUALITY-REFACTOR.md](documentation/archive/code-quality-refactor-nov2025/planning/PLAN_CODE-QUALITY-REFACTOR.md)                               | 2025-11-07 | 70 hours | 36/36 (100%) | [archive/code-quality-refactor-nov2025/](documentation/archive/code-quality-refactor-nov2025/)                     |
 | [PLAN_GRAPHRAG-PIPELINE-VISUALIZATION.md](documentation/archive/graphrag-pipeline-visualization-nov2025/planning/PLAN_GRAPHRAG-PIPELINE-VISUALIZATION.md) | 2025-11-07 | 50 hours | 30/30 (100%) | [archive/graphrag-pipeline-visualization-nov2025/](documentation/archive/graphrag-pipeline-visualization-nov2025/) |
-| [PLAN_TEST-RUNNER-INFRASTRUCTURE.md](documentation/archive/test-runner-infrastructure-nov2025/planning/PLAN_TEST-RUNNER-INFRASTRUCTURE.md) | 2025-11-06 | 18 hours | 8/8 (100%)   | [archive/test-runner-infrastructure-nov2025/](documentation/archive/test-runner-infrastructure-nov2025/) |
+| [PLAN_TEST-RUNNER-INFRASTRUCTURE.md](documentation/archive/test-runner-infrastructure-nov2025/planning/PLAN_TEST-RUNNER-INFRASTRUCTURE.md)                | 2025-11-06 | 18 hours | 8/8 (100%)   | [archive/test-runner-infrastructure-nov2025/](documentation/archive/test-runner-infrastructure-nov2025/)           |
 
 ---
 
 ## 📊 Statistics
 
-**Active/Paused Plans**: 6 (new format) + 6 legacy plans  
+**Active/Paused Plans**: 7 (new format) + 6 legacy plans  
 **Completed Plans (last 30 days)**: 3  
 **Total Achievements Completed**: 132 (includes all partials + Achievements 1.4.5-1.4.9 + 2.4 + CODE-QUALITY 36 + PIPELINE-VIZ 30)  
 **Total Time Invested**: ~208 hours (including all partial completions + Multiple PLANS Protocol + GrammaPlan + CODE-QUALITY 70h + PIPELINE-VIZ 50h)  

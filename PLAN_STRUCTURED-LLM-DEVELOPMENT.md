@@ -219,7 +219,7 @@ Implement a structured, hierarchical development methodology that prevents circu
 - Related archives
 - Dependencies
 
-**Template**: `documentation/templates/PLAN-TEMPLATE.md`
+**Template**: `LLM/templates/PLAN-TEMPLATE.md`
 
 ---
 
@@ -712,7 +712,7 @@ ts & Integration
 - `IMPLEMENTATION_END_POINT.md` - Exit point (end here) ✅
 - `IMPLEMENTATION_RESUME.md` - Resume protocol ✅
 - `IMPLEMENTATION_BACKLOG.md` - Permanent backlog ✅
-- `documentation/guides/MULTIPLE-PLANS-PROTOCOL.md` - Multiple PLAN management ✅
+- `LLM/guides/MULTIPLE-PLANS-PROTOCOL.md` - Multiple PLAN management ✅
 - `documentation/templates/` - PLAN, SUBPLAN, EXECUTION_TASK templates ✅
 
 **Archives** (for learnings):
@@ -1668,7 +1668,7 @@ Based on feedback, adding sub-achievements to existing achievements:
 - **Solution**: Introduce 4th-tier hierarchy (GrammaPlan) to orchestrate multiple child PLANs
 - **Deliverables**:
   - Case study analysis (EXECUTION_ANALYSIS_GRAMMAPLAN-CASE-STUDY.md)
-  - GrammaPlan concept guide (documentation/guides/GRAMMAPLAN-GUIDE.md)
+  - GrammaPlan concept guide (LLM/guides/GRAMMAPLAN-GUIDE.md)
   - GrammaPlan template (documentation/templates/GRAMMAPLAN-TEMPLATE.md)
   - Integration into methodology documents (START_POINT, MULTIPLE-PLANS-PROTOCOL, ACTIVE_PLANS)
   - 7 backlog items for methodology improvements

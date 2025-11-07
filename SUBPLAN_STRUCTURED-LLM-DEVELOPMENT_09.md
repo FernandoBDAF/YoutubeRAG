@@ -34,7 +34,7 @@ Create a comprehensive protocol for handling multiple active/paused PLANs simult
 
 ### Files to Create
 
-1. **`documentation/guides/MULTIPLE-PLANS-PROTOCOL.md`**
+1. **`LLM/guides/MULTIPLE-PLANS-PROTOCOL.md`**
    - Comprehensive protocol document
    - Covers: dependencies, intersections, context switching, coordination
    - Examples and decision trees
@@ -42,7 +42,7 @@ Create a comprehensive protocol for handling multiple active/paused PLANs simult
 
 ### Files to Modify
 
-1. **`documentation/templates/PLAN-TEMPLATE.md`**
+1. **`LLM/templates/PLAN-TEMPLATE.md`**
 
    - Add "Related Plans" section (enhance existing)
    - Add dependency tracking fields

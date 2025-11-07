@@ -9,6 +9,14 @@ Part of the APP layer - external interface.
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import logging
+import os
+import sys
+
+# Add project root to Python path for imports
+_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 from core.libraries.error_handling.decorators import handle_errors
 
 logger = logging.getLogger(__name__)
