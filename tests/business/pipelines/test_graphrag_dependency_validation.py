@@ -3,6 +3,7 @@ Tests for GraphRAG pipeline dependency validation.
 
 Tests Achievement 0.3: Stage Dependency Validation
 """
+
 import unittest
 from unittest.mock import Mock, patch
 import logging
@@ -43,9 +44,7 @@ class TestGraphRAGDependencyValidation(unittest.TestCase):
     def test_warn_out_of_order_reversed(self):
         """Test that reversed order triggers warning."""
         with self.assertLogs(logger="business.pipelines.graphrag", level=logging.WARNING) as log:
-            self.pipeline._warn_out_of_order(
-                ["community_detection", "graph_extraction"]
-            )
+            self.pipeline._warn_out_of_order(["community_detection", "graph_extraction"])
         # Should log warning
         self.assertGreater(len(log.records), 0)
         self.assertIn("out of order", log.records[0].message.lower())
@@ -91,9 +90,7 @@ class TestGraphRAGDependencyValidation(unittest.TestCase):
     def test_resolve_stage_selection_error_on_missing_deps(self):
         """Test that resolve_stage_selection raises error when dependencies missing and auto_include_deps=False."""
         with self.assertRaises(ValueError) as cm:
-            self.pipeline._resolve_stage_selection(
-                ["entity_resolution"], auto_include_deps=False
-            )
+            self.pipeline._resolve_stage_selection(["entity_resolution"], auto_include_deps=False)
         self.assertIn("missing dependencies", str(cm.exception).lower())
         self.assertIn("graph_extraction", str(cm.exception))
 
@@ -129,4 +126,3 @@ class TestGraphRAGDependencyValidation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

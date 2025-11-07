@@ -3,6 +3,7 @@ Tests for GraphRAG pipeline resume from failure capability.
 
 Tests Achievement 0.2: Resume from Failure
 """
+
 import unittest
 from unittest.mock import Mock, patch, MagicMock
 from business.pipelines.graphrag import GraphRAGPipeline, STAGE_ORDER
@@ -57,8 +58,8 @@ class TestGraphRAGResume(unittest.TestCase):
             100,  # Total chunks
             100,  # Extraction completed
             100,  # Resolution completed
-            0,    # Construction not completed
-            0,    # Detection not completed
+            0,  # Construction not completed
+            0,  # Detection not completed
         ]
 
         completion = self.pipeline._detect_stage_completion()
@@ -72,10 +73,10 @@ class TestGraphRAGResume(unittest.TestCase):
         # Mock chunks collection with no stages completed
         self.mock_collection.count_documents.side_effect = [
             100,  # Total chunks
-            0,    # Extraction not completed
-            0,    # Resolution not completed
-            0,    # Construction not completed
-            0,    # Detection not completed
+            0,  # Extraction not completed
+            0,  # Resolution not completed
+            0,  # Construction not completed
+            0,  # Detection not completed
         ]
 
         completion = self.pipeline._detect_stage_completion()
@@ -148,12 +149,15 @@ class TestGraphRAGResume(unittest.TestCase):
             "community_detection": 0.0,
         }
         stages_to_run = self.pipeline._get_stages_to_run(completion)
-        self.assertEqual(stages_to_run, [
-            "graph_extraction",
-            "entity_resolution",
-            "graph_construction",
-            "community_detection",
-        ])
+        self.assertEqual(
+            stages_to_run,
+            [
+                "graph_extraction",
+                "entity_resolution",
+                "graph_construction",
+                "community_detection",
+            ],
+        )
 
     def test_resume_skips_completed_stages(self):
         """Test that resume skips completed stages."""
@@ -188,4 +192,3 @@ class TestGraphRAGResume(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

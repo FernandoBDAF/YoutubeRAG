@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GraphRAG Experiment Visualization & Analysis</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #1e1e1e;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #4a9eff;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        label {
+            color: #aaa;
+            font-size: 14px;
+        }
+
+        input, select, button {
+            background: #3d3d3d;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        button {
+            background: #4a9eff;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #357abd;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .chart-container {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .chart-container h3 {
+            color: #4a9eff;
+            margin-bottom: 15px;
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+
+        .error {
+            background: #4a2d2d;
+            border: 2px solid #f44336;
+            border-radius: 8px;
+            padding: 15px;
+            color: #ff6b6b;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GraphRAG Experiment Visualization & Analysis</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label>Database Names (comma-separated):</label>
+                <input type="text" id="dbNames" placeholder="mongo_hack,graphrag_exp1,graphrag_exp2" style="width: 400px;">
+            </div>
+            <button onclick="loadExperiments()">Load & Visualize</button>
+            <div class="export-buttons">
+                <button onclick="exportCharts()">Export Charts (PNG)</button>
+                <button onclick="exportData()">Export Data (JSON)</button>
+            </div>
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="loading" class="loading" style="display: none;">Loading experiments...</div>
+
+        <div id="chartsGrid" class="charts-grid" style="display: none;"></div>
+    </div>
+
+    <script>
+        let experiments = [];
+        let charts = [];
+
+        async function loadExperiments() {
+            const dbNamesInput = document.getElementById('dbNames').value.trim();
+            if (!dbNamesInput) {
+                showError('Please enter database names');
+                return;
+            }
+
+            const dbNames = dbNamesInput.split(',').map(s => s.trim()).filter(s => s);
+            if (dbNames.length === 0) {
+                showError('Please enter at least one database name');
+                return;
+            }
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('chartsGrid').style.display = 'none';
+
+            try {
+                // In a real implementation, this would call a backend API
+                experiments = await fetchExperiments(dbNames);
+                
+                if (experiments.length === 0) {
+                    showError('No experiments found');
+                    return;
+                }
+
+                renderVisualizations();
+            } catch (error) {
+                showError(`Error loading experiments: ${error.message}`);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        async function fetchExperiments(dbNames) {
+            // This would call a backend API endpoint
+            // For now, return empty array - backend integration needed
+            return [];
+        }
+
+        function renderVisualizations() {
+            const grid = document.getElementById('chartsGrid');
+            grid.innerHTML = '';
+            charts = [];
+
+            // Community Size Distribution (Histogram)
+            renderHistogram(grid, 'Community Size Distribution', 'avg_community_size', 'min_community_size', 'max_community_size');
+
+            // Cost vs Quality Scatter Plot
+            renderScatterPlot(grid, 'Cost vs Quality', 'estimated_cost_usd', 'modularity');
+
+            // Performance Over Time (Line Chart)
+            renderLineChart(grid, 'Performance Over Time', 'throughput_entities_per_sec', 'throughput_relationships_per_sec');
+
+            // Modularity Comparison (Bar Chart)
+            renderBarChart(grid, 'Modularity Comparison', 'modularity');
+
+            // Resolution Parameter Effects (Line Chart)
+            renderResolutionChart(grid, 'Resolution Parameter Effects', 'resolution', 'modularity');
+
+            // Graph Density vs Community Count
+            renderScatterPlot(grid, 'Graph Density vs Community Count', 'graph_density_pct', 'communities');
+
+            document.getElementById('chartsGrid').style.display = 'grid';
+        }
+
+        function renderHistogram(container, title, avgKey, minKey, maxKey) {
+            const chartDiv = createChartContainer(title);
+            const canvas = document.createElement('canvas');
+            chartDiv.appendChild(canvas);
+
+            const labels = experiments.map(e => e.db_name || e.experiment_id);
+            const avgData = experiments.map(e => e[avgKey] || 0);
+            const minData = experiments.map(e => e[minKey] || 0);
+            const maxData = experiments.map(e => e[maxKey] || 0);
+
+            const chart = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Min',
+                            data: minData,
+                            backgroundColor: '#f44336',
+                        },
+                        {
+                            label: 'Avg',
+                            data: avgData,
+                            backgroundColor: '#4a9eff',
+                        },
+                        {
+                            label: 'Max',
+                            data: maxData,
+                            backgroundColor: '#4caf50',
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { labels: { color: '#e0e0e0' } }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: '#e0e0e0' },
+                            grid: { color: '#3d3d3d' }
+                        },
+                        x: {
+                            ticks: { color: '#e0e0e0' },
+                            grid: { color: '#3d3d3d' }
+                        }
+                    }
+                }
+            });
+
+            charts.push(chart);
+            container.appendChild(chartDiv);
+        }
+
+        function renderScatterPlot(container, title, xKey, yKey) {
+            const chartDiv = createChartContainer(title);
+            const canvas = document.createElement('canvas');
+            chartDiv.appendChild(canvas);
+
+            const data = experiments.map(e => ({
+                x: e[xKey] || 0,
+                y: e[yKey] || 0,
+                label: e.db_name || e.experiment_id
+            }));
+
+            const chart = new Chart(canvas, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Experiments',
+                        data: data,
+                        backgroundColor: '#4a9eff',
+                        pointRadius: 8,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { labels: { color: '#e0e0e0' } },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const point = data[context.dataIndex];
+                                    return `${point.label}: (${point.x}, ${point.y})`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            ticks: { color: '#e0e0e0' },
+                            grid: { color: '#3d3d3d' }
+                        },
+                        x: {
+                            ticks: { color: '#e0e0e0' },
+                            grid: { color: '#3d3d3d' }
+                        }
+                    }
+                }
+            });
+
+            charts.push(chart);
+            container.appendChild(chartDiv);
+        }
+
+        function renderLineChart(container, title, key1, key2) {
+            const chartDiv = createChartContainer(title);
+            const canvas = document.createElement('canvas');
+            chartDiv.appendChild(canvas);
+
+            const labels = experiments.map(e => e.db_name || e.experiment_id);
+            const data1 = experiments.map(e => e[key1] || 0);
+            const data2 = experiments.map(e => e[key2] || 0);
+
+            const chart = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: key1.replace(/_/g, ' '),
+                            data: data1,
+                            borderColor: '#4a9eff',
+                            backgroundColor: 'rgba(74, 158, 255, 0.1)',
+                        },
+                        {
+                            label: key2.replace(/_/g, ' '),
+                            data: data2,
+                            borderColor: '#4caf50',
+                            backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { labels: { color: '#e0e0e0' } }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: '#e0e0e0' },
+                            grid: { color: '#3d3d3d' }
+                        },
+                        x: {
+                            ticks: { color: '#e0e0e0' },
+                            grid: { color: '#3d3d3d' }
+                        }
+                    }
+                }
+            });
+
+            charts.push(chart);
+            container.appendChild(chartDiv);
+        }
+
+        function renderBarChart(container, title, key) {
+            const chartDiv = createChartContainer(title);
+            const canvas = document.createElement('canvas');
+            chartDiv.appendChild(canvas);
+
+            const labels = experiments.map(e => e.db_name || e.experiment_id);
+            const data = experiments.map(e => e[key] || 0);
+
+            const chart = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: key.replace(/_/g, ' '),
+                        data: data,
+                        backgroundColor: '#4a9eff',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { labels: { color: '#e0e0e0' } }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: '#e0e0e0' },
+                            grid: { color: '#3d3d3d' }
+                        },
+                        x: {
+                            ticks: { color: '#e0e0e0' },
+                            grid: { color: '#3d3d3d' }
+                        }
+                    }
+                }
+            });
+
+            charts.push(chart);
+            container.appendChild(chartDiv);
+        }
+
+        function renderResolutionChart(container, title, xKey, yKey) {
+            const chartDiv = createChartContainer(title);
+            const canvas = document.createElement('canvas');
+            chartDiv.appendChild(canvas);
+
+            // Sort by resolution parameter
+            const sorted = [...experiments].sort((a, b) => {
+                const aRes = parseFloat(a[xKey]) || 0;
+                const bRes = parseFloat(b[xKey]) || 0;
+                return aRes - bRes;
+            });
+
+            const labels = sorted.map(e => e[xKey] || 'unknown');
+            const data = sorted.map(e => e[yKey] || 0);
+
+            const chart = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: yKey.replace(/_/g, ' '),
+                        data: data,
+                        borderColor: '#4a9eff',
+                        backgroundColor: 'rgba(74, 158, 255, 0.1)',
+                        tension: 0.4,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { labels: { color: '#e0e0e0' } }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: '#e0e0e0' },
+                            grid: { color: '#3d3d3d' }
+                        },
+                        x: {
+                            title: { display: true, text: 'Resolution Parameter', color: '#e0e0e0' },
+                            ticks: { color: '#e0e0e0' },
+                            grid: { color: '#3d3d3d' }
+                        }
+                    }
+                }
+            });
+
+            charts.push(chart);
+            container.appendChild(chartDiv);
+        }
+
+        function createChartContainer(title) {
+            const div = document.createElement('div');
+            div.className = 'chart-container';
+            
+            const h3 = document.createElement('h3');
+            h3.textContent = title;
+            div.appendChild(h3);
+
+            return div;
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function exportCharts() {
+            if (charts.length === 0) {
+                showError('No charts to export');
+                return;
+            }
+            // Implementation would export charts as PNG
+            alert('Export Charts - Backend integration needed to convert canvas to PNG');
+        }
+
+        function exportData() {
+            if (experiments.length === 0) {
+                showError('No data to export');
+                return;
+            }
+            const blob = new Blob([JSON.stringify(experiments, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'experiment_data.json';
+            a.click();
+        }
+    </script>
+</body>
+</html>
+
+

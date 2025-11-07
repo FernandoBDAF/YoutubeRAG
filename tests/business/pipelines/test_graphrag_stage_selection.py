@@ -3,6 +3,7 @@ Tests for GraphRAG pipeline stage selection and partial runs.
 
 Tests Achievement 0.1: Stage Selection & Partial Runs
 """
+
 import unittest
 from unittest.mock import Mock, patch, MagicMock
 from business.pipelines.graphrag import GraphRAGPipeline
@@ -136,13 +137,13 @@ class TestGraphRAGStageSelection(unittest.TestCase):
                 mock_db = Mock()
                 mock_client.return_value = {"mongo_hack": mock_db}
                 pipeline = GraphRAGPipeline(self.config)
-                
+
                 # Mock the filtered runner
                 with patch("business.pipelines.graphrag.PipelineRunner") as mock_runner_class:
                     mock_runner = Mock()
                     mock_runner.run.return_value = 0
                     mock_runner_class.return_value = mock_runner
-                    
+
                     result = pipeline.run_stages("extraction,resolution")
                     self.assertEqual(result, 0)
                     # Verify runner was created and run was called
@@ -151,4 +152,3 @@ class TestGraphRAGStageSelection(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

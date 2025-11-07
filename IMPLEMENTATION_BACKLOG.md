@@ -646,6 +646,142 @@
 
 ### Medium Priority
 
+#### IMPL-TOOLING-001: Code Quality Measurement Script
+
+**Theme**: Code Quality / Metrics  
+**Effort**: Medium (4-6h)  
+**Dependencies**: None  
+**Discovered In**: Legacy Planning Documents Review (PLAN-SESSIONS-AND-REFACTORING.md)  
+**Discovered When**: November 7, 2025  
+**Priority**: Medium  
+**Description**:
+
+- Create `scripts/measure_code_quality.py` to quantify code quality
+- Metrics to track:
+  - **Duplication**: Lines of duplicate code, number of duplicate blocks
+  - **Complexity**: Average function length, max function length, functions >50 lines count
+  - **Documentation**: Functions with docstrings (%), classes with docstrings (%)
+  - **Test Coverage**: Files with tests (%), critical paths tested (%)
+- Generate report showing trends over time
+- Output formats: Markdown report, JSON data, summary statistics
+- Integrate with weekly/monthly code quality reviews
+
+**Value**:
+
+- Quantifies code quality improvements objectively
+- Identifies technical debt hotspots
+- Tracks progress toward quality goals
+- Enables data-driven refactoring decisions
+- Provides baseline for measuring impact
+
+**Why Medium**:
+
+- Valuable for ongoing quality management
+- Not urgent (manual reviews work for now)
+- Moderate effort (script creation + testing)
+- Foundation for quality tracking
+
+**Related Documents**:
+
+- Legacy: PLAN-SESSIONS-AND-REFACTORING.md Phase 2.3
+- Analysis: EXECUTION_ANALYSIS_LEGACY-PLANS-REVIEW.md
+
+---
+
+#### IMPL-TOOLING-002: Validation Automation Scripts
+
+**Theme**: Development Tools / Quality Assurance  
+**Effort**: Small (2-3h)  
+**Dependencies**: None  
+**Discovered In**: Legacy Planning Documents Review (PROCESS-IMPROVEMENTS_METRICS-CHECKPOINT.md)  
+**Discovered When**: November 7, 2025  
+**Priority**: Medium  
+**Description**:
+
+- Create `scripts/validate_imports.py`:
+  - Validate all Python files can be imported
+  - Catch syntax errors and import issues
+  - Fast validation for checkpoint workflows
+  - Output: List of files that fail to import
+- Create `scripts/validate_metrics.py`:
+  - Verify metrics are registered in MetricRegistry
+  - Check expected metric groups exist
+  - Validate metric naming conventions
+  - Output: List of missing/misconfigured metrics
+- Integration with IMPLEMENTATION_MID_PLAN_REVIEW.md
+- Fast validation (<1 minute total)
+
+**Value**:
+
+- Catches errors early (every 3-5 files in bulk changes)
+- Reduces rework time by 50-70% (per legacy analysis)
+- Automated validation prevents human error
+- Faster than manual testing
+- Confidence in every checkpoint
+
+**Why Medium**:
+
+- Quick to implement (2-3 hours)
+- High value for bulk changes
+- Prevents costly late-stage error discovery
+- Should be used in all future large refactors
+
+**Related Documents**:
+
+- Legacy: PROCESS-IMPROVEMENTS_METRICS-CHECKPOINT.md Improvement #5
+- Protocol: IMPLEMENTATION_MID_PLAN_REVIEW.md (validation checkpoints)
+- Analysis: EXECUTION_ANALYSIS_LEGACY-PLANS-REVIEW.md
+
+---
+
+#### IMPL-DOC-004: Refactoring Patterns Library
+
+**Theme**: Documentation / Code Quality  
+**Effort**: Medium (6-8h)  
+**Dependencies**: None (but benefits from having real refactoring examples)  
+**Discovered In**: Legacy Planning Documents Review (PLAN-SESSIONS-AND-REFACTORING.md)  
+**Discovered When**: November 7, 2025  
+**Priority**: Medium  
+**Description**:
+
+- Create `documentation/technical/REFACTORING-PATTERNS.md`
+- Document common refactoring patterns:
+  - **Extract Function**: When to extract, how to name, parameter design
+  - **Extract Class**: When classes make sense, responsibility design
+  - **Move Code**: When to move, how to maintain imports, testing strategy
+  - **Inline**: When to inline overly-abstracted code
+- Include before/after examples from our codebase (real examples from CODE-QUALITY refactor)
+- Define refactoring triggers:
+  - **Duplication Trigger**: Same code in 3+ places → Extract to library
+  - **Complexity Trigger**: Function >100 lines or complexity >10 → Split
+  - **Test Trigger**: Code hard to test → Refactor for testability
+  - **Bug Trigger**: Same bug in multiple places → Extract common logic
+- Testing guidelines during refactoring (test before, during, after)
+- Risks and mitigations for each pattern
+
+**Value**:
+
+- Systematic refactoring guidance
+- Reusable patterns across team
+- Reduces decision paralysis ("Should I refactor this?")
+- Improves refactoring quality
+- Teaches best practices
+
+**Why Medium**:
+
+- Valuable for ongoing code quality work
+- Not urgent (we refactor successfully without it)
+- Moderate effort (documentation + examples)
+- Foundation for quality culture
+
+**Related Documents**:
+
+- Legacy: PLAN-SESSIONS-AND-REFACTORING.md Phases 5.2 & 5.3
+- Archive: CODE-QUALITY refactor (source of real examples)
+- Analysis: EXECUTION_ANALYSIS_LEGACY-PLANS-REVIEW.md
+
+---
+
 #### IMPL-DOC-002: Documentation Naming Convention Review
 
 **Theme**: Documentation Organization  
@@ -962,6 +1098,153 @@ Priority 4 achievements for advanced analysis:
 
 ### Low Priority
 
+#### IMPL-TOOLING-003: Velocity Tracking Script
+
+**Theme**: Process Metrics  
+**Effort**: Small (3-4h)  
+**Dependencies**: None  
+**Discovered In**: Legacy Planning Documents Review (PLAN-SESSIONS-AND-REFACTORING.md)  
+**Discovered When**: November 7, 2025  
+**Priority**: Low  
+**Description**:
+
+- Create `scripts/measure_velocity.py`
+- Track development velocity metrics:
+  - Features completed per week (from CHANGELOG.md)
+  - Tests created per week (from git commits to tests/)
+  - Bugs fixed per week (from BUGS.md or git commits)
+  - Documentation pages created per week (from git commits to documentation/)
+- Analyze git history for trends
+- Generate weekly velocity report showing:
+  - Current week stats
+  - 4-week rolling average
+  - Trend (increasing/decreasing/stable)
+- Output formats: Markdown report, JSON data, charts (optional)
+
+**Value**:
+
+- Measure development velocity trends
+- Improve planning accuracy (estimate based on historical velocity)
+- Identify productivity patterns (what weeks are productive, what slows us down)
+- Celebrate progress (visualize accomplishments)
+
+**Why Low**:
+
+- Nice-to-have optimization
+- Planning currently works without it
+- Low impact on development quality
+- Can be done manually if needed
+
+**Related Documents**:
+
+- Legacy: PLAN-SESSIONS-AND-REFACTORING.md Phase 4.2
+- Dashboard: ACTIVE_PLANS.md (manual velocity tracking)
+- Analysis: EXECUTION_ANALYSIS_LEGACY-PLANS-REVIEW.md
+
+---
+
+#### IMPL-DOC-005: Code Comment Guidelines
+
+**Theme**: Documentation / Best Practices  
+**Effort**: Small (1-2h)  
+**Dependencies**: None  
+**Discovered In**: Legacy Planning Documents Review (PLAN-SESSIONS-AND-REFACTORING.md)  
+**Discovered When**: November 7, 2025  
+**Priority**: Low  
+**Description**:
+
+- Create `documentation/guides/CODE-COMMENTING-GUIDE.md`
+- Document the **LEARNED** pattern for capturing iteration learnings:
+  ```python
+  # LEARNED (2025-11-06): Must validate before processing (iteration 2)
+  if not is_valid(data):
+      raise ValueError("Invalid data")
+  ```
+- Document the **IMPLEMENTATION NOTES** pattern for complex functions:
+
+  ```python
+  \"\"\"
+  IMPLEMENTATION NOTES:
+  - Initially tried X (iteration 1), failed because Y
+  - Current approach Z works because...
+  - Edge cases handled: A, B, C
+
+  FUTURE IMPROVEMENTS:
+  - Could optimize by doing X (low priority)
+  \"\"\"
+  ```
+
+- Include real examples from codebase
+- Guidelines for when to use each pattern
+- Integration with code review process
+
+**Value**:
+
+- Captures context and rationale in code
+- Helps future developers understand why decisions were made
+- Prevents re-solving already-solved problems
+- Improves code maintainability
+
+**Why Low**:
+
+- Nice-to-have documentation
+- We already use similar patterns informally
+- Low effort to formalize
+- Can be done incrementally
+
+**Related Documents**:
+
+- Legacy: PLAN-SESSIONS-AND-REFACTORING.md Phase 3.2
+- Analysis: EXECUTION_ANALYSIS_LEGACY-PLANS-REVIEW.md
+
+---
+
+#### IMPL-PROCESS-001: Process Quality Scorecard
+
+**Theme**: Process Metrics  
+**Effort**: Medium (4-6h)  
+**Dependencies**: Multiple PLANs executed (need historical data)  
+**Discovered In**: Legacy Planning Documents Review (PROCESS-IMPROVEMENTS_METRICS-CHECKPOINT.md)  
+**Discovered When**: November 7, 2025  
+**Priority**: Low  
+**Description**:
+
+- Track methodology quality metrics across plans:
+  - **TDD Adherence**: % of changes with tests first
+  - **Checkpoint Usage**: % of bulk changes with checkpoints
+  - **Plan Accuracy**: % of achievements with accurate status
+  - **Assumption Validation**: % of assumptions verified before marking complete
+  - **Error Rate**: Syntax errors per 100 lines changed
+  - **Circular Debugging**: % of SUBPLANs requiring multiple EXECUTION_TASKs
+  - **Archive Quality**: % of plans with complete archives
+- Add scorecard section to IMPLEMENTATION_END_POINT.md
+- Generate scorecard per plan at completion
+- Track trends across plans
+- Set quality goals and measure progress
+
+**Value**:
+
+- Measures and improves methodology quality
+- Data-driven process improvement
+- Identifies methodology gaps
+- Proves methodology effectiveness
+
+**Why Low**:
+
+- Valuable but not urgent
+- Need more PLAN data first (currently 7 plans)
+- Moderate effort
+- Manual scoring works for now
+
+**Related Documents**:
+
+- Legacy: PROCESS-IMPROVEMENTS_METRICS-CHECKPOINT.md Improvement #6
+- Protocol: IMPLEMENTATION_END_POINT.md (would add scorecard here)
+- Plan: PLAN_STRUCTURED-LLM-DEVELOPMENT.md (meta-PLAN)
+- Analysis: EXECUTION_ANALYSIS_LEGACY-PLANS-REVIEW.md
+
+---
+
 #### IMPL-008: Ontology Maintenance & Improvement Tools
 
 **Theme**: GraphRAG Extraction Quality  
@@ -1131,7 +1414,7 @@ Items will be organized as:
 **Related Documents**:
 
 - PLAN_CODE-QUALITY-REFACTOR.md
-- business/agents/graphrag/*.py
+- business/agents/graphrag/\*.py
 
 ---
 

@@ -13,9 +13,7 @@ import os
 from typing import Optional
 
 # Add the project root to the Python path
-sys.path.append(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from business.pipelines.graphrag import create_graphrag_pipeline
 from core.config.graphrag import GraphRAGPipelineConfig
@@ -41,15 +39,16 @@ def setup_logging(verbose: bool = False, log_file: str = None, stage: str = None
     Note:
         Uses the core logging library's setup_logging function for consistency.
     """
-    from core.libraries.logging import setup_logging as core_setup_logging, create_timestamped_log_path
+    from core.libraries.logging import (
+        setup_logging as core_setup_logging,
+        create_timestamped_log_path,
+    )
 
     # Create default log file path if not provided
     if log_file is None:
         prefix = f"graphrag_{stage}" if stage else "graphrag"
         log_file = create_timestamped_log_path(
-            base_dir="logs/pipeline",
-            prefix=prefix,
-            extension="log"
+            base_dir="logs/pipeline", prefix=prefix, extension="log"
         )
 
     # Use core library's setup_logging function
@@ -63,7 +62,7 @@ def setup_logging(verbose: bool = False, log_file: str = None, stage: str = None
 def create_config_from_args(args) -> GraphRAGPipelineConfig:
     """
     Create pipeline configuration from command line arguments.
-    
+
     Priority (highest to lowest):
     1. CLI flags (--read-db-name, --write-db-name, etc.)
     2. Config file (--config path/to/config.json)
@@ -71,23 +70,23 @@ def create_config_from_args(args) -> GraphRAGPipelineConfig:
     4. REQUIRED: read_db and write_db (NO defaults to prevent mistakes)
     """
     import json
-    
+
     env = dict(os.environ)
     default_db = os.getenv("DB_NAME", "mongo_hack")
-    
+
     # Load config file if provided (base layer)
     file_config = {}
     if hasattr(args, "config") and args.config:
         logger = logging.getLogger(__name__)
         logger.info(f"Loading configuration from: {args.config}")
         try:
-            with open(args.config, 'r') as f:
+            with open(args.config, "r") as f:
                 file_config = json.load(f)
             logger.info(f"Loaded config: experiment_id={file_config.get('experiment_id', 'N/A')}")
         except Exception as e:
             logger.error(f"Failed to load config file '{args.config}': {e}")
             sys.exit(1)
-    
+
     # Merge config file into environment (config file < env vars < CLI flags)
     # This allows config file to set defaults that env/CLI can override
     if file_config:
@@ -117,7 +116,7 @@ def create_config_from_args(args) -> GraphRAGPipelineConfig:
     # Override with any command-line specific args not in from_args_env
     if hasattr(args, "log_file") and args.log_file:
         config.log_file = args.log_file
-    
+
     # Achievement 0.1: Stage Selection & Partial Runs
     if hasattr(args, "stages") and args.stages:
         config.selected_stages = args.stages
@@ -125,7 +124,7 @@ def create_config_from_args(args) -> GraphRAGPipelineConfig:
     # Achievement 0.2: Resume from Failure
     if hasattr(args, "resume") and args.resume:
         config.resume_from_failure = True
-    
+
     # Store experiment_id if provided (for tracking)
     if file_config.get("experiment_id"):
         config.experiment_id = file_config["experiment_id"]
@@ -243,11 +242,9 @@ def main():
 
     # Configuration file
     parser.add_argument(
-        "--config",
-        type=str,
-        help="Path to JSON config file (sets defaults, CLI flags override)"
+        "--config", type=str, help="Path to JSON config file (sets defaults, CLI flags override)"
     )
-    
+
     # Main operation arguments
     parser.add_argument(
         "--stage",
@@ -277,15 +274,11 @@ def main():
         ),
     )
     parser.add_argument("--status", action="store_true", help="Show pipeline status")
-    parser.add_argument(
-        "--cleanup", action="store_true", help="Clean up failed stage records"
-    )
+    parser.add_argument("--cleanup", action="store_true", help="Clean up failed stage records")
 
     # Processing arguments
     parser.add_argument("--video-id", help="Process specific video ID")
-    parser.add_argument(
-        "--max", type=int, help="Maximum number of documents to process"
-    )
+    parser.add_argument("--max", type=int, help="Maximum number of documents to process")
     parser.add_argument(
         "--dry-run", action="store_true", help="Dry run mode (no actual processing)"
     )
@@ -308,12 +301,10 @@ def main():
     parser.add_argument(
         "--algorithm",
         choices=["louvain", "hierarchical_leiden"],
-        help="Community detection algorithm (default: louvain)"
+        help="Community detection algorithm (default: louvain)",
     )
     parser.add_argument(
-        "--resolution",
-        type=float,
-        help="Louvain resolution parameter (0.5-2.0, default: 1.0)"
+        "--resolution", type=float, help="Louvain resolution parameter (0.5-2.0, default: 1.0)"
     )
 
     # Standard stage arguments (used by from_args_env)
@@ -323,14 +314,12 @@ def main():
     parser.add_argument("--read-coll", help="Read collection name")
     parser.add_argument("--write-coll", help="Write collection name")
     parser.add_argument(
-        "--concurrency", 
-        type=int, 
+        "--concurrency",
+        type=int,
         default=300,
-        help="Concurrency level (default: 300 workers for optimal TPM utilization)"
+        help="Concurrency level (default: 300 workers for optimal TPM utilization)",
     )
-    parser.add_argument(
-        "--upsert-existing", action="store_true", help="Upsert existing documents"
-    )
+    parser.add_argument("--upsert-existing", action="store_true", help="Upsert existing documents")
 
     # Logging arguments
     parser.add_argument(
@@ -340,9 +329,7 @@ def main():
         "--log-file",
         help="Path to log file (default: logs/pipeline/graphrag_STAGE_TIMESTAMP.log)",
     )
-    parser.add_argument(
-        "--quiet", action="store_true", help="Suppress output except errors"
-    )
+    parser.add_argument("--quiet", action="store_true", help="Suppress output except errors")
 
     args = parser.parse_args()
 

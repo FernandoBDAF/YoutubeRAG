@@ -22,15 +22,11 @@ class GraphRAGEnvironmentConfig:
     mongodb_uri: str = field(
         default_factory=lambda: os.getenv("MONGODB_URI", "mongodb://localhost:27017")
     )
-    database_name: str = field(
-        default_factory=lambda: os.getenv("DB_NAME", "mongo_hack")
-    )
+    database_name: str = field(default_factory=lambda: os.getenv("DB_NAME", "mongo_hack"))
 
     # OpenAI settings
     openai_api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
-    openai_model: str = field(
-        default_factory=lambda: os.getenv("GRAPHRAG_MODEL", "gpt-4o-mini")
-    )
+    openai_model: str = field(default_factory=lambda: os.getenv("GRAPHRAG_MODEL", "gpt-4o-mini"))
     openai_temperature: float = 0.1
     openai_max_tokens: int = 4000
 
@@ -48,9 +44,7 @@ class GraphRAGEnvironmentConfig:
         default_factory=lambda: int(os.getenv("GRAPHRAG_MAX_CLUSTER_SIZE", "10"))
     )
     entity_resolution_threshold: float = field(
-        default_factory=lambda: float(
-            os.getenv("GRAPHRAG_ENTITY_RESOLUTION_THRESHOLD", "0.85")
-        )
+        default_factory=lambda: float(os.getenv("GRAPHRAG_ENTITY_RESOLUTION_THRESHOLD", "0.85"))
     )
 
     # Performance settings
@@ -236,12 +230,8 @@ class GraphRAGEnvironmentConfig:
             "timeout": self.operation_timeout_ms / 1000,  # Convert to seconds
             "max_retries": self.max_retry_attempts,
             "retry_delay": self.retry_delay_ms / 1000,  # Convert to seconds
-            "rate_limit_requests_per_minute": (
-                60 if self.environment == "production" else 20
-            ),
-            "rate_limit_tokens_per_minute": (
-                150000 if self.environment == "production" else 40000
-            ),
+            "rate_limit_requests_per_minute": (60 if self.environment == "production" else 20),
+            "rate_limit_tokens_per_minute": (150000 if self.environment == "production" else 40000),
         }
 
     def validate_configuration(self) -> Dict[str, Any]:
@@ -257,9 +247,7 @@ class GraphRAGEnvironmentConfig:
         required_env_vars = ["MONGODB_URI", "OPENAI_API_KEY"]
         for var in required_env_vars:
             if not os.getenv(var):
-                validation_results["errors"].append(
-                    f"Missing required environment variable: {var}"
-                )
+                validation_results["errors"].append(f"Missing required environment variable: {var}")
                 validation_results["valid"] = False
 
         # Check MongoDB connection
@@ -275,9 +263,7 @@ class GraphRAGEnvironmentConfig:
 
         # Check OpenAI API key format
         if self.openai_api_key and not self.openai_api_key.startswith("sk-"):
-            validation_results["warnings"].append(
-                "OpenAI API key format may be incorrect"
-            )
+            validation_results["warnings"].append("OpenAI API key format may be incorrect")
 
         # Performance recommendations
         if self.environment == "production":
@@ -325,9 +311,7 @@ class GraphRAGEnvironmentConfig:
             "openai_model": self.openai_model,
             "database": self.database_name,
             "mongodb_uri": (
-                self.mongodb_uri[:20] + "..."
-                if len(self.mongodb_uri) > 20
-                else self.mongodb_uri
+                self.mongodb_uri[:20] + "..." if len(self.mongodb_uri) > 20 else self.mongodb_uri
             ),
         }
 
@@ -383,25 +367,15 @@ class GraphExtractionConfig(BaseStageConfig):
         )
 
         # Get stage-specific settings from env
-        model_name = (
-            env.get("GRAPHRAG_MODEL") or env.get("OPENAI_MODEL") or "gpt-4o-mini"
-        )
+        model_name = env.get("GRAPHRAG_MODEL") or env.get("OPENAI_MODEL") or "gpt-4o-mini"
         temperature = float(env.get("GRAPHRAG_TEMPERATURE", "0.1"))
-        max_tokens = (
-            int(env.get("GRAPHRAG_MAX_TOKENS"))
-            if env.get("GRAPHRAG_MAX_TOKENS")
-            else None
-        )
+        max_tokens = int(env.get("GRAPHRAG_MAX_TOKENS")) if env.get("GRAPHRAG_MAX_TOKENS") else None
         llm_retries = int(env.get("GRAPHRAG_LLM_RETRIES", "3"))
         llm_backoff_s = float(env.get("GRAPHRAG_LLM_BACKOFF_S", "1.0"))
         max_entities_per_chunk = int(env.get("GRAPHRAG_MAX_ENTITIES_PER_CHUNK", "20"))
-        max_relationships_per_chunk = int(
-            env.get("GRAPHRAG_MAX_RELATIONSHIPS_PER_CHUNK", "30")
-        )
+        max_relationships_per_chunk = int(env.get("GRAPHRAG_MAX_RELATIONSHIPS_PER_CHUNK", "30"))
         min_entity_confidence = float(env.get("GRAPHRAG_MIN_ENTITY_CONFIDENCE", "0.3"))
-        min_relationship_confidence = float(
-            env.get("GRAPHRAG_MIN_RELATIONSHIP_CONFIDENCE", "0.3")
-        )
+        min_relationship_confidence = float(env.get("GRAPHRAG_MIN_RELATIONSHIP_CONFIDENCE", "0.3"))
         batch_size = int(env.get("GRAPHRAG_BATCH_SIZE", "50"))
         extraction_timeout = int(env.get("GRAPHRAG_EXTRACTION_TIMEOUT", "30"))
 
@@ -467,27 +441,17 @@ class EntityResolutionConfig(BaseStageConfig):
         )
 
         # Get stage-specific settings from env
-        model_name = (
-            env.get("GRAPHRAG_MODEL") or env.get("OPENAI_MODEL") or "gpt-4o-mini"
-        )
+        model_name = env.get("GRAPHRAG_MODEL") or env.get("OPENAI_MODEL") or "gpt-4o-mini"
         temperature = float(env.get("GRAPHRAG_TEMPERATURE", "0.1"))
-        max_tokens = (
-            int(env.get("GRAPHRAG_MAX_TOKENS"))
-            if env.get("GRAPHRAG_MAX_TOKENS")
-            else None
-        )
+        max_tokens = int(env.get("GRAPHRAG_MAX_TOKENS")) if env.get("GRAPHRAG_MAX_TOKENS") else None
         llm_retries = int(env.get("GRAPHRAG_LLM_RETRIES", "3"))
         llm_backoff_s = float(env.get("GRAPHRAG_LLM_BACKOFF_S", "1.0"))
-        similarity_threshold = float(
-            env.get("GRAPHRAG_ENTITY_RESOLUTION_THRESHOLD", "0.85")
-        )
+        similarity_threshold = float(env.get("GRAPHRAG_ENTITY_RESOLUTION_THRESHOLD", "0.85"))
         max_aliases_per_entity = int(env.get("GRAPHRAG_MAX_ALIASES_PER_ENTITY", "10"))
         min_source_count = int(env.get("GRAPHRAG_MIN_SOURCE_COUNT", "1"))
         batch_size = int(env.get("GRAPHRAG_RESOLUTION_BATCH_SIZE", "100"))
         resolution_timeout = int(env.get("GRAPHRAG_RESOLUTION_TIMEOUT", "60"))
-        use_fuzzy_matching = (
-            env.get("GRAPHRAG_USE_FUZZY_MATCHING", "true").lower() == "true"
-        )
+        use_fuzzy_matching = env.get("GRAPHRAG_USE_FUZZY_MATCHING", "true").lower() == "true"
         use_embedding_similarity = (
             env.get("GRAPHRAG_USE_EMBEDDING_SIMILARITY", "true").lower() == "true"
         )
@@ -550,27 +514,15 @@ class GraphConstructionConfig(BaseStageConfig):
 
         # Get stage-specific settings from env
         batch_size = int(env.get("GRAPHRAG_CONSTRUCTION_BATCH_SIZE", "200"))
-        max_relationships_per_entity = int(
-            env.get("GRAPHRAG_MAX_RELATIONSHIPS_PER_ENTITY", "100")
-        )
-        calculate_centrality = (
-            env.get("GRAPHRAG_CALCULATE_CENTRALITY", "true").lower() == "true"
-        )
-        calculate_degree = (
-            env.get("GRAPHRAG_CALCULATE_DEGREE", "true").lower() == "true"
-        )
-        calculate_clustering = (
-            env.get("GRAPHRAG_CALCULATE_CLUSTERING", "false").lower() == "true"
-        )
+        max_relationships_per_entity = int(env.get("GRAPHRAG_MAX_RELATIONSHIPS_PER_ENTITY", "100"))
+        calculate_centrality = env.get("GRAPHRAG_CALCULATE_CENTRALITY", "true").lower() == "true"
+        calculate_degree = env.get("GRAPHRAG_CALCULATE_DEGREE", "true").lower() == "true"
+        calculate_clustering = env.get("GRAPHRAG_CALCULATE_CLUSTERING", "false").lower() == "true"
         validate_entity_existence = (
             env.get("GRAPHRAG_VALIDATE_ENTITY_EXISTENCE", "true").lower() == "true"
         )
-        min_relationship_confidence = float(
-            env.get("GRAPHRAG_MIN_RELATIONSHIP_CONFIDENCE", "0.3")
-        )
-        max_relationship_distance = int(
-            env.get("GRAPHRAG_MAX_RELATIONSHIP_DISTANCE", "3")
-        )
+        min_relationship_confidence = float(env.get("GRAPHRAG_MIN_RELATIONSHIP_CONFIDENCE", "0.3"))
+        max_relationship_distance = int(env.get("GRAPHRAG_MAX_RELATIONSHIP_DISTANCE", "3"))
 
         return cls(
             **vars(base),
@@ -590,18 +542,14 @@ class CommunityDetectionConfig(BaseStageConfig):
     """Configuration for community detection stage."""
 
     # LLM settings for summarization
-    model_name: str = (
-        "gpt-4o-mini"  # Use gpt-4o-mini for small communities (fast, cost-effective)
-    )
+    model_name: str = "gpt-4o-mini"  # Use gpt-4o-mini for small communities (fast, cost-effective)
     temperature: float = 0.2
     max_tokens: Optional[int] = None
     llm_retries: int = 3
     llm_backoff_s: float = 1.0
 
     # Community detection settings
-    algorithm: str = (
-        "louvain"  # Algorithm: "louvain" (default) or "hierarchical_leiden"
-    )
+    algorithm: str = "louvain"  # Algorithm: "louvain" (default) or "hierarchical_leiden"
     max_cluster_size: int = 50  # Soft limit for community size (Louvain ignores this)
     min_cluster_size: int = 2  # Used for post-filtering single-node communities
     resolution_parameter: float = 1.0  # Louvain resolution (0.5-2.0, default 1.0)
@@ -634,15 +582,9 @@ class CommunityDetectionConfig(BaseStageConfig):
         )
 
         # Get stage-specific settings from env
-        model_name = (
-            env.get("GRAPHRAG_MODEL") or env.get("OPENAI_MODEL") or "gpt-4o-mini"
-        )
+        model_name = env.get("GRAPHRAG_MODEL") or env.get("OPENAI_MODEL") or "gpt-4o-mini"
         temperature = float(env.get("GRAPHRAG_COMMUNITY_TEMPERATURE", "0.2"))
-        max_tokens = (
-            int(env.get("GRAPHRAG_MAX_TOKENS"))
-            if env.get("GRAPHRAG_MAX_TOKENS")
-            else None
-        )
+        max_tokens = int(env.get("GRAPHRAG_MAX_TOKENS")) if env.get("GRAPHRAG_MAX_TOKENS") else None
         llm_retries = int(env.get("GRAPHRAG_LLM_RETRIES", "3"))
         llm_backoff_s = float(env.get("GRAPHRAG_LLM_BACKOFF_S", "1.0"))
         algorithm = env.get("GRAPHRAG_COMMUNITY_ALGORITHM", "louvain")
@@ -734,7 +676,9 @@ class GraphRAGPipelineConfig:
     checkpoint_interval: int = 100  # chunks
 
     # Achievement 0.1: Stage Selection & Partial Runs
-    selected_stages: Optional[str] = None  # Stage selection string (e.g., "extraction,resolution" or "1-3")
+    selected_stages: Optional[str] = (
+        None  # Stage selection string (e.g., "extraction,resolution" or "1-3")
+    )
 
     # Achievement 0.2: Resume from Failure
     resume_from_failure: bool = False  # If True, resume from last failure (skip completed stages)
@@ -780,25 +724,19 @@ class GraphRAGPipelineConfig:
         # Create stage configs using their from_args_env methods
         extraction_config = GraphExtractionConfig.from_args_env(args, env, default_db)
         resolution_config = EntityResolutionConfig.from_args_env(args, env, default_db)
-        construction_config = GraphConstructionConfig.from_args_env(
-            args, env, default_db
-        )
+        construction_config = GraphConstructionConfig.from_args_env(args, env, default_db)
         detection_config = CommunityDetectionConfig.from_args_env(args, env, default_db)
 
         # Get experiment ID from env (for tracking)
         experiment_id = env.get("EXPERIMENT_ID")
 
         # Get pipeline-level settings from env
-        enable_incremental = (
-            env.get("GRAPHRAG_ENABLE_INCREMENTAL", "true").lower() == "true"
-        )
+        enable_incremental = env.get("GRAPHRAG_ENABLE_INCREMENTAL", "true").lower() == "true"
         max_processing_time = int(env.get("GRAPHRAG_MAX_PROCESSING_TIME", "7200"))
         checkpoint_interval = int(env.get("GRAPHRAG_CHECKPOINT_INTERVAL", "100"))
         max_retries = int(env.get("GRAPHRAG_MAX_RETRIES", "3"))
         retry_delay = float(env.get("GRAPHRAG_RETRY_DELAY", "5.0"))
-        continue_on_error = (
-            env.get("GRAPHRAG_CONTINUE_ON_ERROR", "true").lower() == "true"
-        )
+        continue_on_error = env.get("GRAPHRAG_CONTINUE_ON_ERROR", "true").lower() == "true"
         log_level = env.get("GRAPHRAG_LOG_LEVEL", "INFO")
         log_file = env.get("GRAPHRAG_LOG_FILE")
 

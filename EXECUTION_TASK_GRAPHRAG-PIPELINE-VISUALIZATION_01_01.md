@@ -16,6 +16,7 @@
 **Goal**: Implement stage selection and partial runs
 
 **Steps**:
+
 1. ✅ Created SUBPLAN_01
 2. ✅ Created EXECUTION_TASK
 3. 🔄 Writing tests first (TDD)
@@ -54,6 +55,7 @@
 **Completed**: 2025-11-06 23:45 UTC
 
 **What was implemented**:
+
 1. Stage dependencies mapping (STAGE_DEPENDENCIES, STAGE_NAME_MAP, STAGE_ORDER)
 2. `_parse_stage_selection()` - Parses stage selection strings (names, ranges, indices)
 3. `_get_stage_dependencies()` - Recursively gets all dependencies for a stage
@@ -67,10 +69,10 @@
 **Test Results**: ✅ 14/14 tests passing
 
 **Files Modified**:
+
 - `business/pipelines/graphrag.py` - Core implementation
 - `app/cli/graphrag.py` - CLI argument support
 - `core/config/graphrag.py` - Config field added
 - `tests/business/pipelines/test_graphrag_stage_selection.py` - Comprehensive test suite
 
 **Status**: ✅ Complete
-

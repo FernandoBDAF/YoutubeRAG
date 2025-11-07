@@ -10,6 +10,7 @@
 ## 🎯 Objective
 
 Implement flexible stage selection for the GraphRAG pipeline, allowing users to:
+
 - Run specific stages by name (e.g., `--stages extraction,resolution`)
 - Run stage ranges (e.g., `--stages 1-3`)
 - Validate stage dependencies automatically
@@ -22,12 +23,14 @@ Implement flexible stage selection for the GraphRAG pipeline, allowing users to:
 ### Files to Modify
 
 1. **`business/pipelines/graphrag.py`**:
+
    - Add `run_stages()` method to accept list of stage names/indices
    - Add `_parse_stage_selection()` to parse stage list/ranges
    - Add `_get_stage_dependencies()` to define dependencies
    - Modify `_create_stage_specs()` to accept optional stage filter
 
 2. **`app/cli/graphrag.py`**:
+
    - Add `--stages` argument (comma-separated list or range)
    - Update argument parsing to handle stage selection
    - Pass stage selection to pipeline config
@@ -61,6 +64,7 @@ STAGE_DEPENDENCIES = {
 ### 2. Parse Stage Selection
 
 Support formats:
+
 - `--stages extraction,resolution` (names)
 - `--stages 1-3` (range)
 - `--stages 1,2,4` (indices)
@@ -84,19 +88,14 @@ Support formats:
 
 1. **Test stage selection by name**:
    - `--stages extraction,resolution` → runs only those 2 stages
-   
 2. **Test stage selection by range**:
    - `--stages 1-3` → runs stages 1, 2, 3
-   
 3. **Test dependency auto-inclusion**:
    - `--stages resolution` → auto-includes extraction
-   
 4. **Test dependency validation**:
    - `--stages construction` without resolution → error or auto-include
-   
 5. **Test invalid stage names**:
    - `--stages invalid_stage` → clear error message
-   
 6. **Test empty selection**:
    - `--stages ""` → runs full pipeline (backward compatible)
 
@@ -138,4 +137,3 @@ Support formats:
 
 **Status**: Ready for execution  
 **Next**: Create EXECUTION_TASK and start implementation
-

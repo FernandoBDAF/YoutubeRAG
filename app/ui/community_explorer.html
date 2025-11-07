@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GraphRAG Community Explorer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #1e1e1e;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #4a9eff;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        label {
+            color: #aaa;
+            font-size: 14px;
+        }
+
+        input, select, button {
+            background: #3d3d3d;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        button {
+            background: #4a9eff;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #357abd;
+        }
+
+        .level-navigation {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .level-btn {
+            background: #3d3d3d;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+
+        .level-btn.active {
+            border-color: #4a9eff;
+            background: #2d3a4a;
+        }
+
+        .level-stats {
+            margin-left: auto;
+            color: #aaa;
+            font-size: 14px;
+        }
+
+        .community-list {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .community-item {
+            background: #3d3d3d;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+
+        .community-item:hover {
+            border-color: #4a9eff;
+            transform: translateX(5px);
+        }
+
+        .community-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .community-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #4a9eff;
+        }
+
+        .community-level {
+            background: #555;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .community-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 13px;
+            color: #aaa;
+        }
+
+        .community-summary {
+            margin-top: 10px;
+            color: #ccc;
+            font-size: 14px;
+        }
+
+        .pagination {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .community-detail {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 20px;
+            display: none;
+        }
+
+        .community-detail.active {
+            display: block;
+        }
+
+        .community-detail-header {
+            margin-bottom: 20px;
+        }
+
+        .community-detail-title {
+            font-size: 24px;
+            color: #4a9eff;
+            margin-bottom: 10px;
+        }
+
+        .community-detail-meta {
+            display: flex;
+            gap: 20px;
+            color: #aaa;
+            font-size: 14px;
+        }
+
+        .entities-section, .relationships-section {
+            margin-top: 20px;
+        }
+
+        .entity-item, .relationship-item {
+            background: #3d3d3d;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 5px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+
+        .error {
+            background: #4a2d2d;
+            border: 2px solid #f44336;
+            border-radius: 8px;
+            padding: 15px;
+            color: #ff6b6b;
+            margin-bottom: 20px;
+        }
+
+        .close-btn {
+            background: #f44336;
+            margin-top: 20px;
+        }
+
+        .close-btn:hover {
+            background: #d32f2f;
+        }
+
+        .view-graph-btn {
+            background: #4caf50;
+            margin-top: 10px;
+        }
+
+        .view-graph-btn:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GraphRAG Community Explorer</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label>Database:</label>
+                <input type="text" id="dbName" placeholder="mongo_hack" value="mongo_hack" style="width: 150px;">
+            </div>
+            <div class="control-group">
+                <label>Min Size:</label>
+                <input type="number" id="minSize" min="0" value="0" style="width: 80px;">
+            </div>
+            <div class="control-group">
+                <label>Max Size:</label>
+                <input type="number" id="maxSize" min="0" value="" style="width: 80px;">
+            </div>
+            <div class="control-group">
+                <label>Min Coherence:</label>
+                <input type="number" id="minCoherence" min="0" max="1" step="0.01" value="0" style="width: 80px;">
+            </div>
+            <div class="control-group">
+                <label>Sort By:</label>
+                <select id="sortBy">
+                    <option value="entity_count">Size</option>
+                    <option value="coherence_score">Coherence</option>
+                    <option value="level">Level</option>
+                </select>
+            </div>
+            <button onclick="searchCommunities()">Search</button>
+        </div>
+
+        <div id="levelNavigation" class="level-navigation" style="display: none;">
+            <span style="color: #aaa;">Levels:</span>
+            <div id="levelButtons"></div>
+            <div class="level-stats" id="levelStats"></div>
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="loading" class="loading" style="display: none;">Loading communities...</div>
+
+        <div id="communityList" class="community-list" style="display: none;"></div>
+        <div id="pagination" class="pagination" style="display: none;"></div>
+        <div id="communityDetail" class="community-detail"></div>
+    </div>
+
+    <script>
+        let currentOffset = 0;
+        let currentLevel = null;
+        const pageSize = 50;
+        let totalCommunities = 0;
+        let levelStats = {};
+        const API_BASE = window.location.origin || 'http://localhost:8000';
+
+        async function searchCommunities(resetOffset = true) {
+            if (resetOffset) {
+                currentOffset = 0;
+            }
+
+            const dbName = document.getElementById('dbName').value.trim();
+            const minSize = parseInt(document.getElementById('minSize').value) || 0;
+            const maxSize = document.getElementById('maxSize').value ? parseInt(document.getElementById('maxSize').value) : null;
+            const minCoherence = parseFloat(document.getElementById('minCoherence').value) || 0;
+            const sortBy = document.getElementById('sortBy').value;
+
+            if (!dbName) {
+                showError('Please enter a database name');
+                return;
+            }
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('communityList').style.display = 'none';
+            document.getElementById('pagination').style.display = 'none';
+            document.getElementById('communityDetail').classList.remove('active');
+
+            try {
+                // Load level stats if not loaded
+                if (Object.keys(levelStats).length === 0) {
+                    await loadLevelStats(dbName);
+                }
+
+                const params = new URLSearchParams({
+                    db_name: dbName,
+                    limit: pageSize,
+                    offset: currentOffset,
+                    sort_by: sortBy,
+                });
+
+                if (currentLevel !== null) params.append('level', currentLevel);
+                if (minSize > 0) params.append('min_size', minSize);
+                if (maxSize) params.append('max_size', maxSize);
+                if (minCoherence > 0) params.append('min_coherence', minCoherence);
+
+                const response = await fetch(`${API_BASE}/api/communities/search?${params}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                totalCommunities = data.total;
+
+                renderCommunityList(data.communities);
+                renderPagination(data);
+                renderLevelNavigation();
+            } catch (error) {
+                showError(`Error loading communities: ${error.message}`);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        async function loadLevelStats(dbName) {
+            try {
+                const response = await fetch(`${API_BASE}/api/communities/levels?db_name=${dbName}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    levelStats = {};
+                    data.levels.forEach(level => {
+                        levelStats[level.level] = level;
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load level stats:', error);
+            }
+        }
+
+        function renderLevelNavigation() {
+            const navDiv = document.getElementById('levelNavigation');
+            const buttonsDiv = document.getElementById('levelButtons');
+            const statsDiv = document.getElementById('levelStats');
+
+            if (Object.keys(levelStats).length === 0) {
+                navDiv.style.display = 'none';
+                return;
+            }
+
+            buttonsDiv.innerHTML = '';
+            const levels = Object.keys(levelStats).sort((a, b) => parseInt(a) - parseInt(b));
+
+            // Add "All" button
+            const allBtn = document.createElement('button');
+            allBtn.className = `level-btn ${currentLevel === null ? 'active' : ''}`;
+            allBtn.textContent = 'All';
+            allBtn.onclick = () => {
+                currentLevel = null;
+                searchCommunities();
+            };
+            buttonsDiv.appendChild(allBtn);
+
+            // Add level buttons
+            levels.forEach(level => {
+                const btn = document.createElement('button');
+                btn.className = `level-btn ${currentLevel === parseInt(level) ? 'active' : ''}`;
+                btn.textContent = `Level ${level}`;
+                btn.onclick = () => {
+                    currentLevel = parseInt(level);
+                    searchCommunities();
+                };
+                buttonsDiv.appendChild(btn);
+            });
+
+            // Show stats
+            if (currentLevel !== null && levelStats[currentLevel]) {
+                const stats = levelStats[currentLevel];
+                statsDiv.textContent = `${stats.count} communities, avg size: ${stats.avg_size}, avg coherence: ${stats.avg_coherence.toFixed(3)}`;
+            } else {
+                const total = Object.values(levelStats).reduce((sum, s) => sum + s.count, 0);
+                statsDiv.textContent = `${total} total communities across ${levels.length} levels`;
+            }
+
+            navDiv.style.display = 'flex';
+        }
+
+        function renderCommunityList(communities) {
+            const listDiv = document.getElementById('communityList');
+            listDiv.innerHTML = '';
+
+            if (communities.length === 0) {
+                listDiv.innerHTML = '<div style="text-align: center; padding: 40px; color: #888;">No communities found</div>';
+                listDiv.style.display = 'block';
+                return;
+            }
+
+            communities.forEach(community => {
+                const item = document.createElement('div');
+                item.className = 'community-item';
+                item.onclick = () => showCommunityDetail(community.community_id);
+
+                item.innerHTML = `
+                    <div class="community-header">
+                        <div>
+                            <span class="community-title">${escapeHtml(community.title || 'Untitled Community')}</span>
+                            <span class="community-level">Level ${community.level}</span>
+                        </div>
+                    </div>
+                    <div class="community-stats">
+                        <span>Entities: ${formatNumber(community.entity_count)}</span>
+                        <span>Relationships: ${formatNumber(community.relationship_count)}</span>
+                        <span>Coherence: ${(community.coherence_score * 100).toFixed(1)}%</span>
+                    </div>
+                    ${community.summary ? `<div class="community-summary">${escapeHtml(community.summary.substring(0, 200))}${community.summary.length > 200 ? '...' : ''}</div>` : ''}
+                `;
+
+                listDiv.appendChild(item);
+            });
+
+            listDiv.style.display = 'block';
+        }
+
+        function renderPagination(data) {
+            const paginationDiv = document.getElementById('pagination');
+            paginationDiv.innerHTML = '';
+
+            if (data.total === 0) {
+                paginationDiv.style.display = 'none';
+                return;
+            }
+
+            const totalPages = Math.ceil(data.total / pageSize);
+            const currentPage = Math.floor(currentOffset / pageSize) + 1;
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = 'Previous';
+            prevBtn.disabled = currentOffset === 0;
+            prevBtn.onclick = () => {
+                if (currentOffset > 0) {
+                    currentOffset -= pageSize;
+                    searchCommunities(false);
+                }
+            };
+            paginationDiv.appendChild(prevBtn);
+
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Page ${currentPage} of ${totalPages} (${formatNumber(data.total)} total)`;
+            pageInfo.style.color = '#aaa';
+            paginationDiv.appendChild(pageInfo);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Next';
+            nextBtn.disabled = !data.has_more;
+            nextBtn.onclick = () => {
+                if (data.has_more) {
+                    currentOffset += pageSize;
+                    searchCommunities(false);
+                }
+            };
+            paginationDiv.appendChild(nextBtn);
+
+            paginationDiv.style.display = 'flex';
+        }
+
+        async function showCommunityDetail(communityId) {
+            const dbName = document.getElementById('dbName').value.trim();
+            const detailDiv = document.getElementById('communityDetail');
+
+            detailDiv.innerHTML = '<div class="loading">Loading community details...</div>';
+            detailDiv.classList.add('active');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/communities/${communityId}?db_name=${dbName}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const community = await response.json();
+                renderCommunityDetail(community);
+            } catch (error) {
+                detailDiv.innerHTML = `<div class="error">Error loading community: ${error.message}</div>`;
+            }
+        }
+
+        function renderCommunityDetail(community) {
+            const detailDiv = document.getElementById('communityDetail');
+
+            let entitiesHtml = '';
+            if (community.entities && community.entities.length > 0) {
+                entitiesHtml = '<div class="entities-section"><h3 style="color: #4a9eff; margin-bottom: 15px;">Entities (' + community.entity_count + ')</h3>';
+                community.entities.forEach(entity => {
+                    entitiesHtml += `
+                        <div class="entity-item">
+                            <strong>${escapeHtml(entity.name || entity.canonical_name || entity.entity_id)}</strong>
+                            <span style="color: #888; font-size: 12px;">(${escapeHtml(entity.type || 'OTHER')})</span>
+                            <div style="color: #aaa; font-size: 12px; margin-top: 5px;">
+                                Confidence: ${(entity.confidence * 100).toFixed(1)}% | 
+                                Source Count: ${formatNumber(entity.source_count)}
+                            </div>
+                        </div>
+                    `;
+                });
+                entitiesHtml += '</div>';
+            }
+
+            let relationshipsHtml = '';
+            if (community.relationships && community.relationships.length > 0) {
+                relationshipsHtml = '<div class="relationships-section"><h3 style="color: #4a9eff; margin-bottom: 15px;">Relationships (' + community.relationships.length + ')</h3>';
+                community.relationships.forEach(rel => {
+                    const subjectName = rel.subject_name ? (rel.subject_name.canonical_name || rel.subject_name.name || rel.subject_id) : rel.subject_id;
+                    const objectName = rel.object_name ? (rel.object_name.canonical_name || rel.object_name.name || rel.object_id) : rel.object_id;
+                    
+                    relationshipsHtml += `
+                        <div class="relationship-item">
+                            <strong>${escapeHtml(subjectName)}</strong> 
+                            <span style="color: #4caf50;">${escapeHtml(rel.predicate)}</span> 
+                            <strong>${escapeHtml(objectName)}</strong>
+                            <div style="color: #aaa; font-size: 12px; margin-top: 5px;">
+                                Confidence: ${(rel.confidence * 100).toFixed(1)}% | 
+                                Source Count: ${formatNumber(rel.source_count)}
+                            </div>
+                        </div>
+                    `;
+                });
+                relationshipsHtml += '</div>';
+            }
+
+            detailDiv.innerHTML = `
+                <div class="community-detail-header">
+                    <div class="community-detail-title">${escapeHtml(community.title || 'Untitled Community')}</div>
+                    <div class="community-detail-meta">
+                        <span>Level: ${community.level}</span>
+                        <span>Entities: ${formatNumber(community.entity_count)}</span>
+                        <span>Relationships: ${formatNumber(community.relationship_count)}</span>
+                        <span>Coherence: ${(community.coherence_score * 100).toFixed(1)}%</span>
+                    </div>
+                </div>
+                ${community.summary ? `<div style="margin-top: 15px; color: #ccc; line-height: 1.6;">${escapeHtml(community.summary)}</div>` : ''}
+                ${entitiesHtml}
+                ${relationshipsHtml}
+                <button class="view-graph-btn" onclick="viewCommunityGraph('${community.community_id}')">View as Graph</button>
+                <button class="close-btn" onclick="closeCommunityDetail()">Close</button>
+            `;
+        }
+
+        function viewCommunityGraph(communityId) {
+            // Open graph viewer with community ID
+            const dbName = document.getElementById('dbName').value.trim();
+            window.open(`graph_viewer.html?community_id=${communityId}&db_name=${dbName}`, '_blank');
+        }
+
+        function closeCommunityDetail() {
+            document.getElementById('communityDetail').classList.remove('active');
+        }
+
+        function formatNumber(num) {
+            return new Intl.NumberFormat().format(num);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        // Initial load
+        window.addEventListener('load', () => {
+            const dbName = document.getElementById('dbName').value.trim();
+            if (dbName) {
+                loadLevelStats(dbName).then(() => {
+                    renderLevelNavigation();
+                });
+            }
+        });
+    </script>
+</body>
+</html>
+

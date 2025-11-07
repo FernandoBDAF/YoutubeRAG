@@ -11,6 +11,7 @@
 ## 🎯 Objective
 
 Implement resume capability for the GraphRAG pipeline, allowing users to:
+
 - Detect which stages have already completed (by checking chunk status in DB)
 - Skip completed stages automatically
 - Resume from the first incomplete stage
@@ -23,12 +24,14 @@ Implement resume capability for the GraphRAG pipeline, allowing users to:
 ### Files to Modify
 
 1. **`business/pipelines/graphrag.py`**:
+
    - Add `_detect_completed_stages()` method to check DB for completion status
    - Add `_get_last_completed_stage()` method
    - Modify `run_full_pipeline()` to support resume mode
    - Add `run_with_resume()` method
 
 2. **`app/cli/graphrag.py`**:
+
    - Add `--resume` argument
    - Pass resume flag to pipeline config
    - Handle resume logic in main()
@@ -51,12 +54,14 @@ Implement resume capability for the GraphRAG pipeline, allowing users to:
 ### 1. Detect Completed Stages
 
 Each stage marks completion in chunk documents:
+
 - `graphrag_extraction.status: "completed"`
 - `graphrag_resolution.status: "completed"`
 - `graphrag_construction.status: "completed"`
 - `graphrag_communities.status: "completed"`
 
 Strategy:
+
 - Query chunks collection for completion status
 - Check percentage of chunks with each stage completed
 - Consider stage complete if >95% of chunks have status="completed"
@@ -81,19 +86,15 @@ Strategy:
 1. **Test detecting completed stages**:
    - Mock DB with chunks having extraction completed
    - Verify detection returns extraction as complete
-   
 2. **Test resume skips completed stages**:
    - Mock DB with extraction and resolution completed
    - Resume should skip those, start from construction
-   
 3. **Test resume from middle stage**:
    - Mock DB with only extraction completed
    - Resume should start from resolution
-   
 4. **Test resume when all complete**:
    - Mock DB with all stages completed
    - Resume should detect and skip all (or warn)
-   
 5. **Test resume with no completed stages**:
    - Mock DB with no stages completed
    - Resume should run all stages (same as normal run)
@@ -147,8 +148,8 @@ Strategy:
 - Created comprehensive test suite (11 tests, all passing)
 
 **Tests**: All 11 tests passing
+
 - Stage completion detection (all, partial, none)
 - Last completed stage detection
 - Stages to run filtering
 - Resume logic (skips completed, handles all complete)
-

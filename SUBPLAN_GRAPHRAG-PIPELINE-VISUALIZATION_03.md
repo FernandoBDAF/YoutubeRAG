@@ -13,6 +13,7 @@
 Enhance existing dependency validation to add warnings for out-of-order stage selection and ensure comprehensive validation coverage.
 
 **Note**: Core dependency validation is already implemented in Achievement 0.1. This achievement adds:
+
 - Warnings when stages are selected out of order
 - Enhanced logging for dependency resolution
 - Additional test coverage
@@ -58,11 +59,9 @@ Enhance existing dependency validation to add warnings for out-of-order stage se
 1. **Test out-of-order warning**:
    - Select stages out of order (e.g., "detection,extraction")
    - Verify warning is logged
-   
 2. **Test dependency auto-include logging**:
    - Select stage without dependencies
    - Verify logging shows auto-included dependencies
-   
 3. **Test error on missing dependencies**:
    - Select stage with missing dependencies and auto_include_deps=False
    - Verify ValueError is raised
@@ -107,8 +106,8 @@ Enhance existing dependency validation to add warnings for out-of-order stage se
 - Created comprehensive test suite (10 tests, all passing)
 
 **Tests**: All 10 tests passing
+
 - Out-of-order detection (single, sequential, reversed, mixed)
 - Dependency validation (auto-include, error on missing)
 - Order maintenance
 - Logging verification
-

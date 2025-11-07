@@ -94,15 +94,12 @@ class GraphRAGPipeline:
         selected_stages = None
         if hasattr(config, "selected_stages") and config.selected_stages:
             selected_stages = self._resolve_stage_selection(
-                self._parse_stage_selection(config.selected_stages),
-                auto_include_deps=True
+                self._parse_stage_selection(config.selected_stages), auto_include_deps=True
             )
             logger.info(f"🎯 Stage selection: {selected_stages}")
 
         self.specs = self._create_stage_specs(stage_filter=selected_stages)
-        self.runner = PipelineRunner(
-            self.specs, stop_on_error=not config.continue_on_error
-        )
+        self.runner = PipelineRunner(self.specs, stop_on_error=not config.continue_on_error)
 
         # Initialize database connection for setup()
         from dependencies.database.mongodb import get_mongo_client
@@ -117,6 +114,12 @@ class GraphRAGPipeline:
         # Track experiment metadata if experiment_id is provided
         if config.experiment_id:
             self._track_experiment_start()
+
+        # Achievement 1.1: Initialize metrics tracker
+        from business.services.observability.prometheus_metrics import get_metrics_tracker
+
+        pipeline_id = config.experiment_id or f"pipeline_{int(time.time())}"
+        self.metrics_tracker = get_metrics_tracker(pipeline_id=pipeline_id)
 
     def _track_experiment_start(self):
         """
@@ -232,11 +235,7 @@ class GraphRAGPipeline:
         except Exception as e:
             # Log error but don't fail if collections already exist
             error_msg = str(e).lower()
-            if (
-                "already exists" in error_msg
-                or "collection" in error_msg
-                and "exists" in error_msg
-            ):
+            if "already exists" in error_msg or "collection" in error_msg and "exists" in error_msg:
                 logger.warning(
                     f"Some GraphRAG collections may already exist: {e}. "
                     f"Continuing with pipeline execution."
@@ -324,8 +323,7 @@ class GraphRAGPipeline:
                 idx = int(stage_input)
                 if idx < 1 or idx > len(STAGE_ORDER):
                     raise ValueError(
-                        f"Invalid stage index: {idx}. "
-                        f"Must be between 1 and {len(STAGE_ORDER)}"
+                        f"Invalid stage index: {idx}. " f"Must be between 1 and {len(STAGE_ORDER)}"
                     )
                 stages = [STAGE_ORDER[idx - 1]]
             except ValueError:
@@ -453,9 +451,7 @@ class GraphRAGPipeline:
 
         # Log dependency auto-inclusion if needed
         if missing and auto_include_deps:
-            logger.info(
-                f"📦 Auto-including missing dependencies for {selected_stages}: {missing}"
-            )
+            logger.info(f"📦 Auto-including missing dependencies for {selected_stages}: {missing}")
 
         # Combine selected stages and dependencies, maintaining order
         all_stages = selected_stages + missing
@@ -555,9 +551,7 @@ class GraphRAGPipeline:
         for stage_name in STAGE_ORDER:
             status_field = stage_status_fields[stage_name]
             # Count chunks with this stage completed
-            completed_count = collection.count_documents(
-                {status_field: "completed"}
-            )
+            completed_count = collection.count_documents({status_field: "completed"})
             completion_ratios[stage_name] = (
                 completed_count / total_chunks if total_chunks > 0 else 0.0
             )
@@ -645,8 +639,7 @@ class GraphRAGPipeline:
         last_completed = self._get_last_completed_stage(completion_ratios, completion_threshold)
         if last_completed:
             logger.info(
-                f"📌 Last completed stage: {last_completed}. "
-                f"Resuming from: {stages_to_run[0]}"
+                f"📌 Last completed stage: {last_completed}. " f"Resuming from: {stages_to_run[0]}"
             )
         else:
             logger.info(f"🔄 No stages completed. Running all stages from start.")
@@ -666,6 +659,9 @@ class GraphRAGPipeline:
         Achievement 0.2: Resume from Failure
         - If resume=True, automatically detects and skips completed stages
 
+        Achievement 1.1: Prometheus Metrics Export
+        - Tracks pipeline status, stage progress, throughput, and errors
+
         Args:
             resume: If True, resume from last failure (skip completed stages)
 
@@ -677,6 +673,9 @@ class GraphRAGPipeline:
             return self.run_with_resume()
 
         logger.info("Starting full GraphRAG pipeline execution")
+
+        # Achievement 1.1: Track pipeline start
+        self.metrics_tracker.set_pipeline_status("running")
 
         with error_context(
             "graphrag_pipeline_execution",
@@ -692,10 +691,13 @@ class GraphRAGPipeline:
             logger.info(f"[PIPELINE] Starting {len(self.specs)} stages")
             exit_code = self.runner.run(pipeline_type="graphrag")
 
+            # Achievement 1.1: Update pipeline status
             if exit_code == 0:
                 logger.info("GraphRAG pipeline completed successfully")
+                self.metrics_tracker.set_pipeline_status("completed")
             else:
                 logger.error(f"GraphRAG pipeline failed with exit code {exit_code}")
+                self.metrics_tracker.set_pipeline_status("failed")
 
             return exit_code
 
@@ -727,19 +729,13 @@ class GraphRAGPipeline:
             stage_statuses = {}
 
             for spec in self.specs:
-                stage_name = (
-                    spec.stage if isinstance(spec.stage, str) else spec.stage.name
-                )
+                stage_name = spec.stage if isinstance(spec.stage, str) else spec.stage.name
                 stage_cls = (
-                    STAGE_REGISTRY.get(stage_name)
-                    if isinstance(spec.stage, str)
-                    else spec.stage
+                    STAGE_REGISTRY.get(stage_name) if isinstance(spec.stage, str) else spec.stage
                 )
 
                 if not stage_cls:
-                    stage_statuses[stage_name] = {
-                        "error": "Stage class not found in registry"
-                    }
+                    stage_statuses[stage_name] = {"error": "Stage class not found in registry"}
                     continue
 
                 try:
@@ -751,17 +747,11 @@ class GraphRAGPipeline:
                     stats = {}
                     if hasattr(stage, "get_processing_stats"):  # GraphExtractionStage
                         stats = stage.get_processing_stats()
-                    elif hasattr(
-                        stage, "get_resolution_stats"
-                    ):  # EntityResolutionStage
+                    elif hasattr(stage, "get_resolution_stats"):  # EntityResolutionStage
                         stats = stage.get_resolution_stats()
-                    elif hasattr(
-                        stage, "get_construction_stats"
-                    ):  # GraphConstructionStage
+                    elif hasattr(stage, "get_construction_stats"):  # GraphConstructionStage
                         stats = stage.get_construction_stats()
-                    elif hasattr(
-                        stage, "get_detection_stats"
-                    ):  # CommunityDetectionStage
+                    elif hasattr(stage, "get_detection_stats"):  # CommunityDetectionStage
                         stats = stage.get_detection_stats()
                     else:
                         stats = {
@@ -798,9 +788,7 @@ class GraphRAGPipeline:
         for spec in self.specs:
             stage_name = spec.stage if isinstance(spec.stage, str) else spec.stage.name
             stage_cls = (
-                STAGE_REGISTRY.get(stage_name)
-                if isinstance(spec.stage, str)
-                else spec.stage
+                STAGE_REGISTRY.get(stage_name) if isinstance(spec.stage, str) else spec.stage
             )
 
             if not stage_cls:
@@ -862,9 +850,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="GraphRAG Pipeline Runner")
     parser.add_argument("--stage", help="Run specific stage only")
     parser.add_argument("--video-id", help="Process specific video ID")
-    parser.add_argument(
-        "--max", type=int, help="Maximum number of documents to process"
-    )
+    parser.add_argument("--max", type=int, help="Maximum number of documents to process")
     parser.add_argument("--dry-run", action="store_true", help="Dry run mode")
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
 
