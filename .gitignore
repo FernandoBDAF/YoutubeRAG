@@ -9,3 +9,13 @@
 *.py[cod]
 .env
 *.log
+# IDE Performance Optimization (Nov 2025)
+.pytest_cache/
+.DS_Store
+node_modules/
+
+# Additional common patterns
+*.swp
+*.swo
+*~
+.idea/

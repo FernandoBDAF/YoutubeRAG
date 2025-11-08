@@ -17,6 +17,8 @@ class BaseStageConfig:
     upsert_existing: bool = False
     video_id: Optional[str] = None
     concurrency: Optional[int] = None
+    # Trace ID for linking transformations across pipeline run
+    trace_id: Optional[str] = None
 
     @classmethod
     def from_args_env(

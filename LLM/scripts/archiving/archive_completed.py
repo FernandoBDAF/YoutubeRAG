@@ -30,7 +30,24 @@ from pathlib import Path
 
 
 def find_plan_file(file_path: Path) -> Path:
-    """Find the parent PLAN file for a SUBPLAN or EXECUTION_TASK."""
+    """Find the parent PLAN file for a SUBPLAN or EXECUTION_TASK.
+    
+    Uses nested structure: work-space/plans/PLAN_NAME/
+    If file is in nested structure, uses parent directory.
+    Otherwise checks nested structure based on feature name.
+    """
+    # Check if file is in nested structure: work-space/plans/{feature}/
+    # If so, PLAN is in the same directory
+    if "plans" in file_path.parts:
+        plan_index = file_path.parts.index("plans")
+        if plan_index + 1 < len(file_path.parts):
+            plan_folder = Path(*file_path.parts[:plan_index + 2])
+            # Extract feature name from folder name
+            feature_name = plan_folder.name
+            plan_file = plan_folder / f"PLAN_{feature_name}.md"
+            if plan_file.exists():
+                return plan_file
+    
     # Extract feature name from file
     if file_path.name.startswith("SUBPLAN_"):
         feature = file_path.name.replace("SUBPLAN_", "").split("_")[0]
@@ -40,8 +57,8 @@ def find_plan_file(file_path: Path) -> Path:
     else:
         raise ValueError(f"Unknown file type: {file_path.name}")
 
-    # Look for PLAN file
-    plan_file = Path(f"PLAN_{feature}.md")
+    # Check nested structure: work-space/plans/{feature}/PLAN_{feature}.md
+    plan_file = Path("work-space") / "plans" / feature / f"PLAN_{feature}.md"
     if plan_file.exists():
         return plan_file
 

@@ -24,6 +24,7 @@ from core.libraries.error_handling.decorators import handle_errors
 from dependencies.database.mongodb import get_mongo_client
 from core.config.paths import DB_NAME
 from business.services.graphrag.indexes import get_graphrag_collections
+from business.services.graphrag.quality_metrics import QualityMetricsService
 from business.stages.graphrag.extraction import GraphExtractionStage
 from business.stages.graphrag.entity_resolution import EntityResolutionStage
 from business.stages.graphrag.graph_construction import GraphConstructionStage
@@ -229,6 +230,135 @@ def get_quality_trends(
     }
 
 
+def get_metrics_by_trace_id(
+    db_name: str,
+    trace_id: str,
+) -> Dict[str, Any]:
+    """
+    Get all quality metrics for a specific pipeline run.
+
+    Achievement 0.4: Per-Stage Quality Metrics
+
+    Args:
+        db_name: Database name
+        trace_id: Pipeline run trace ID
+
+    Returns:
+        Dictionary with all metrics for the run
+    """
+    client = get_mongo_client()
+    db = client[db_name]
+
+    quality_metrics = QualityMetricsService(db, enabled=True)
+    metrics = quality_metrics.get_metrics(trace_id)
+
+    if not metrics:
+        return {"error": f"No metrics found for trace_id={trace_id}"}
+
+    # Add healthy range warnings
+    warnings = quality_metrics.check_healthy_ranges(metrics)
+
+    return {
+        "trace_id": trace_id,
+        "metrics": metrics,
+        "warnings": warnings,
+    }
+
+
+def get_metric_time_series(
+    db_name: str,
+    stage: str,
+    metric_name: str,
+    limit: int = 50,
+) -> Dict[str, Any]:
+    """
+    Get time-series data for a specific metric.
+
+    Achievement 0.4: Per-Stage Quality Metrics
+
+    Args:
+        db_name: Database name
+        stage: Stage name (extraction, resolution, construction, detection)
+        metric_name: Metric name
+        limit: Maximum number of data points
+
+    Returns:
+        Dictionary with time-series data
+    """
+    client = get_mongo_client()
+    db = client[db_name]
+
+    quality_metrics = QualityMetricsService(db, enabled=True)
+    data_points = quality_metrics.get_metrics_time_series(stage, metric_name, limit)
+
+    return {
+        "stage": stage,
+        "metric_name": metric_name,
+        "data_points": len(data_points),
+        "data": data_points,
+    }
+
+
+def get_all_runs_summary(
+    db_name: str,
+    limit: int = 20,
+) -> Dict[str, Any]:
+    """
+    Get summary of recent pipeline runs with key metrics.
+
+    Achievement 0.4: Per-Stage Quality Metrics
+
+    Args:
+        db_name: Database name
+        limit: Maximum number of runs to return
+
+    Returns:
+        Dictionary with run summaries
+    """
+    client = get_mongo_client()
+    db = client[db_name]
+
+    runs_collection = db.graphrag_runs
+
+    # Get recent runs
+    cursor = runs_collection.find().sort("timestamp", -1).limit(limit)
+
+    runs = []
+    for run_doc in cursor:
+        metrics = run_doc.get("metrics", {})
+
+        # Extract key metrics from each stage
+        summary = {
+            "trace_id": run_doc.get("trace_id"),
+            "timestamp": run_doc.get("timestamp"),
+            "extraction": {
+                "entity_count_avg": metrics.get("extraction", {}).get("entity_count_avg", 0),
+                "confidence_avg": metrics.get("extraction", {}).get("confidence_avg", 0),
+            },
+            "resolution": {
+                "merge_rate": metrics.get("resolution", {}).get("merge_rate", 0),
+                "resolved_entity_count": metrics.get("resolution", {}).get(
+                    "resolved_entity_count", 0
+                ),
+            },
+            "construction": {
+                "graph_density": metrics.get("construction", {}).get("graph_density", 0),
+                "edge_count_final": metrics.get("construction", {}).get("edge_count_final", 0),
+            },
+            "detection": {
+                "modularity": metrics.get("detection", {}).get("modularity", 0),
+                "community_count": metrics.get("detection", {}).get("community_count", 0),
+            },
+        }
+
+        runs.append(summary)
+
+    return {
+        "total_runs": len(runs),
+        "runs": runs,
+    }
+
+
 class QualityMetricsHandler(BaseHTTPRequestHandler):
     """HTTP handler for quality metrics API endpoints."""
 
@@ -263,6 +393,69 @@ class QualityMetricsHandler(BaseHTTPRequestHandler):
                     trends = get_quality_trends(db_name=db_name, stage=stage, limit=limit)
 
                     response_json = json.dumps(trends, indent=2, default=str)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(response_json.encode("utf-8"))
+
+                elif path_parts[2] == "run":
+                    # GET /api/quality/run?trace_id=abc123
+                    trace_id = params.get("trace_id", [None])[0]
+
+                    if not trace_id:
+                        self.send_response(400)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Access-Control-Allow-Origin", "*")
+                        self.end_headers()
+                        error_response = json.dumps({"error": "trace_id parameter required"})
+                        self.wfile.write(error_response.encode("utf-8"))
+                        return
+
+                    metrics = get_metrics_by_trace_id(db_name=db_name, trace_id=trace_id)
+
+                    response_json = json.dumps(metrics, indent=2, default=str)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(response_json.encode("utf-8"))
+
+                elif path_parts[2] == "timeseries":
+                    # GET /api/quality/timeseries?stage=extraction&metric=entity_count_avg
+                    stage = params.get("stage", [None])[0]
+                    metric_name = params.get("metric", [None])[0]
+                    limit = int(params.get("limit", [50])[0])
+
+                    if not stage or not metric_name:
+                        self.send_response(400)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Access-Control-Allow-Origin", "*")
+                        self.end_headers()
+                        error_response = json.dumps(
+                            {"error": "stage and metric parameters required"}
+                        )
+                        self.wfile.write(error_response.encode("utf-8"))
+                        return
+
+                    data = get_metric_time_series(
+                        db_name=db_name, stage=stage, metric_name=metric_name, limit=limit
+                    )
+
+                    response_json = json.dumps(data, indent=2, default=str)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(response_json.encode("utf-8"))
+
+                elif path_parts[2] == "runs":
+                    # GET /api/quality/runs?limit=20
+                    limit = int(params.get("limit", [20])[0])
+
+                    summary = get_all_runs_summary(db_name=db_name, limit=limit)
+
+                    response_json = json.dumps(summary, indent=2, default=str)
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
                     self.send_header("Access-Control-Allow-Origin", "*")

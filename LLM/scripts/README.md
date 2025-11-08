@@ -1,207 +1,111 @@
-# LLM Methodology Scripts
+# LLM Scripts Documentation
 
-**Purpose**: Scripts for the LLM Development Methodology  
-**Status**: Active  
-**Created**: 2025-11-07
-
----
-
-## 📁 Directory Structure
-
-Scripts are organized by domain for better discoverability and maintainability:
-
-```
-LLM/scripts/
-├── validation/     # Validation and compliance checking scripts
-├── generation/     # Prompt and content generation scripts
-├── archiving/      # Archiving and file management scripts
-└── README.md       # This file
-```
+**Purpose**: Documentation for all automation scripts in the LLM methodology  
+**Last Updated**: 2025-01-28
 
 ---
 
-## 🔍 Scripts by Domain
+## 📁 Script Organization
 
-### Validation Scripts (`validation/`)
+Scripts are organized by domain:
 
-**Purpose**: Validate methodology compliance and enforce rules
-
-**Scripts**:
-
-1. **check_plan_size.py**
-
-   - Validates PLAN size limits (600 lines / 32 hours)
-   - Usage: `python LLM/scripts/validation/check_plan_size.py @PLAN_FEATURE.md`
-   - Exit code 1 if limits exceeded
-
-2. **check_execution_task_size.py**
-
-   - Validates EXECUTION_TASK size limits (200 lines)
-   - Usage: `python LLM/scripts/validation/check_execution_task_size.py @EXECUTION_TASK_FILE.md`
-   - Exit code 1 if limit exceeded
-
-3. **validate_achievement_completion.py**
-
-   - Validates achievement completion before marking complete
-   - Usage: `python LLM/scripts/validation/validate_achievement_completion.py @PLAN_FILE.md --achievement 1.1`
-   - Checks: SUBPLAN exists, EXECUTION_TASK exists, deliverables exist
-
-4. **validate_execution_start.py**
-
-   - Validates prerequisites before starting EXECUTION_TASK
-   - Usage: `python LLM/scripts/validation/validate_execution_start.py @EXECUTION_TASK_FILE.md`
-   - Checks: SUBPLAN exists, parent PLAN exists, archive location exists
-
-5. **validate_mid_plan.py**
-
-   - Validates PLAN compliance at mid-point
-   - Usage: `python LLM/scripts/validation/validate_mid_plan.py @PLAN_FILE.md`
-   - Checks: Statistics accuracy, SUBPLAN registration, archive compliance
-
-6. **validate_registration.py**
-
-   - Validates component registration in PLAN/SUBPLAN
-   - Usage: `python LLM/scripts/validation/validate_registration.py @PLAN_FILE.md`
-   - Checks: All components registered, no orphaned files
-
-7. **validate_plan_compliance.py** (if exists)
-
-   - Validates PLAN compliance with methodology
-   - Usage: `python LLM/scripts/validation/validate_plan_compliance.py @PLAN_FILE.md`
-
-8. **validate_references.py** (if exists)
-   - Validates references in documentation
-   - Usage: `python LLM/scripts/validation/validate_references.py`
+- **archiving/**: File archiving scripts
+- **generation/**: Prompt and document generation scripts
+- **validation/**: Validation and compliance checking scripts
 
 ---
 
-### Generation Scripts (`generation/`)
+## 📦 Archiving Scripts
 
-**Purpose**: Generate prompts and content automatically
+### manual_archive.py
 
-**Scripts**:
+**Purpose**: User-controlled archiving of files from workspace (on-demand, not automatic)
 
-1. **generate_prompt.py**
+**Location**: `LLM/scripts/archiving/manual_archive.py`
 
-   - Generates methodology-compliant prompts for LLM execution
-   - Usage: `python LLM/scripts/generation/generate_prompt.py --next --clipboard @PLAN_FEATURE.md`
-   - Options: `--next`, `--achievement X.Y`, `--clipboard`
-   - Auto-detects context boundaries and validation scripts
-
-2. **generate_pause_prompt.py**
-
-   - Generates prompt to pause a PLAN
-   - Usage: `python LLM/scripts/generation/generate_pause_prompt.py @PLAN_FEATURE.md --clipboard`
-   - Includes checklist for pausing properly
-
-3. **generate_resume_prompt.py**
-
-   - Generates prompt to resume a paused PLAN
-   - Usage: `python LLM/scripts/generation/generate_resume_prompt.py @PLAN_FEATURE.md --clipboard`
-   - Includes pre-resume checklist from IMPLEMENTATION_RESUME.md
-
-4. **generate_verify_prompt.py**
-   - Generates prompt to verify PLAN status and fix inconsistencies
-   - Usage: `python LLM/scripts/generation/generate_verify_prompt.py @PLAN_FEATURE.md --clipboard`
-   - Runs validate_mid_plan.py and provides fix instructions
-
----
-
-### Archiving Scripts (`archiving/`)
-
-**Purpose**: Archive completed work immediately
-
-**Scripts**:
-
-1. **archive_completed.py**
-   - Archives completed SUBPLANs and EXECUTION_TASKs immediately
-   - Usage: `python LLM/scripts/archiving/archive_completed.py @SUBPLAN_FILE.md`
-   - Auto-detects archive location from PLAN
-   - Creates archive structure if needed
-
----
-
-## 🚀 Quick Reference
-
-### Most Common Commands
-
-**Generate prompt for next achievement**:
+**Usage**:
 
 ```bash
-python LLM/scripts/generation/generate_prompt.py @PLAN_FEATURE.md --next --clipboard
+# Dry-run: See what would be archived
+python LLM/scripts/archiving/manual_archive.py --dry-run --workspace work-space/
+
+# Archive files with status: archived metadata tag
+python LLM/scripts/archiving/manual_archive.py --workspace work-space/
+
+# Archive specific files
+python LLM/scripts/archiving/manual_archive.py work-space/plans/PLAN_TEST.md
+
+# Archive files matching pattern
+python LLM/scripts/archiving/manual_archive.py --pattern "EXECUTION_TASK_*_*_01.md" --workspace work-space/
 ```
 
-**Pause PLAN**:
+**Detection Methods**:
 
-```bash
-python LLM/scripts/generation/generate_pause_prompt.py @PLAN_FEATURE.md --clipboard
-```
+1. **Metadata Tag**: Files with `status: archived` in metadata section
+2. **Explicit List**: Files provided as command-line arguments
+3. **Pattern Matching**: Files matching specified pattern (e.g., `EXECUTION_TASK_*_*_01.md`)
 
-**Resume PLAN**:
+**Features**:
 
-```bash
-python LLM/scripts/generation/generate_resume_prompt.py @PLAN_FEATURE.md --clipboard
-```
+- Dry-run mode (`--dry-run`) to preview what would be archived
+- Multiple detection methods for flexibility
+- Validates files before archiving
+- Handles duplicates gracefully
+- Verbose output option (`--verbose`)
+- Works with workspace folder structure
 
-**Verify PLAN status**:
+**When to Use**:
 
-```bash
-python LLM/scripts/generation/generate_verify_prompt.py @PLAN_FEATURE.md --clipboard
-```
+- Archive files when convenient (not during execution)
+- Batch archive multiple files at once
+- Preview what would be archived before actually archiving
 
-**Validate achievement before marking complete**:
-
-```bash
-python LLM/scripts/validation/validate_achievement_completion.py @PLAN_FEATURE.md --achievement 1.1
-```
-
-**Archive completed component**:
-
-```bash
-python LLM/scripts/archiving/archive_completed.py @SUBPLAN_FEATURE_XX.md
-```
-
-**Check PLAN size**:
-
-```bash
-python LLM/scripts/validation/check_plan_size.py @PLAN_FEATURE.md
-```
+**Related**: See `archive_completed.py` for deferred archiving during execution
 
 ---
 
-## 📝 Adding New Scripts
+### archive_completed.py
 
-**Guidelines**:
+**Purpose**: Archive completed SUBPLANs and EXECUTION_TASKs (supports deferred archiving)
 
-1. **Choose Domain**: Determine which domain the script belongs to
+**Location**: `LLM/scripts/archiving/archive_completed.py`
 
-   - Validation: Compliance checking, rule enforcement
-   - Generation: Creating prompts, content, templates
-   - Archiving: File management, archiving workflows
+**Usage**:
 
-2. **Place Script**: Move script to appropriate domain directory
+```bash
+# Single file
+python LLM/scripts/archiving/archive_completed.py @SUBPLAN_FEATURE_01.md
 
-   ```bash
-   mv new_script.py LLM/scripts/[domain]/
-   ```
+# Batch mode (recommended for deferred archiving)
+python LLM/scripts/archiving/archive_completed.py --batch @SUBPLAN_FEATURE_01.md @EXECUTION_TASK_FEATURE_01_01.md
+```
 
-3. **Update README**: Add script to this README with:
+**Features**:
 
-   - Purpose
-   - Usage example
-   - Key options
+- Auto-detects archive location from PLAN file
+- Creates archive structure if needed
+- Supports batch operations for deferred archiving
+- Works with root directory files
 
-4. **Update References**: If script is referenced in documentation, update paths
+**When to Use**:
 
----
+- Archive files at achievement completion (deferred archiving policy)
+- Archive files during execution workflow
 
-## 🔗 Related Documentation
-
-- **Methodology Overview**: `LLM-METHODOLOGY.md`
-- **Protocols**: `LLM/protocols/`
-- **Templates**: `LLM/templates/`
-- **Guides**: `LLM/guides/`
+**Related**: See `manual_archive.py` for user-controlled on-demand archiving
 
 ---
 
-**Last Updated**: 2025-11-07
+## 🔧 Generation Scripts
+
+Scripts for generating prompts and documents. See individual script files for documentation.
+
+---
+
+## ✅ Validation Scripts
+
+Scripts for validating PLAN compliance, achievement completion, etc. See individual script files for documentation.
+
+---
+
+**Note**: This README is a work in progress. Individual scripts contain detailed documentation in their docstrings.

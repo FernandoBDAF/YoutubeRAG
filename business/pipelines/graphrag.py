@@ -7,6 +7,7 @@ all stages from entity extraction to community detection and summarization.
 
 import logging
 import time
+import uuid
 import argparse
 from typing import Dict, List, Any, Optional
 from core.config.graphrag import GraphRAGPipelineConfig
@@ -15,6 +16,7 @@ from business.services.graphrag.indexes import (
     create_graphrag_indexes,
     ensure_graphrag_collections,
 )
+from business.services.graphrag.quality_metrics import QualityMetricsService
 from core.libraries.error_handling.context import error_context
 from core.libraries.error_handling.decorators import handle_errors
 
@@ -109,6 +111,14 @@ class GraphRAGPipeline:
         db_name = config.extraction_config.db_name or DB_NAME
         self.db = self.client[db_name]  # ✅ Now available for setup()
 
+        # Achievement 0.1: Generate trace_id for transformation logging
+        # Generate unique trace_id for this pipeline run
+        self.trace_id = str(uuid.uuid4())
+        logger.info(f"🔍 Trace ID generated: {self.trace_id}")
+
+        # Set trace_id on all stage configs so stages can access it
+        self._set_trace_id_on_configs()
+
         logger.info("Initialized GraphRAGPipeline with PipelineRunner")
 
         # Track experiment metadata if experiment_id is provided
@@ -120,6 +130,13 @@ class GraphRAGPipeline:
 
         pipeline_id = config.experiment_id or f"pipeline_{int(time.time())}"
         self.metrics_tracker = get_metrics_tracker(pipeline_id=pipeline_id)
+
+        # Achievement 0.4: Initialize quality metrics service
+        import os
+
+        metrics_enabled = os.getenv("GRAPHRAG_QUALITY_METRICS", "true").lower() == "true"
+        self.quality_metrics = QualityMetricsService(self.db, enabled=metrics_enabled)
+        logger.info(f"Quality metrics collection: {'enabled' if metrics_enabled else 'disabled'}")
 
     def _track_experiment_start(self):
         """
@@ -147,6 +164,9 @@ class GraphRAGPipeline:
             "pipeline_type": "graphrag",
             "started_at": datetime.utcnow(),
             "status": "running",
+            "trace_id": getattr(
+                self, "trace_id", None
+            ),  # Achievement 0.1: Trace ID System Integration
             "configuration": {
                 "read_db": self.config.extraction_config.read_db_name,
                 "write_db": self.config.extraction_config.write_db_name,
@@ -169,6 +189,19 @@ class GraphRAGPipeline:
         )
 
         logger.info(f"📊 Experiment metadata tracked: {self.config.experiment_id}")
+
+    def _set_trace_id_on_configs(self):
+        """
+        Set trace_id on all stage configs so stages can access it for transformation logging.
+
+        Achievement 0.1: Trace ID System Integration
+        """
+        if hasattr(self, "trace_id") and self.trace_id:
+            self.config.extraction_config.trace_id = self.trace_id
+            self.config.resolution_config.trace_id = self.trace_id
+            self.config.construction_config.trace_id = self.trace_id
+            self.config.detection_config.trace_id = self.trace_id
+            logger.debug(f"Set trace_id on all stage configs: {self.trace_id}")
 
     def _create_stage_specs(self, stage_filter: Optional[List[str]] = None) -> List[StageSpec]:
         """
@@ -695,6 +728,23 @@ class GraphRAGPipeline:
             if exit_code == 0:
                 logger.info("GraphRAG pipeline completed successfully")
                 self.metrics_tracker.set_pipeline_status("completed")
+
+                # Achievement 0.4: Calculate and store quality metrics
+                logger.info(f"Calculating quality metrics for trace_id={self.trace_id}")
+                try:
+                    metrics = self.quality_metrics.calculate_all_metrics(self.trace_id)
+                    self.quality_metrics.store_metrics(self.trace_id, metrics)
+
+                    # Check for out-of-range metrics
+                    warnings = self.quality_metrics.check_healthy_ranges(metrics)
+                    for stage, stage_warnings in warnings.items():
+                        if stage_warnings:
+                            logger.warning(f"Quality warnings for {stage}: {stage_warnings}")
+
+                    logger.info("Quality metrics calculated and stored successfully")
+                except Exception as e:
+                    logger.error(f"Failed to calculate quality metrics: {e}")
+                    # Don't fail the pipeline if metrics calculation fails
             else:
                 logger.error(f"GraphRAG pipeline failed with exit code {exit_code}")
                 self.metrics_tracker.set_pipeline_status("failed")

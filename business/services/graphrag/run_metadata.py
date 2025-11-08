@@ -92,6 +92,7 @@ def create_run_document(
     graph_signature: str,
     params: Dict[str, Any],
     ontology_version: str = "unknown",
+    trace_id: Optional[str] = None,
 ) -> str:
     """
     Create a new run document in graphrag_runs collection.
@@ -103,6 +104,7 @@ def create_run_document(
         graph_signature: Computed graph signature
         params: Full parameters dictionary
         ontology_version: Ontology version string
+        trace_id: Optional trace ID for linking transformations across pipeline run
 
     Returns:
         Run ID (MongoDB _id as string)
@@ -121,6 +123,10 @@ def create_run_document(
         "completed_at": None,
         "metrics": {},
     }
+    
+    # Add trace_id if provided (Achievement 0.1: Trace ID System Integration)
+    if trace_id:
+        run_doc["trace_id"] = trace_id
 
     # Insert document
     result = runs_collection.insert_one(run_doc)

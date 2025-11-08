@@ -147,9 +147,23 @@ Exit Codes:
         # Clean file path
         plan_path = Path(args.plan_file.replace("@", ""))
 
+        # If not found, check work-space/plans/ (workspace structure support)
         if not plan_path.exists():
-            print(f"❌ Error: File not found: {plan_path}")
-            sys.exit(1)
+            # Only check workspace if path is relative (not absolute)
+            if not plan_path.is_absolute():
+                workspace_path = Path("work-space/plans") / plan_path.name
+                if workspace_path.exists():
+                    plan_path = workspace_path
+                else:
+                    # File not found - show all checked locations
+                    print(f"❌ Error: File not found: {args.plan_file.replace('@', '')}")
+                    print(f"   Checked: {plan_path}")
+                    print(f"   Checked: {workspace_path}")
+                    sys.exit(1)
+            else:
+                # Absolute path not found
+                print(f"❌ Error: File not found: {plan_path}")
+                sys.exit(1)
 
         # Generate prompt
         prompt = generate_pause_prompt(plan_path)

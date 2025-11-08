@@ -1,7 +1,7 @@
 # File Index: LLM Methodology Files
 
 **Purpose**: Central catalog of all methodology files for fast discovery  
-**Last Updated**: 2025-01-27  
+**Last Updated**: 2025-01-28  
 **Total Files**: 78+
 
 ---
@@ -10,60 +10,105 @@
 
 | Type | Count | Location |
 |------|-------|----------|
-| PLANs (active) | 17 | Root directory |
-| SUBPLANs (active) | 30 | Root directory |
-| EXECUTION_TASKs (active) | 31 | Root directory |
-| Scripts | 16 | LLM/scripts/ |
+| PLANs (active) | 17 | work-space/plans/ |
+| SUBPLANs (active) | 30 | work-space/subplans/ |
+| EXECUTION_TASKs (active) | 31 | work-space/execution/ |
+| Scripts | 17 | LLM/scripts/ |
 | Templates | 5 | LLM/templates/ |
 | Protocols | 5 | LLM/protocols/ |
 | Guides | 6 | LLM/guides/ |
 | Documentation | 4 | LLM/ |
 | Archived Plans | Many | documentation/archive/ |
 
+**Note**: Active files are in `work-space/` directory. Some legacy files may still be in root directory (migration optional).
+
 ---
 
-## 🗂️ Active Plans (Root Directory)
+## ⭐ North Stars (work-space/north-stars/)
+
+**Location**: `work-space/north-stars/`
+
+**Purpose**: Strategic vision documents (800-2,000 lines) that illuminate and guide all work
+
+**Current North Stars**:
+- `work-space/north-stars/NORTH_STAR_LLM-METHODOLOGY.md` - Methodology evolution and practices
+- `work-space/north-stars/NORTH_STAR_MULTI-AGENT-COORDINATION.md` - Multi-agent coordination vision
+- `work-space/north-stars/NORTH_STAR_UNIVERSAL-METHODOLOGY-CLI.md` - Universal CLI tooling vision
+
+**Usage**: Referenced by GrammaPlans and PLANs for strategic direction
+
+---
+
+## 📋 GrammaPlans (work-space/grammaplans/)
+
+**Location**: `work-space/grammaplans/`
+
+**Purpose**: Strategic coordination documents (600-1,500 lines) that orchestrate multiple PLANs
+
+**Current GrammaPlans**:
+- `work-space/grammaplans/GRAMMAPLAN_GRAPHRAG-PIPELINE-EXCELLENCE.md` - GraphRAG pipeline coordination
+- `work-space/grammaplans/GRAMMAPLAN_YOUTUBE-RAG-SYSTEM-INTEGRATION.md` - YouTube RAG system coordination
+- `work-space/grammaplans/GRAMMAPLAN_UNIVERSAL-CLI-CORE-FOUNDATION.md` - CLI core foundation
+- `work-space/grammaplans/GRAMMAPLAN_UNIVERSAL-METHODOLOGY-CLI.md` - Universal CLI platform
+- `work-space/grammaplans/GRAMMAPLAN_CURSOR-CLI-INTEGRATION.md` - Cursor CLI integration
+- `work-space/grammaplans/GRAMMAPLAN_EXECUTION-WORK-SYSTEM-ENHANCEMENT.md` - Execution system enhancement
+
+**Usage**: Coordinate multiple child PLANs under strategic umbrella
+
+---
+
+## 🗂️ Active Plans (work-space/plans/)
+
+**Location**: `work-space/plans/`
 
 ### File Moving Optimization Plans
-- `PLAN_FILE-MOVING-OPTIMIZATION.md` - Quick wins for file moving (deferred archiving, file index, metadata)
-- `PLAN_FILE-MOVING-ADVANCED-OPTIMIZATION.md` - Advanced optimization (batch archiving, search tool, virtual organization)
+- `work-space/plans/PLAN_FILE-MOVING-OPTIMIZATION.md` - Quick wins for file moving (deferred archiving, file index, metadata)
+- `work-space/plans/PLAN_FILE-MOVING-ADVANCED-OPTIMIZATION.md` - Advanced optimization (batch archiving, search tool, virtual organization)
+- `work-space/plans/PLAN_FILE-MOVING-WORKSPACE-AND-MANUAL-ARCHIVE.md` - Workspace folder and manual archive script
 
 ### Methodology Plans
-- `PLAN_EXECUTION-ANALYSIS-INTEGRATION.md` - Integration of EXECUTION_ANALYSIS documents into methodology
-- `PLAN_PROMPT-GENERATOR-FIX-AND-TESTING.md` - Bug fixes for prompt generator
-- `PLAN_PLAN-COMPLETION-VERIFICATION-AND-PROMPT-FIX.md` - PLAN completion verification improvements
+- `work-space/plans/PLAN_EXECUTION-ANALYSIS-INTEGRATION.md` - Integration of EXECUTION_ANALYSIS documents into methodology
+- `work-space/plans/PLAN_PROMPT-GENERATOR-FIX-AND-TESTING.md` - Bug fixes for prompt generator
+- `work-space/plans/PLAN_PLAN-COMPLETION-VERIFICATION-AND-PROMPT-FIX.md` - PLAN completion verification improvements
 
 ### Other Active Plans
-- Additional PLANs (17 total) - See root directory for complete list
+- Additional PLANs (17 total) - See `work-space/plans/` for complete list
+
+**Note**: Some legacy PLANs may still be in root directory (migration optional). New PLANs are created in `work-space/plans/`.
 
 ---
 
-## 📄 Active SUBPLANs (Root Directory)
+## 📄 Active SUBPLANs (work-space/subplans/)
 
 SUBPLANs are created for each achievement and follow naming convention:
 - `SUBPLAN_<FEATURE>_<NUMBER>.md`
 
 **Current Active**: 30 SUBPLANs  
-**Location**: Root directory  
+**Location**: `work-space/subplans/`  
 **Related to**: Active PLANs
+
+**Note**: Some legacy SUBPLANs may still be in root directory (migration optional). New SUBPLANs are created in `work-space/subplans/`.
 
 ---
 
-## 📋 Active EXECUTION_TASKs (Root Directory)
+## 📋 Active EXECUTION_TASKs (work-space/execution/)
 
 EXECUTION_TASKs log execution attempts and follow naming convention:
 - `EXECUTION_TASK_<FEATURE>_<SUBPLAN>_<EXECUTION>.md`
 
 **Current Active**: 31 EXECUTION_TASKs  
-**Location**: Root directory  
+**Location**: `work-space/execution/`  
 **Related to**: Active SUBPLANs
+
+**Note**: Some legacy EXECUTION_TASKs may still be in root directory (migration optional). New EXECUTION_TASKs are created in `work-space/execution/`.
 
 ---
 
 ## 🔧 Scripts (LLM/scripts/)
 
 ### Archiving Scripts (LLM/scripts/archiving/)
-- `archive_completed.py` - Archive completed SUBPLANs and EXECUTION_TASKs
+- `archive_completed.py` - Archive completed SUBPLANs and EXECUTION_TASKs (deferred archiving during execution)
+- `manual_archive.py` - User-controlled on-demand archiving from workspace ⭐
 
 ### Generation Scripts (LLM/scripts/generation/)
 - `generate_prompt.py` - Generate prompts for next achievement

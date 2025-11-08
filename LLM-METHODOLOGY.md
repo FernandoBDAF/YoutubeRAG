@@ -9,12 +9,20 @@
 
 ## 🎯 What This Is
 
-A **4-tier hierarchical methodology** for managing LLM-assisted development work:
+A **5-tier hierarchical methodology** for managing LLM-assisted development work:
 
 ```
-GRAMMAPLAN → PLAN → SUBPLAN → EXECUTION_TASK
-(Strategy)   (What)  (How)     (Journey)
+⭐ NORTH_STAR ────────────────────── (Strategic Vision - "Floats above funnel, illuminating it")
+       ├─→ GRAMMAPLAN → PLAN        (Strategic Coordination → Tactical Execution)
+       │       └─→ SUBPLAN          (Approach + Execution Coordination)
+       │           └─→ EXECUTION_TASK (Implementation Journey)
+       │
+       └─→ PLAN                      (Tactical Execution - Independent)
+           └─→ SUBPLAN
+               └─→ EXECUTION_TASK
 ```
+
+**Hierarchy**: NORTH_STAR (Vision) → GrammaPlan (Orchestrate) → PLAN (Objectives) → SUBPLAN (Design) → EXECUTION_TASK (Journey)
 
 **Key Principles**:
 
@@ -24,6 +32,48 @@ GRAMMAPLAN → PLAN → SUBPLAN → EXECUTION_TASK
 - ✅ Complete documentation (knowledge preserved)
 
 **Proven**: 10+ plans, 200+ achievements, 200+ hours of real usage
+
+---
+
+## 🧪 Testing Requirements
+
+**Mandatory for Code Work**: All code implementations must include comprehensive test coverage.
+
+### Testing Policy
+
+**Required Test Types**:
+
+- **Unit Tests**: For all new functions and classes
+- **Integration Tests**: For workflows and component interactions
+- **Edge Case Tests**: For error handling and boundary conditions
+
+**Coverage Requirement**: >90% for all new code
+
+**Test File Naming**: `test_<script_name>.py` in `tests/LLM/scripts/<domain>/`
+
+**Test Infrastructure**: Use existing fixtures from `tests/LLM/scripts/conftest.py`
+
+### TDD Workflow
+
+**Preferred Approach**: Write tests first, then implement (Test-Driven Development)
+
+**When to Write Tests**:
+
+- Before implementation (TDD - preferred)
+- During implementation (acceptable)
+- After implementation (minimum - must be before marking achievement complete)
+
+**Test File in Deliverables**: Test file must be explicitly listed in achievement deliverables
+
+### Validation
+
+**Automated Validation**: Use `LLM/scripts/validation/validate_test_coverage.py` to check test file existence and coverage
+
+**Templates**: See `LLM/templates/PLAN-TEMPLATE.md` and `LLM/templates/SUBPLAN-TEMPLATE.md` for testing requirements in achievement definitions
+
+**Example**: See `PLAN_PROMPT-GENERATOR-FIX-AND-TESTING.md` for good testing practice
+
+**Note**: Testing is mandatory for code work, optional for documentation-only work
 
 ---
 
@@ -53,23 +103,25 @@ GRAMMAPLAN → PLAN → SUBPLAN → EXECUTION_TASK
 
 ### Coordination Protocols
 
-| Protocol             | Purpose             | When to Use              | Location                                |
-| -------------------- | ------------------- | ------------------------ | --------------------------------------- |
-| **MULTIPLE-PLANS**   | Manage dependencies | 2+ active/paused PLANs   | `LLM/guides/MULTIPLE-PLANS-PROTOCOL.md` |
-| **MULTI-LLM**        | Team collaboration  | Multiple LLM instances   | `LLM/guides/MULTI-LLM-PROTOCOL.md`      |
-| **GRAMMAPLAN-GUIDE** | Large initiatives   | Plans >80h or >800 lines | `LLM/guides/GRAMMAPLAN-GUIDE.md`        |
+| Protocol             | Purpose             | When to Use                   | Location                                |
+| -------------------- | ------------------- | ----------------------------- | --------------------------------------- |
+| **NORTH-STAR-GUIDE** | Strategic vision    | Vision & principles documents | `LLM/guides/NORTH-STAR-GUIDE.md`        |
+| **GRAMMAPLAN-GUIDE** | Large initiatives   | Plans >80h or >800 lines      | `LLM/guides/GRAMMAPLAN-GUIDE.md`        |
+| **MULTIPLE-PLANS**   | Manage dependencies | 2+ active/paused PLANs        | `LLM/guides/MULTIPLE-PLANS-PROTOCOL.md` |
+| **MULTI-LLM**        | Team collaboration  | Multiple LLM instances        | `LLM/guides/MULTI-LLM-PROTOCOL.md`      |
 
 ---
 
 ## 📝 Templates (Copy-Paste Ready)
 
-| Template                    | Purpose             | Use For                     | Location                                   |
-| --------------------------- | ------------------- | --------------------------- | ------------------------------------------ |
-| **PLAN-TEMPLATE**           | Define achievements | Significant features (>10h) | `LLM/templates/PLAN-TEMPLATE.md`           |
-| **SUBPLAN-TEMPLATE**        | Define approach     | One achievement strategy    | `LLM/templates/SUBPLAN-TEMPLATE.md`        |
-| **EXECUTION_TASK-TEMPLATE** | Log iterations      | Track execution journey     | `LLM/templates/EXECUTION_TASK-TEMPLATE.md` |
-| **GRAMMAPLAN-TEMPLATE**     | Orchestrate PLANs   | Large initiatives (>80h)    | `LLM/templates/GRAMMAPLAN-TEMPLATE.md`     |
-| **PROMPTS**                 | Standard prompts    | Common workflows            | `LLM/templates/PROMPTS.md` ⭐              |
+| Template                    | Purpose             | Use For                          | Location                                   |
+| --------------------------- | ------------------- | -------------------------------- | ------------------------------------------ |
+| **NORTH_STAR-TEMPLATE**     | Strategic vision    | Vision & principles (>800 lines) | `LLM/templates/NORTH_STAR-TEMPLATE.md`     |
+| **GRAMMAPLAN-TEMPLATE**     | Orchestrate PLANs   | Large initiatives (>80h)         | `LLM/templates/GRAMMAPLAN-TEMPLATE.md`     |
+| **PLAN-TEMPLATE**           | Define achievements | Significant features (>10h)      | `LLM/templates/PLAN-TEMPLATE.md`           |
+| **SUBPLAN-TEMPLATE**        | Define approach     | One achievement strategy         | `LLM/templates/SUBPLAN-TEMPLATE.md`        |
+| **EXECUTION_TASK-TEMPLATE** | Log iterations      | Track execution journey          | `LLM/templates/EXECUTION_TASK-TEMPLATE.md` |
+| **PROMPTS**                 | Standard prompts    | Common workflows                 | `LLM/templates/PROMPTS.md` ⭐              |
 
 **⭐ Start Here**: `PROMPTS.md` has copy-paste prompts for all common tasks!
 
@@ -90,42 +142,182 @@ GRAMMAPLAN → PLAN → SUBPLAN → EXECUTION_TASK
 
 ## 📊 Methodology Structure
 
-### Four-Tier Hierarchy
+### Five-Tier Hierarchy
+
+**Overview**:
+
+```
+⭐ NORTH_STAR → 📋 GRAMMAPLAN → 📄 PLAN → 📝 SUBPLAN → ✅ EXECUTION_TASK
+(Vision)       (Orchestrate)   (What)   (Design)   (Journey)
+```
+
+**The Funnel Metaphor**: NORTH_STAR floats above the funnel, illuminating all work below with strategic principles and vision.
+
+---
+
+**0. NORTH_STAR** (optional - strategic vision):
+
+- Strategic vision and guiding principles
+- "Floats above funnel, illuminating it"
+- 800-2,000 lines
+- May coordinate GrammaPlans/PLANs
+- Living document (evolves with understanding)
+- Example: NORTH_STAR_LLM-DEVELOPMENT-PHILOSOPHY.md
+- Location: `work-space/north-stars/`
 
 1. **GRAMMAPLAN** (optional - for large initiatives):
 
    - Coordinates 6-8 child PLANs
    - > 80 hours OR >800 lines OR 3+ domains
-   - Strategic orchestration (~200-300 lines)
-   - Example: GRAMMAPLAN_LLM-METHODOLOGY-V2.md
+   - Strategic orchestration (600-1,500 lines)
+   - Example: GRAMMAPLAN_GRAPHRAG-PIPELINE-EXCELLENCE.md
+   - Location: `work-space/grammaplans/`
 
 2. **PLAN** (defines WHAT to achieve):
 
    - Lists priority-ordered achievements
    - Self-contained (LLM can execute from PLAN alone)
    - Dynamic (add achievements during work)
+   - 300-900 lines
    - Example: PLAN_ENTITY-RESOLUTION-REFACTOR.md
+   - Location: `work-space/plans/`
 
 3. **SUBPLAN** (defines HOW to achieve):
 
    - Created on-demand for one achievement
    - Specific approach, deliverables, tests
    - Static once created
+   - 200-600 lines
    - Example: SUBPLAN_ENTITY-RESOLUTION-REFACTOR_01.md
+   - Location: `work-space/subplans/`
 
 4. **EXECUTION_TASK** (logs the journey):
    - Dynamic log of all iterations
    - Captures learnings, what worked/didn't
    - Multiple per SUBPLAN possible (different attempts)
+   - <200 lines
    - Example: EXECUTION_TASK_ENTITY-RESOLUTION-REFACTOR_01_01.md
+   - Location: `work-space/plans/<PLAN>/execution/` (nested with PLAN)
+
+### Document Size Table
+
+| Document Type  | Size Range | Purpose               | Location                |
+| -------------- | ---------- | --------------------- | ----------------------- |
+| NORTH_STAR     | 800-2,000  | Strategic vision      | work-space/north-stars/ |
+| GRAMMAPLAN     | 600-1,500  | Coordinate PLANs      | work-space/grammaplans/ |
+| PLAN           | 300-900    | Define achievements   | work-space/plans/       |
+| SUBPLAN        | 200-600    | Define approach       | work-space/subplans/    |
+| EXECUTION_TASK | <200       | Log execution journey | work-space/plans/<PLAN>/execution/ |
+| EXECUTION_ANALYSIS | 200-1,000 | Investigation & analysis | work-space/analyses/ |
+| EXECUTION_CASE-STUDY | 200-1,000 | Pattern documentation | work-space/case-studies/ |
+| EXECUTION_OBSERVATION | 100-500 | Real-time feedback | work-space/observations/ |
+| EXECUTION_DEBUG | 200-1,000 | Issue investigation | work-space/debug-logs/ |
+| EXECUTION_REVIEW | 200-1,000 | Implementation review | work-space/reviews/ |
 
 ### Naming Convention
 
+- NORTH*STAR: `NORTH_STAR*<NAME>.md`
 - GRAMMAPLAN: `GRAMMAPLAN_<FEATURE>.md`
 - PLAN: `PLAN_<FEATURE>.md` or `PLAN_<GRAMMAPLAN>-<DOMAIN>.md` (child)
-- SUBPLAN: `SUBPLAN_<FEATURE>_<NUMBER>.md`
-- EXECUTION*TASK: `EXECUTION_TASK*<FEATURE>_<SUBPLAN>_<EXECUTION>.md`
-- EXECUTION*ANALYSIS: `EXECUTION_ANALYSIS*<TOPIC>.md` (for analyses, not execution tracking)
+- SUBPLAN: `SUBPLAN_<FEATURE>_<NUMBER>.md` (nested: `work-space/plans/<PLAN>/subplans/`)
+- EXECUTION*TASK: `EXECUTION_TASK*<FEATURE>_<SUBPLAN>_<EXECUTION>.md` (nested: `work-space/plans/<PLAN>/execution/`)
+- EXECUTION*ANALYSIS: `EXECUTION_ANALYSIS*<TOPIC>.md` (flat: `work-space/analyses/`)
+- EXECUTION*CASE-STUDY: `EXECUTION_CASE-STUDY_<FEATURE>.md` (flat: `work-space/case-studies/`)
+- EXECUTION*OBSERVATION: `EXECUTION_OBSERVATION_<TOPIC>_<DATE>.md` (flat: `work-space/observations/`)
+- EXECUTION*DEBUG: `EXECUTION_DEBUG_<ISSUE>.md` (flat: `work-space/debug-logs/`)
+- EXECUTION*REVIEW: `EXECUTION_REVIEW_<FEATURE>.md` (flat: `work-space/reviews/`)
+
+---
+
+## 🎯 Execution Work System
+
+The methodology distinguishes two types of execution-level work:
+
+### EXECUTION_TASK (Tier 4 - SUBPLAN-Connected)
+
+**Purpose**: Track the iterative implementation journey of a SUBPLAN achievement, from design to completion.
+
+**Characteristics**:
+- Connected to specific SUBPLAN
+- <200 lines (hard limit)
+- Iteration tracking with test-first workflow
+- Location: `work-space/execution/`
+- Deleted when SUBPLAN archived (not archived separately)
+
+**Example**: Implementing Authentication in SUBPLAN_04 → Create `EXECUTION_TASK_FEATURE_04_01.md` in `work-space/plans/FEATURE/execution/` to log iterations, tests, and learnings.
+
+### EXECUTION_WORK (Standalone Knowledge Work - Outside Hierarchy)
+
+**Purpose**: Capture standalone knowledge creation (analysis, case studies, observations, reviews, debugging) that informs strategy but isn't directly implementing a SUBPLAN.
+
+**Types** (5 categories):
+
+1. **EXECUTION_ANALYSIS**: Structured investigation (5 subcategories: bug-analysis, methodology-review, implementation-review, process-analysis, planning-strategy)
+2. **EXECUTION_CASE-STUDY**: Deep dive with pattern extraction
+3. **EXECUTION_OBSERVATION**: Real-time feedback during work
+4. **EXECUTION_DEBUG**: Complex issue investigation
+5. **EXECUTION_REVIEW**: Post-completion assessment
+
+**Characteristics**:
+- Standalone, not SUBPLAN-connected
+- 200-1000+ lines (variable)
+- Archived by type/topic for future reference
+- Ad-hoc creation as knowledge work emerges
+
+**Locations** (Flat folders by type):
+- EXECUTION_ANALYSIS: `work-space/analyses/`
+- EXECUTION_CASE-STUDY: `work-space/case-studies/`
+- EXECUTION_OBSERVATION: `work-space/observations/`
+- EXECUTION_DEBUG: `work-space/debug-logs/`
+- EXECUTION_REVIEW: `work-space/reviews/`
+
+**Example**: After implementing Authentication, create `EXECUTION_ANALYSIS_AUTHENTICATION-PERFORMANCE-REVIEW.md` in `work-space/analyses/` to analyze performance vs alternatives.
+
+### Decision Framework
+
+**When EXECUTION_TASK?** "I'm implementing Achievement 2.3 from SUBPLAN_XX" → YES, use EXECUTION_TASK
+
+**When EXECUTION_WORK?** "I need to analyze the codebase strategy" OR "I found a pattern worth documenting" → YES, use EXECUTION_WORK
+
+**See**: `LLM/guides/EXECUTION-TAXONOMY.md` for detailed decision tree, 12+ scenario examples, and quick reference card.
+
+---
+
+---
+
+## 🎓 Multi-Agent Workflow Evolution
+
+The methodology now explicitly separates agent roles in the SUBPLAN independent workflow:
+
+**Designer Agent** (SUBPLAN work):
+
+- Analyzes requirements deeply
+- Designs approach and coordination strategy
+- Plans multiple EXECUTIONs (if needed)
+- Coordinates parallel work
+- Synthesizes collective learnings from EXECUTIONs
+
+**Executor Agents** (EXECUTION_TASK work):
+
+- Receive minimal context (SUBPLAN objective + approach only)
+- Execute according to Designer's plan
+- Document journey and learnings
+- May work in parallel on independent tasks
+- Report results for Designer synthesis
+
+**Designer/Executor Separation Benefits**:
+
+- ✅ Each agent can focus on their role deeply
+- ✅ Reduces context pollution (Executor gets 200 lines, not 1,000+)
+- ✅ Enables true parallelization (multiple Executors under one Designer)
+- ✅ Foundation for concurrent multi-agent systems
+- ✅ Clearer accountability and specialization
+
+**Parallel Execution Patterns**:
+
+- **Sequential**: Step 1 → Step 2 → Step 3 (default)
+- **Parallel Independent**: Multiple EXECUTIONs run simultaneously, coordinated by Designer
+- **Parallel Iterative**: Run, learn, improve, repeat (A/B testing, refinement)
 
 ---
 
@@ -185,6 +377,8 @@ LLM/
 │   └── IMPLEMENTATION_MID_PLAN_REVIEW.md
 ├── scripts/             # Automation scripts
 │   ├── archiving/       # Archiving scripts
+│   │   ├── archive_completed.py  # Deferred archiving during execution
+│   │   └── manual_archive.py    # User-controlled on-demand archiving ⭐
 │   ├── generation/      # Prompt generation
 │   └── validation/      # Validation scripts
 ├── examples/            # Example PLANs and workflows
@@ -193,9 +387,16 @@ LLM/
 └── README.md            # Navigation and structure
 ```
 
-**Active Work**: Lives in project root (PLAN*\*.md, SUBPLAN*_.md, EXECUTION\__.md)
+**Active Work**: Lives in `work-space/` directory:
+
+- `work-space/plans/` - PLAN files
+- `work-space/subplans/` - SUBPLAN files
+- `work-space/execution/` - EXECUTION_TASK files
+- See `work-space/README.md` for workspace documentation
 
 **Completed Work**: Lives in `documentation/archive/`
+
+**Archiving**: Use `LLM/scripts/archiving/manual_archive.py` for user-controlled on-demand archiving from workspace.
 
 **🔍 Quick File Discovery**: See `LLM/index/FILE-INDEX.md` for complete catalog of all methodology files
 
@@ -206,12 +407,14 @@ LLM/
 **Purpose**: Organize files by metadata rather than physical directory structure.
 
 **Key Concept**: **Virtual Organization**
+
 - Files stay in root directory (no physical moves needed)
 - Organized by metadata tags (type, status, plan, achievement, priority)
 - Search tool queries by tags (see `PLAN_FILE-MOVING-ADVANCED-OPTIMIZATION.md`)
 - No reference updates when organizing (tags change, not file locations)
 
 **Standard Tags**:
+
 - **type**: PLAN, SUBPLAN, EXECUTION_TASK, EXECUTION_ANALYSIS, GRAMMAPLAN
 - **status**: active, complete, paused, archived, abandoned
 - **plan**: Parent PLAN name (for SUBPLANs and EXECUTION_TASKs)
@@ -221,6 +424,7 @@ LLM/
 - **completed**: Completion date (for completed work)
 
 **Benefits**:
+
 - No file moving needed (eliminates all moving overhead)
 - No reference updates (files don't move)
 - Flexible organization (query by any tag combination)
@@ -240,6 +444,7 @@ LLM/
 | --------------------- | ------------ | ------------------------ |
 | Achievement Structure | ✅ Excellent | 100% adoption            |
 | TDD Adherence         | ✅ Excellent | 0% circular debug        |
+| Test Coverage         | ✅ Excellent | >90% for new code        |
 | Partial Completion    | ✅ Excellent | 100% success rate        |
 | Archive Quality       | ✅ Excellent | All resumable            |
 | Context Management    | 🟡 Improving | Optimization in progress |

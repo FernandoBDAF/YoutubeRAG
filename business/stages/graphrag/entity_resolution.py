@@ -14,6 +14,8 @@ from core.config.graphrag import EntityResolutionConfig
 from business.agents.graphrag.entity_resolution import EntityResolutionAgent
 from core.models.graphrag import ResolvedEntity
 from business.services.graphrag.indexes import get_graphrag_collections
+from business.services.graphrag.transformation_logger import TransformationLogger
+from business.services.graphrag.intermediate_data import IntermediateDataService
 from core.config.paths import COLL_CHUNKS
 from core.libraries.database import batch_insert
 from core.libraries.rate_limiting import RateLimiter
@@ -58,6 +60,21 @@ class EntityResolutionStage(BaseStage):
 
         # Get GraphRAG collections (use write DB for output)
         self.graphrag_collections = get_graphrag_collections(self.db_write)
+
+        # Initialize TransformationLogger for logging entity operations (Achievement 0.1)
+        # Check if logging is enabled via environment variable
+        import os
+
+        logging_enabled = os.getenv("GRAPHRAG_TRANSFORMATION_LOGGING", "true").lower() == "true"
+        self.transformation_logger = TransformationLogger(self.db_write, enabled=logging_enabled)
+
+        # Initialize IntermediateDataService for saving intermediate data (Achievement 0.2)
+        intermediate_data_enabled = os.getenv("GRAPHRAG_SAVE_INTERMEDIATE_DATA", "false").lower() == "true"
+        self.intermediate_data = IntermediateDataService(
+            self.db_write, 
+            enabled=intermediate_data_enabled,
+            ttl_days=int(os.getenv("GRAPHRAG_INTERMEDIATE_DATA_TTL_DAYS", "7"))
+        )
 
         logger.info(
             f"Initialized {self.name} with similarity threshold {self.config.similarity_threshold}"
@@ -112,31 +129,74 @@ class EntityResolutionStage(BaseStage):
         chunk_id = doc.get("chunk_id", "unknown")
         video_id = doc.get("video_id", "unknown")
 
-        logger.debug(
-            f"Processing chunk {chunk_id} from video {video_id} for entity resolution"
-        )
+        logger.debug(f"Processing chunk {chunk_id} from video {video_id} for entity resolution")
 
         try:
             # Extract entity data from the chunk
             extraction_data = doc.get("graphrag_extraction", {}).get("data", {})
 
+            # Get trace_id for linking
+            trace_id = getattr(self.config, "trace_id", None) or "unknown"
+
+            # Achievement 0.2: Save raw entities (before resolution)
+            if extraction_data and "entities" in extraction_data:
+                raw_entities = extraction_data.get("entities", [])
+                self.intermediate_data.save_entities_raw(
+                    entities=raw_entities,
+                    chunk_id=chunk_id,
+                    video_id=video_id,
+                    trace_id=trace_id,
+                    extraction_method="llm"
+                )
+
             if not extraction_data or "entities" not in extraction_data:
                 logger.warning(f"No entity extraction data found in chunk {chunk_id}")
+                # Log skip transformation (Achievement 0.1)
+                trace_id = getattr(self.config, "trace_id", None) or "unknown"
+                self.transformation_logger.log_entity_skip(
+                    entity={"id": chunk_id, "name": f"chunk_{chunk_id}"},
+                    reason="no_extraction_data",
+                    confidence=0.0,
+                    trace_id=trace_id,
+                )
                 return self._mark_resolution_failed(doc, "no_extraction_data")
 
             # Resolve entities for this chunk
-            resolved_entities = self.resolution_agent.resolve_entities(
-                [extraction_data]
-            )
+            resolved_entities = self.resolution_agent.resolve_entities([extraction_data])
 
             if not resolved_entities:
                 logger.warning(f"No entities resolved for chunk {chunk_id}")
+                # Log skip transformation (Achievement 0.1)
+                trace_id = getattr(self.config, "trace_id", None) or "unknown"
+                self.transformation_logger.log_entity_skip(
+                    entity={"id": chunk_id, "name": f"chunk_{chunk_id}"},
+                    reason="no_entities_resolved",
+                    confidence=0.0,
+                    trace_id=trace_id,
+                )
                 return self._mark_resolution_failed(doc, "no_entities_resolved")
 
             # Store resolved entities in the entities collection
             # Returns id_map: {original_id → final_id} for correct mention mapping
-            id_map = self._store_resolved_entities(
-                resolved_entities, chunk_id, video_id
+            id_map = self._store_resolved_entities(resolved_entities, chunk_id, video_id)
+
+            # Achievement 0.2: Save resolved entities (after resolution)
+            resolved_entities_data = []
+            for entity in resolved_entities:
+                resolved_entities_data.append({
+                    "entity_id": id_map.get(entity.original_id, entity.original_id),
+                    "canonical_name": entity.canonical_name,
+                    "type": entity.type.value if hasattr(entity.type, "value") else str(entity.type),
+                    "aliases": entity.aliases,
+                    "confidence": entity.confidence,
+                    "source_count": 1
+                })
+            self.intermediate_data.save_entities_resolved(
+                entities=resolved_entities_data,
+                chunk_id=chunk_id,
+                video_id=video_id,
+                trace_id=trace_id,
+                resolution_method="fuzzy_match"
             )
 
             # Store entity mentions using id_map to ensure correct entity_id
@@ -147,9 +207,7 @@ class EntityResolutionStage(BaseStage):
                 "graphrag_resolution": {
                     "status": "completed",
                     "resolved_entities": len(resolved_entities),
-                    "stored_entities": len(
-                        id_map
-                    ),  # Count of entities stored (id_map keys)
+                    "stored_entities": len(id_map),  # Count of entities stored (id_map keys)
                     "processed_at": time.time(),
                     "model_used": self.config.model_name,
                 }
@@ -168,12 +226,9 @@ class EntityResolutionStage(BaseStage):
                 )
                 if (
                     existing
-                    and existing.get("graphrag_resolution", {}).get("status")
-                    == "completed"
+                    and existing.get("graphrag_resolution", {}).get("status") == "completed"
                 ):
-                    logger.debug(
-                        f"Skipping chunk {chunk_id} - already has completed resolution"
-                    )
+                    logger.debug(f"Skipping chunk {chunk_id} - already has completed resolution")
                     self.stats["skipped"] += 1
                     return None
 
@@ -186,16 +241,13 @@ class EntityResolutionStage(BaseStage):
 
             self.stats["updated"] += 1
             logger.debug(
-                f"Successfully resolved {len(resolved_entities)} entities "
-                f"for chunk {chunk_id}"
+                f"Successfully resolved {len(resolved_entities)} entities " f"for chunk {chunk_id}"
             )
 
             return None
 
         except Exception as e:
-            logger.error(
-                f"Error processing chunk {chunk_id} for entity resolution: {e}"
-            )
+            logger.error(f"Error processing chunk {chunk_id} for entity resolution: {e}")
             return self._mark_resolution_failed(doc, str(e))
 
     def _find_db_candidates(
@@ -319,9 +371,7 @@ class EntityResolutionStage(BaseStage):
             # Score against canonical name using multi-strategy
             candidate_name = candidate.get("canonical_name", "")
             if candidate_name:
-                score = self.resolution_agent._multi_strategy_score(
-                    name, candidate_name
-                )
+                score = self.resolution_agent._multi_strategy_score(name, candidate_name)
                 if score > best_score:
                     best_score = score
                     best_match = candidate
@@ -377,13 +427,22 @@ class EntityResolutionStage(BaseStage):
                 original_id = entity.entity_id
 
                 # First, check if entity already exists by entity_id (existing logic)
-                existing_entity = entities_collection.find_one(
-                    {"entity_id": entity.entity_id}
-                )
+                existing_entity = entities_collection.find_one({"entity_id": entity.entity_id})
 
                 if existing_entity:
                     # Update existing entity using atomic upsert
                     self._upsert_entity(entity, chunk_id, video_id)
+
+                    # Log entity update (same entity_id, no merge) (Achievement 0.1)
+                    trace_id = getattr(self.config, "trace_id", None) or "unknown"
+                    self.transformation_logger.log_entity_create(
+                        entity={"id": original_id, "name": entity.canonical_name},
+                        entity_type=entity.type.value,
+                        sources=existing_entity.get("source_count", 1),
+                        confidence=entity.confidence,
+                        trace_id=trace_id,
+                    )
+
                     id_map[original_id] = original_id  # No change, same ID
                 else:
                     # NEW: Look for candidates across chunks before creating new entity
@@ -393,9 +452,7 @@ class EntityResolutionStage(BaseStage):
                         aliases=entity.aliases,
                     )
 
-                    matched_candidate = self._choose_match(
-                        entity.canonical_name, candidates
-                    )
+                    matched_candidate = self._choose_match(entity.canonical_name, candidates)
 
                     if matched_candidate:
                         # Reuse existing entity from another chunk
@@ -403,22 +460,34 @@ class EntityResolutionStage(BaseStage):
                         existing_canonical = matched_candidate.get("canonical_name", "")
                         existing_aliases = matched_candidate.get("aliases", [])
 
+                        # Calculate similarity score for logging (Achievement 0.1)
+                        similarity_score = self.resolution_agent._multi_strategy_score(
+                            entity.canonical_name, existing_canonical
+                        )
+
                         logger.debug(
                             f"Reusing existing entity {existing_entity_id} for "
                             f"'{entity.canonical_name}' (found via candidate lookup, "
                             f"existing: '{existing_canonical}')"
                         )
 
-                        # Merge aliases: add new entity's name if different from existing
-                        merged_aliases = (
-                            list(existing_aliases) if existing_aliases else []
+                        # Log entity merge transformation (Achievement 0.1)
+                        trace_id = getattr(self.config, "trace_id", None) or "unknown"
+                        self.transformation_logger.log_entity_merge(
+                            entity_a={"id": original_id, "name": entity.canonical_name},
+                            entity_b={"id": existing_entity_id, "name": existing_canonical},
+                            result_entity={"id": existing_entity_id, "name": existing_canonical},
+                            reason="fuzzy_match_above_threshold",
+                            similarity=similarity_score,
+                            confidence=entity.confidence,
+                            trace_id=trace_id,
                         )
 
+                        # Merge aliases: add new entity's name if different from existing
+                        merged_aliases = list(existing_aliases) if existing_aliases else []
+
                         # Add new entity's canonical_name as alias if different
-                        if (
-                            entity.canonical_name
-                            and entity.canonical_name != existing_canonical
-                        ):
+                        if entity.canonical_name and entity.canonical_name != existing_canonical:
                             if entity.canonical_name not in merged_aliases:
                                 merged_aliases.append(entity.canonical_name)
 
@@ -434,9 +503,7 @@ class EntityResolutionStage(BaseStage):
                         # Keep existing canonical_name (more stable, already in DB)
                         # But update description if new one is better (higher confidence)
                         final_canonical = (
-                            existing_canonical
-                            if existing_canonical
-                            else entity.canonical_name
+                            existing_canonical if existing_canonical else entity.canonical_name
                         )
                         final_description = (
                             entity.description
@@ -468,6 +535,17 @@ class EntityResolutionStage(BaseStage):
                     else:
                         # No candidate found, upsert new entity (atomic operation)
                         self._upsert_entity(entity, chunk_id, video_id)
+
+                        # Log entity creation transformation (Achievement 0.1)
+                        trace_id = getattr(self.config, "trace_id", None) or "unknown"
+                        self.transformation_logger.log_entity_create(
+                            entity={"id": original_id, "name": entity.canonical_name},
+                            entity_type=entity.type.value,
+                            sources=1,  # New entity from this chunk
+                            confidence=entity.confidence,
+                            trace_id=trace_id,
+                        )
+
                         id_map[original_id] = original_id  # New entity, no change
 
             except Exception as e:
@@ -519,8 +597,7 @@ class EntityResolutionStage(BaseStage):
             resolved_entity.canonical_name
         )
         aliases_normalized = [
-            self.resolution_agent._normalize_entity_name(alias)
-            for alias in resolved_entity.aliases
+            self.resolution_agent._normalize_entity_name(alias) for alias in resolved_entity.aliases
         ]
 
         # Check if entity exists and if chunk_id is already in source_chunks
@@ -694,9 +771,7 @@ class EntityResolutionStage(BaseStage):
         return None
 
     @handle_errors(fallback=[], log_traceback=True, reraise=False)
-    def process_batch(
-        self, docs: List[Dict[str, Any]]
-    ) -> List[Optional[Dict[str, Any]]]:
+    def process_batch(self, docs: List[Dict[str, Any]]) -> List[Optional[Dict[str, Any]]]:
         """
         Process a batch of documents for entity resolution.
 
@@ -725,9 +800,7 @@ class EntityResolutionStage(BaseStage):
                 results.append(None)
 
         successful_count = sum(1 for r in results if r is not None)
-        logger.info(
-            f"Batch processing completed: {successful_count}/{len(docs)} successful"
-        )
+        logger.info(f"Batch processing completed: {successful_count}/{len(docs)} successful")
 
         return results
 
@@ -744,19 +817,13 @@ class EntityResolutionStage(BaseStage):
         entities_collection = self.graphrag_collections["entities"]
 
         # Count total chunks with extraction
-        total_extracted = collection.count_documents(
-            {"graphrag_extraction.status": "completed"}
-        )
+        total_extracted = collection.count_documents({"graphrag_extraction.status": "completed"})
 
         # Count resolved chunks
-        resolved_chunks = collection.count_documents(
-            {"graphrag_resolution.status": "completed"}
-        )
+        resolved_chunks = collection.count_documents({"graphrag_resolution.status": "completed"})
 
         # Count failed chunks
-        failed_chunks = collection.count_documents(
-            {"graphrag_resolution.status": "failed"}
-        )
+        failed_chunks = collection.count_documents({"graphrag_resolution.status": "failed"})
 
         # Count pending chunks
         pending_chunks = total_extracted - resolved_chunks - failed_chunks
@@ -775,12 +842,8 @@ class EntityResolutionStage(BaseStage):
             "pending_chunks": pending_chunks,
             "total_entities": total_entities,
             "total_mentions": total_mentions,
-            "completion_rate": (
-                resolved_chunks / total_extracted if total_extracted > 0 else 0
-            ),
-            "failure_rate": (
-                failed_chunks / total_extracted if total_extracted > 0 else 0
-            ),
+            "completion_rate": (resolved_chunks / total_extracted if total_extracted > 0 else 0),
+            "failure_rate": (failed_chunks / total_extracted if total_extracted > 0 else 0),
         }
 
     def cleanup_failed_resolutions(self) -> int:

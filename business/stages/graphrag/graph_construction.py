@@ -16,6 +16,8 @@ from core.config.graphrag import GraphConstructionConfig
 from business.agents.graphrag.relationship_resolution import RelationshipResolutionAgent
 from core.models.graphrag import ResolvedRelationship
 from business.services.graphrag.indexes import get_graphrag_collections
+from business.services.graphrag.transformation_logger import TransformationLogger
+from business.services.graphrag.intermediate_data import IntermediateDataService
 from core.config.paths import COLL_CHUNKS
 from core.libraries.database import batch_insert
 from core.libraries.error_handling.decorators import handle_errors
@@ -66,6 +68,20 @@ class GraphConstructionStage(BaseStage):
         # Get GraphRAG collections (use write DB for output)
         self.graphrag_collections = get_graphrag_collections(self.db_write)
 
+        # Initialize TransformationLogger for logging relationship operations (Achievement 0.1)
+        logging_enabled = os.getenv("GRAPHRAG_TRANSFORMATION_LOGGING", "true").lower() == "true"
+        self.transformation_logger = TransformationLogger(self.db_write, enabled=logging_enabled)
+
+        # Initialize IntermediateDataService for saving intermediate data (Achievement 0.2)
+        intermediate_data_enabled = (
+            os.getenv("GRAPHRAG_SAVE_INTERMEDIATE_DATA", "false").lower() == "true"
+        )
+        self.intermediate_data = IntermediateDataService(
+            self.db_write,
+            enabled=intermediate_data_enabled,
+            ttl_days=int(os.getenv("GRAPHRAG_INTERMEDIATE_DATA_TTL_DAYS", "7")),
+        )
+
         # Load ontology for predicate metadata (Achievement 3.1)
         try:
             from core.libraries.ontology.loader import load_ontology
@@ -85,9 +101,7 @@ class GraphConstructionStage(BaseStage):
 
         logger.info(f"Initialized {self.name}")
 
-    def _get_entity_degree(
-        self, entity_id: str, relationship_type: Optional[str] = None
-    ) -> int:
+    def _get_entity_degree(self, entity_id: str, relationship_type: Optional[str] = None) -> int:
         """
         Get the degree (number of relationships) for an entity.
 
@@ -227,17 +241,35 @@ class GraphConstructionStage(BaseStage):
         chunk_id = doc.get("chunk_id", "unknown")
         video_id = doc.get("video_id", "unknown")
 
-        logger.debug(
-            f"Processing chunk {chunk_id} from video {video_id} for graph construction"
-        )
+        logger.debug(f"Processing chunk {chunk_id} from video {video_id} for graph construction")
 
         try:
             # Extract relationship data from the chunk
             extraction_data = doc.get("graphrag_extraction", {}).get("data", {})
 
+            # Get trace_id for linking
+            trace_id = getattr(self.config, "trace_id", None) or "unknown"
+
+            # Achievement 0.2: Save raw relationships (before post-processing)
+            if extraction_data and "relationships" in extraction_data:
+                raw_relationships = extraction_data.get("relationships", [])
+                self.intermediate_data.save_relations_raw(
+                    relationships=raw_relationships,
+                    chunk_id=chunk_id,
+                    video_id=video_id,
+                    trace_id=trace_id,
+                    extraction_method="llm",
+                )
+
             if not extraction_data or "relationships" not in extraction_data:
-                logger.warning(
-                    f"No relationship extraction data found in chunk {chunk_id}"
+                logger.warning(f"No relationship extraction data found in chunk {chunk_id}")
+                # Achievement 0.1: Log relationship skip (no extraction data)
+                trace_id = getattr(self.config, "trace_id", None) or "unknown"
+                self.transformation_logger.log_relationship_filter(
+                    relationship={"source": chunk_id, "target": chunk_id},
+                    reason="no_extraction_data",
+                    confidence=0.0,
+                    trace_id=trace_id,
                 )
                 return self._mark_construction_failed(doc, "no_extraction_data")
 
@@ -251,6 +283,14 @@ class GraphConstructionStage(BaseStage):
 
             if not resolved_relationships:
                 logger.warning(f"No relationships resolved for chunk {chunk_id}")
+                # Achievement 0.1: Log relationship filter (no relationships resolved)
+                trace_id = getattr(self.config, "trace_id", None) or "unknown"
+                self.transformation_logger.log_relationship_filter(
+                    relationship={"source": chunk_id, "target": chunk_id},
+                    reason="no_relationships_resolved",
+                    confidence=0.0,
+                    trace_id=trace_id,
+                )
                 return self._mark_construction_failed(doc, "no_relationships_resolved")
 
             # Get existing entity IDs for validation
@@ -268,6 +308,30 @@ class GraphConstructionStage(BaseStage):
             # Store relationships in the relations collection
             stored_relationships = self._store_resolved_relationships(
                 validated_relationships, chunk_id, video_id
+            )
+
+            # Achievement 0.2: Save final relationships (after post-processing)
+            final_relationships_data = []
+            for rel_id in stored_relationships:
+                # Get the stored relationship from database
+                rel_doc = self.graphrag_collections["relations"].find_one({"_id": rel_id})
+                if rel_doc:
+                    final_relationships_data.append(
+                        {
+                            "source_entity_id": rel_doc.get("subject_id", ""),
+                            "target_entity_id": rel_doc.get("object_id", ""),
+                            "relation_type": rel_doc.get("relationship_type", ""),
+                            "weight": rel_doc.get("weight", 1.0),
+                            "confidence": rel_doc.get("confidence", 0.0),
+                            "co_occurrences": rel_doc.get("co_occurrences", 1),
+                        }
+                    )
+            self.intermediate_data.save_relations_final(
+                relationships=final_relationships_data,
+                chunk_id=chunk_id,
+                video_id=video_id,
+                trace_id=trace_id,
+                processing_method="post_processing",
             )
 
             # Prepare construction payload
@@ -294,12 +358,9 @@ class GraphConstructionStage(BaseStage):
                 )
                 if (
                     existing
-                    and existing.get("graphrag_construction", {}).get("status")
-                    == "completed"
+                    and existing.get("graphrag_construction", {}).get("status") == "completed"
                 ):
-                    logger.debug(
-                        f"Skipping chunk {chunk_id} - already has completed construction"
-                    )
+                    logger.debug(f"Skipping chunk {chunk_id} - already has completed construction")
                     self.stats["skipped"] += 1
                     return True  # Skipped is considered success (already processed)
 
@@ -319,9 +380,7 @@ class GraphConstructionStage(BaseStage):
             return True  # Success (Achievement 0.3)
 
         except Exception as e:
-            logger.error(
-                f"Error processing chunk {chunk_id} for graph construction: {e}"
-            )
+            logger.error(f"Error processing chunk {chunk_id} for graph construction: {e}")
             return self._mark_construction_failed(doc, str(e))
 
     def _get_existing_entity_ids(self) -> Set[str]:
@@ -414,9 +473,7 @@ class GraphConstructionStage(BaseStage):
                 stored_relationship_ids.append(relationship.relationship_id)
 
             except Exception as e:
-                logger.error(
-                    f"Failed to store relationship {relationship.relationship_id}: {e}"
-                )
+                logger.error(f"Failed to store relationship {relationship.relationship_id}: {e}")
                 continue
 
         return stored_relationship_ids
@@ -455,9 +512,7 @@ class GraphConstructionStage(BaseStage):
             update_data["$inc"] = {"source_count": 1}
 
         # Update confidence if new relationship has higher confidence
-        if resolved_relationship.confidence > existing_relationship.get(
-            "confidence", 0
-        ):
+        if resolved_relationship.confidence > existing_relationship.get("confidence", 0):
             update_data["$set"]["confidence"] = resolved_relationship.confidence
 
         # Update description if new relationship has more comprehensive description
@@ -468,6 +523,16 @@ class GraphConstructionStage(BaseStage):
 
         relations_collection.update_one(
             {"relationship_id": resolved_relationship.relationship_id}, update_data
+        )
+
+        # Achievement 0.1: Log relationship augmentation (existing relationship updated)
+        self.transformation_logger.log_relationship_augment(
+            subject_id=resolved_relationship.subject_id,
+            object_id=resolved_relationship.object_id,
+            predicate=resolved_relationship.predicate,
+            method="source_augmentation",
+            confidence=resolved_relationship.confidence,
+            trace_id=self.config.trace_id if hasattr(self.config, "trace_id") else None,
         )
 
     def _insert_new_relationship(
@@ -505,6 +570,16 @@ class GraphConstructionStage(BaseStage):
         }
 
         relations_collection.insert_one(relationship_doc)
+
+        # Achievement 0.1: Log relationship creation
+        self.transformation_logger.log_relationship_create(
+            subject_id=resolved_relationship.subject_id,
+            object_id=resolved_relationship.object_id,
+            predicate=resolved_relationship.predicate,
+            confidence=resolved_relationship.confidence,
+            relationship_type="extracted",
+            trace_id=self.config.trace_id if hasattr(self.config, "trace_id") else None,
+        )
 
     def _add_co_occurrence_relationships(self) -> int:
         """
@@ -617,6 +692,17 @@ class GraphConstructionStage(BaseStage):
                     f"Co-occurrence batch insert: {result['inserted']}/{result['total']} successful, "
                     f"{result['failed']} failed"
                 )
+
+                # Achievement 0.1: Log relationship augmentation for co-occurrence
+                for rel_doc in relationships_to_insert[: result["inserted"]]:
+                    self.transformation_logger.log_relationship_augment(
+                        subject_id=rel_doc["subject_id"],
+                        object_id=rel_doc["object_id"],
+                        predicate=rel_doc["predicate"],
+                        method="co_occurrence",
+                        confidence=rel_doc["confidence"],
+                        trace_id=self.config.trace_id if hasattr(self.config, "trace_id") else None,
+                    )
             except DuplicateKeyError:
                 # Expected on reruns (idempotency) - unique index on relationship_id prevents duplicates
                 logger.debug(
@@ -646,9 +732,7 @@ class GraphConstructionStage(BaseStage):
 
         return added_count
 
-    def _add_semantic_similarity_relationships(
-        self, similarity_threshold: float = 0.85
-    ) -> int:
+    def _add_semantic_similarity_relationships(self, similarity_threshold: float = 0.85) -> int:
         """
         Add semantic similarity relationships between entities based on embeddings.
 
@@ -664,9 +748,7 @@ class GraphConstructionStage(BaseStage):
         relations_collection = self.graphrag_collections["relations"]
 
         # Step 1: Get all entities without embeddings and generate them
-        entities_to_embed = list(
-            entities_collection.find({"entity_embedding": {"$exists": False}})
-        )
+        entities_to_embed = list(entities_collection.find({"entity_embedding": {"$exists": False}}))
 
         if entities_to_embed:
             logger.info(f"Generating embeddings for {len(entities_to_embed)} entities")
@@ -684,9 +766,7 @@ class GraphConstructionStage(BaseStage):
                     embedding_array = np.array(embedding)
                     embedding_norm = np.linalg.norm(embedding_array)
                     if embedding_norm > 0:
-                        embedding_normalized = (
-                            embedding_array / embedding_norm
-                        ).tolist()
+                        embedding_normalized = (embedding_array / embedding_norm).tolist()
                     else:
                         embedding_normalized = embedding
 
@@ -709,9 +789,7 @@ class GraphConstructionStage(BaseStage):
             entities_collection.find({"entity_embedding": {"$exists": True}})
         )
 
-        logger.info(
-            f"Calculating similarity for {len(entities_with_embeddings)} entities"
-        )
+        logger.info(f"Calculating similarity for {len(entities_with_embeddings)} entities")
 
         # Get edge cap from environment (Achievement 2.3)
         max_sim_per_entity = int(os.getenv("GRAPHRAG_MAX_SIM_PER_ENTITY", "200"))
@@ -753,9 +831,7 @@ class GraphConstructionStage(BaseStage):
                 similarity = np.dot(emb1, emb2)
             else:
                 # Not normalized: use standard cosine formula (backward compatibility)
-                similarity = np.dot(emb1, emb2) / (
-                    np.linalg.norm(emb1) * np.linalg.norm(emb2)
-                )
+                similarity = np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2))
 
             if similarity >= similarity_threshold:
                 # Create similarity relationship
@@ -807,6 +883,18 @@ class GraphConstructionStage(BaseStage):
                     f"Semantic similarity batch insert: {result['inserted']}/{result['total']} successful, "
                     f"{result['failed']} failed"
                 )
+
+                # Achievement 0.1: Log relationship augmentation for semantic similarity
+                for rel_doc in relationships_to_insert[: result["inserted"]]:
+                    self.transformation_logger.log_relationship_augment(
+                        subject_id=rel_doc["subject_id"],
+                        object_id=rel_doc["object_id"],
+                        predicate=rel_doc["predicate"],
+                        method="semantic_similarity",
+                        confidence=rel_doc["confidence"],
+                        similarity=rel_doc.get("similarity_score"),
+                        trace_id=self.config.trace_id if hasattr(self.config, "trace_id") else None,
+                    )
             except DuplicateKeyError:
                 # Expected on reruns (idempotency) - unique index on relationship_id prevents duplicates
                 logger.debug(
@@ -947,20 +1035,14 @@ class GraphConstructionStage(BaseStage):
                                 continue
 
                             # Get entity types to determine relationship type first
-                            entity1 = entities_collection.find_one(
-                                {"entity_id": entity1_id}
-                            )
-                            entity2 = entities_collection.find_one(
-                                {"entity_id": entity2_id}
-                            )
+                            entity1 = entities_collection.find_one({"entity_id": entity1_id})
+                            entity2 = entities_collection.find_one({"entity_id": entity2_id})
 
                             if not entity1 or not entity2:
                                 continue
 
                             # Create cross-chunk relationship based on entity types
-                            predicate = self._determine_cross_chunk_predicate(
-                                entity1, entity2
-                            )
+                            predicate = self._determine_cross_chunk_predicate(entity1, entity2)
 
                             if not predicate:
                                 continue
@@ -978,10 +1060,8 @@ class GraphConstructionStage(BaseStage):
                                 skipped_count += 1
                                 continue
 
-                            relationship_id = (
-                                ResolvedRelationship.generate_relationship_id(
-                                    entity1_id, entity2_id, predicate
-                                )
+                            relationship_id = ResolvedRelationship.generate_relationship_id(
+                                entity1_id, entity2_id, predicate
                             )
 
                             # Calculate chunk distance for confidence adjustment
@@ -1041,9 +1121,7 @@ class GraphConstructionStage(BaseStage):
                 )
             except DuplicateKeyError:
                 # Expected on reruns (idempotency) - unique index on relationship_id prevents duplicates
-                logger.debug(
-                    "Duplicate key error in cross-chunk batch insert (expected on reruns)"
-                )
+                logger.debug("Duplicate key error in cross-chunk batch insert (expected on reruns)")
                 # Count successful inserts by checking which ones exist
                 for rel_doc in relationships_to_insert:
                     existing = relations_collection.find_one(
@@ -1055,9 +1133,7 @@ class GraphConstructionStage(BaseStage):
                     f"Cross-chunk batch insert: {added_count}/{len(relationships_to_insert)} relationships already exist (idempotent)"
                 )
 
-        window_mode = (
-            "adaptive" if use_adaptive_window else f"override={chunk_window_override}"
-        )
+        window_mode = "adaptive" if use_adaptive_window else f"override={chunk_window_override}"
         logger.info(
             f"Cross-chunk post-processing complete: "
             f"added {added_count} relationships, skipped {skipped_count} existing "
@@ -1070,9 +1146,7 @@ class GraphConstructionStage(BaseStage):
 
         return added_count
 
-    def _determine_cross_chunk_predicate(
-        self, entity1: Dict, entity2: Dict
-    ) -> Optional[str]:
+    def _determine_cross_chunk_predicate(self, entity1: Dict, entity2: Dict) -> Optional[str]:
         """
         Determine appropriate predicate for cross-chunk relationship based on entity types.
 
@@ -1169,9 +1243,7 @@ class GraphConstructionStage(BaseStage):
                         )
                     },
                     "$addToSet": {
-                        "source_chunks": {
-                            "$each": relationship.get("source_chunks", [])
-                        }
+                        "source_chunks": {"$each": relationship.get("source_chunks", [])}
                     },
                 }
 
@@ -1215,9 +1287,7 @@ class GraphConstructionStage(BaseStage):
         # Batch insert all reverse relationships
         added_count = 0
         if relationships_to_insert:
-            logger.info(
-                f"Inserting {len(relationships_to_insert)} reverse relationships in batch"
-            )
+            logger.info(f"Inserting {len(relationships_to_insert)} reverse relationships in batch")
             try:
                 result = batch_insert(
                     collection=relations_collection,
@@ -1341,12 +1411,8 @@ class GraphConstructionStage(BaseStage):
 
         # Initialize link prediction agent
         link_predictor = GraphLinkPredictionAgent(
-            confidence_threshold=float(
-                os.getenv("GRAPHRAG_LINK_PREDICTION_THRESHOLD", "0.65")
-            ),
-            max_predictions_per_entity=int(
-                os.getenv("GRAPHRAG_MAX_PREDICTIONS_PER_ENTITY", "5")
-            ),
+            confidence_threshold=float(os.getenv("GRAPHRAG_LINK_PREDICTION_THRESHOLD", "0.65")),
+            max_predictions_per_entity=int(os.getenv("GRAPHRAG_MAX_PREDICTIONS_PER_ENTITY", "5")),
             use_structural_features=True,
         )
 
@@ -1442,18 +1508,14 @@ class GraphConstructionStage(BaseStage):
                     f"Link prediction batch insert: {added_count}/{len(relationships_to_insert)} relationships already exist (idempotent)"
                 )
 
-        logger.info(
-            f"Link prediction post-processing complete: added {added_count} relationships"
-        )
+        logger.info(f"Link prediction post-processing complete: added {added_count} relationships")
 
         # Update metrics (Achievement 3.3)
         self.post_processing_stats["predicted"]["added"] += added_count
 
         return added_count
 
-    def _mark_construction_failed(
-        self, doc: Dict[str, Any], error_message: str
-    ) -> bool:
+    def _mark_construction_failed(self, doc: Dict[str, Any], error_message: str) -> bool:
         """
         Mark construction as failed for a document.
 
@@ -1484,16 +1546,12 @@ class GraphConstructionStage(BaseStage):
         )
 
         self.stats["failed"] += 1
-        logger.warning(
-            f"Marked chunk {chunk_id} construction as failed: {error_message}"
-        )
+        logger.warning(f"Marked chunk {chunk_id} construction as failed: {error_message}")
 
         return False  # Failure (Achievement 0.3)
 
     @handle_errors(fallback=[], log_traceback=True, reraise=False)
-    def process_batch(
-        self, docs: List[Dict[str, Any]]
-    ) -> List[Optional[Dict[str, Any]]]:
+    def process_batch(self, docs: List[Dict[str, Any]]) -> List[Optional[Dict[str, Any]]]:
         """
         Process a batch of documents for graph construction.
 
@@ -1522,9 +1580,7 @@ class GraphConstructionStage(BaseStage):
                 results.append(None)
 
         successful_count = sum(1 for r in results if r is True)
-        logger.info(
-            f"Batch processing completed: {successful_count}/{len(docs)} successful"
-        )
+        logger.info(f"Batch processing completed: {successful_count}/{len(docs)} successful")
 
         return results
 
@@ -1546,29 +1602,21 @@ class GraphConstructionStage(BaseStage):
         entity_degrees = {}
 
         # Count outgoing relationships
-        outgoing_pipeline = [
-            {"$group": {"_id": "$subject_id", "outgoing_count": {"$sum": 1}}}
-        ]
+        outgoing_pipeline = [{"$group": {"_id": "$subject_id", "outgoing_count": {"$sum": 1}}}]
         outgoing_results = list(relations_collection.aggregate(outgoing_pipeline))
 
         # Count incoming relationships
-        incoming_pipeline = [
-            {"$group": {"_id": "$object_id", "incoming_count": {"$sum": 1}}}
-        ]
+        incoming_pipeline = [{"$group": {"_id": "$object_id", "incoming_count": {"$sum": 1}}}]
         incoming_results = list(relations_collection.aggregate(incoming_pipeline))
 
         # Combine degrees
         for result in outgoing_results:
             entity_id = result["_id"]
-            entity_degrees[entity_id] = (
-                entity_degrees.get(entity_id, 0) + result["outgoing_count"]
-            )
+            entity_degrees[entity_id] = entity_degrees.get(entity_id, 0) + result["outgoing_count"]
 
         for result in incoming_results:
             entity_id = result["_id"]
-            entity_degrees[entity_id] = (
-                entity_degrees.get(entity_id, 0) + result["incoming_count"]
-            )
+            entity_degrees[entity_id] = entity_degrees.get(entity_id, 0) + result["incoming_count"]
 
         # Calculate centrality scores
         if entity_degrees:
@@ -1613,9 +1661,7 @@ class GraphConstructionStage(BaseStage):
         relations_collection = self.graphrag_collections["relations"]
 
         # Count total chunks with resolution
-        total_resolved = collection.count_documents(
-            {"graphrag_resolution.status": "completed"}
-        )
+        total_resolved = collection.count_documents({"graphrag_resolution.status": "completed"})
 
         # Count constructed chunks
         constructed_chunks = collection.count_documents(
@@ -1623,9 +1669,7 @@ class GraphConstructionStage(BaseStage):
         )
 
         # Count failed chunks
-        failed_chunks = collection.count_documents(
-            {"graphrag_construction.status": "failed"}
-        )
+        failed_chunks = collection.count_documents({"graphrag_construction.status": "failed"})
 
         # Count pending chunks
         pending_chunks = total_resolved - constructed_chunks - failed_chunks
@@ -1639,9 +1683,7 @@ class GraphConstructionStage(BaseStage):
             "failed_chunks": failed_chunks,
             "pending_chunks": pending_chunks,
             "total_relationships": total_relationships,
-            "completion_rate": (
-                constructed_chunks / total_resolved if total_resolved > 0 else 0
-            ),
+            "completion_rate": (constructed_chunks / total_resolved if total_resolved > 0 else 0),
             "failure_rate": failed_chunks / total_resolved if total_resolved > 0 else 0,
         }
 
@@ -1704,8 +1746,7 @@ class GraphConstructionStage(BaseStage):
             total_added += count
             current_density = self._calculate_current_graph_density()
             logger.info(
-                f"✓ Added {count} co-occurrence relationships "
-                f"(density: {current_density:.4f})"
+                f"✓ Added {count} co-occurrence relationships " f"(density: {current_density:.4f})"
             )
         except Exception as e:
             logger.error(f"✗ Failed to add co-occurrence relationships: {e}")
@@ -1718,9 +1759,7 @@ class GraphConstructionStage(BaseStage):
                 f"Skipping remaining post-processing to prevent over-connection."
             )
             logger.info("=" * 80)
-            logger.info(
-                f"Graph post-processing stopped early: added {total_added} relationships"
-            )
+            logger.info(f"Graph post-processing stopped early: added {total_added} relationships")
             logger.info("=" * 80)
             super().finalize()
             return
@@ -1728,9 +1767,7 @@ class GraphConstructionStage(BaseStage):
         # 2. Semantic similarity relationships
         logger.info("[2/5] Adding semantic similarity relationships...")
         try:
-            similarity_threshold = float(
-                os.getenv("GRAPHRAG_SIMILARITY_THRESHOLD", "0.92")
-            )
+            similarity_threshold = float(os.getenv("GRAPHRAG_SIMILARITY_THRESHOLD", "0.92"))
             count = self._add_semantic_similarity_relationships(similarity_threshold)
             total_added += count
             current_density = self._calculate_current_graph_density()
@@ -1749,9 +1786,7 @@ class GraphConstructionStage(BaseStage):
                 f"Skipping remaining post-processing to prevent over-connection."
             )
             logger.info("=" * 80)
-            logger.info(
-                f"Graph post-processing stopped early: added {total_added} relationships"
-            )
+            logger.info(f"Graph post-processing stopped early: added {total_added} relationships")
             logger.info("=" * 80)
             super().finalize()
             return
@@ -1763,8 +1798,7 @@ class GraphConstructionStage(BaseStage):
             total_added += count
             current_density = self._calculate_current_graph_density()
             logger.info(
-                f"✓ Added {count} cross-chunk relationships "
-                f"(density: {current_density:.4f})"
+                f"✓ Added {count} cross-chunk relationships " f"(density: {current_density:.4f})"
             )
         except Exception as e:
             logger.error(f"✗ Failed to add cross-chunk relationships: {e}")
@@ -1777,9 +1811,7 @@ class GraphConstructionStage(BaseStage):
                 f"Skipping bidirectional and link prediction."
             )
             logger.info("=" * 80)
-            logger.info(
-                f"Graph post-processing stopped early: added {total_added} relationships"
-            )
+            logger.info(f"Graph post-processing stopped early: added {total_added} relationships")
             logger.info("=" * 80)
             super().finalize()
             return
@@ -1791,8 +1823,7 @@ class GraphConstructionStage(BaseStage):
             total_added += count
             current_density = self._calculate_current_graph_density()
             logger.info(
-                f"✓ Added {count} bidirectional relationships "
-                f"(density: {current_density:.4f})"
+                f"✓ Added {count} bidirectional relationships " f"(density: {current_density:.4f})"
             )
         except Exception as e:
             logger.error(f"✗ Failed to add bidirectional relationships: {e}")
@@ -1805,9 +1836,7 @@ class GraphConstructionStage(BaseStage):
                 f"Skipping link prediction."
             )
             logger.info("=" * 80)
-            logger.info(
-                f"Graph post-processing complete: added {total_added} relationships"
-            )
+            logger.info(f"Graph post-processing complete: added {total_added} relationships")
             logger.info("=" * 80)
             # Log comprehensive metrics (Achievement 3.3)
             self._log_comprehensive_metrics()
@@ -1822,20 +1851,15 @@ class GraphConstructionStage(BaseStage):
                 total_added += count
                 current_density = self._calculate_current_graph_density()
                 logger.info(
-                    f"✓ Added {count} predicted relationships "
-                    f"(density: {current_density:.4f})"
+                    f"✓ Added {count} predicted relationships " f"(density: {current_density:.4f})"
                 )
             except Exception as e:
                 logger.error(f"✗ Failed to add predicted relationships: {e}")
         else:
-            logger.info(
-                "[5/5] Link prediction disabled (GRAPHRAG_ENABLE_LINK_PREDICTION=false)"
-            )
+            logger.info("[5/5] Link prediction disabled (GRAPHRAG_ENABLE_LINK_PREDICTION=false)")
 
         logger.info("=" * 80)
-        logger.info(
-            f"Graph post-processing complete: added {total_added} total relationships"
-        )
+        logger.info(f"Graph post-processing complete: added {total_added} total relationships")
         logger.info("=" * 80)
 
         # Log comprehensive metrics (Achievement 3.3)

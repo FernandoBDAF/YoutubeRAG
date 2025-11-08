@@ -28,6 +28,18 @@ GrammaPlan (orchestration level)
 4. **Ascend Pattern**: All child PLANs work toward GrammaPlan goal (dominant context)
 5. **Descend Pattern**: Actual work happens in child PLANs (distributed execution)
 
+**Size**: 600-1,500 lines (strategic coordination needs space)
+
+**Location**: `work-space/grammaplans/GRAMMAPLAN_[NAME].md`
+
+**Size Guidelines**:
+
+- **600-999 lines**: Typical GrammaPlan (coordinates 3-5 PLANs)
+- **1,000-1,499 lines**: Large GrammaPlan (coordinates 6-8 PLANs) - **Warning**: Consider splitting or simplifying
+- **1,500+ lines**: **Error** - Must split into multiple GrammaPlans or convert to NORTH_STAR
+
+**Validation**: Use `LLM/scripts/validation/check_grammaplan_size.py` to validate size
+
 ---
 
 ## 🤔 When to Use GrammaPlan
@@ -38,12 +50,12 @@ Use GrammaPlan when **ANY** of these **HARD LIMITS** apply, OR **TWO OR MORE** o
 
 **HARD LIMITS** (GrammaPlan REQUIRED if exceeded):
 
-1. **Size**: PLAN would exceed **600 lines** ⚠️ **MANDATORY**
-2. **Duration**: Estimated effort > **32 hours** ⚠️ **MANDATORY**
+1. **Size**: PLAN would exceed **900 lines** ⚠️ **MANDATORY**
+2. **Duration**: Estimated effort > **40 hours** ⚠️ **MANDATORY**
 
 **Other Indicators** (GrammaPlan recommended if 2+ apply):
 
-3. **Domains**: Work spans 3+ distinct domains/areas
+3. **Domains**: Work spans 4+ distinct domains/areas
 4. **Achievements**: > 20 achievements in single PLAN
 5. **Parallelism**: Natural opportunities for parallel work
 6. **Context**: Medium-context model deployment
@@ -53,9 +65,9 @@ Use GrammaPlan when **ANY** of these **HARD LIMITS** apply, OR **TWO OR MORE** o
 
 **Strong GrammaPlan Indicators**:
 
-- PLAN draft is 600+ lines ⚠️ **MANDATORY**
-- Estimated effort > 32 hours ⚠️ **MANDATORY**
-- PLAN draft is 800+ lines (strongly recommended)
+- PLAN draft is 900+ lines ⚠️ **MANDATORY**
+- Estimated effort > 40 hours ⚠️ **MANDATORY**
+- PLAN draft is 1,000+ lines (strongly recommended)
 - Work naturally divides into 3+ independent areas
 - Team wants to work in parallel
 - High risk of context loss
@@ -321,9 +333,9 @@ PLAN_<GRAMMAPLAN-NAME>-<IDENTIFIER>.md
 
 | Aspect           | Single PLAN       | GrammaPlan                         |
 | ---------------- | ----------------- | ---------------------------------- |
-| **Size**         | < 600 lines       | 600+ lines (split across children) |
-| **Effort**       | < 32 hours        | 32+ hours                          |
-| **Domains**      | 1-2               | 3+                                 |
+| **Size**         | < 900 lines       | 900+ lines (split across children) |
+| **Effort**       | < 40 hours        | 40+ hours                          |
+| **Domains**      | 1-3               | 4+                                 |
 | **Parallelism**  | Sequential        | Parallel opportunities             |
 | **Context**      | Single context    | Distributed context                |
 | **Coordination** | Internal          | Cross-PLAN                         |
@@ -360,9 +372,9 @@ Create a GrammaPlan for LLM-METHODOLOGY-V2 following @LLM/guides/GRAMMAPLAN-GUID
 
 1. **Identify Need**:
 
-   - PLAN draft exceeds **600 lines** ⚠️ **MANDATORY** OR
-   - Estimated effort > **32 hours** ⚠️ **MANDATORY** OR
-   - Work spans 3+ domains OR
+   - PLAN draft exceeds **900 lines** ⚠️ **MANDATORY** OR
+   - Estimated effort > **40 hours** ⚠️ **MANDATORY** OR
+   - Work spans 4+ domains OR
    - Natural parallelism exists
 
 2. **Analyze Natural Divisions**:
@@ -589,9 +601,9 @@ GRAMMAPLAN_GRAPHRAG-PIPELINE.md
 
 **Use When**:
 
-- > **600 lines** in single PLAN ⚠️ **MANDATORY**
-- > **32 hours** estimated ⚠️ **MANDATORY**
-- 3+ domains (recommended)
+- > **900 lines** in single PLAN ⚠️ **MANDATORY**
+- > **40 hours** estimated ⚠️ **MANDATORY**
+- 4+ domains (recommended)
 - Natural parallelism (recommended)
 
 **Key Benefits**:

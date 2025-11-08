@@ -1,185 +1,133 @@
-# Workspace Directory
+# Work-Space Directory: Active LLM Development Files
 
-**Purpose**: Dedicated location for all generated methodology files to prevent root directory pollution  
-**Created**: 2025-01-27  
-**Status**: Active
-
----
-
-## 🎯 What This Is
-
-The `work-space/` directory is a dedicated folder for all active methodology files (PLANs, SUBPLANs, EXECUTION_TASKs). Instead of creating these files in the project root, they are organized here to keep the root directory clean and focused on project code.
-
-**Key Benefits**:
-- **Clean Root**: Project root stays uncluttered with methodology files
-- **Better Organization**: All active work in one dedicated location
-- **Easy Discovery**: Know exactly where to find active PLANs, SUBPLANs, EXECUTION_TASKs
-- **Separation of Concerns**: Methodology files separate from project code
+**Purpose**: Central workspace for active LLM methodology documents  
+**Status**: Active Development Hub  
+**Last Updated**: November 9, 2025
 
 ---
 
-## 📁 Directory Structure
+## 📁 Folder Structure
 
-```
-work-space/
-├── plans/          # PLAN files (PLAN_*.md)
-├── subplans/       # SUBPLAN files (SUBPLAN_*.md)
-├── execution/      # EXECUTION_TASK files (EXECUTION_TASK_*.md)
-└── README.md       # This file
-```
+### `north-stars/` ⭐
+**Purpose**: Strategic vision documents that illuminate and guide all work  
+**Size**: 800-2,000 lines per document  
+**Examples**: NORTH_STAR_LLM-METHODOLOGY.md, NORTH_STAR_MULTI-AGENT-COORDINATION.md
 
-### Directory Purposes
+These documents exist "above the funnel," providing strategic principles and long-term vision that guide all tactical work below. They rarely change and serve as reference points for GrammaPlans and PLANs.
 
-**plans/**:
-- Contains all PLAN files
-- Example: `PLAN_FILE-MOVING-WORKSPACE-AND-MANUAL-ARCHIVE.md`
-- One PLAN per feature/initiative
+### `grammaplans/` 📋
+**Purpose**: Strategic coordination documents that orchestrate multiple PLANs  
+**Size**: 600-1,500 lines per document  
+**Examples**: GRAMMAPLAN_GRAPHRAG-PIPELINE-EXCELLENCE.md, GRAMMAPLAN_EXECUTION-WORK-SYSTEM-ENHANCEMENT.md
 
-**subplans/**:
-- Contains all SUBPLAN files
-- Example: `SUBPLAN_FILE-MOVING-WORKSPACE-AND-MANUAL-ARCHIVE_01.md`
-- One SUBPLAN per achievement
+GrammaPlans coordinate 4-6 related child PLANs under a strategic umbrella. They track completion of child PLANs and identify dependencies.
 
-**execution/**:
-- Contains all EXECUTION_TASK files
-- Example: `EXECUTION_TASK_FILE-MOVING-WORKSPACE-AND-MANUAL-ARCHIVE_01_01.md`
-- One EXECUTION_TASK per execution attempt
+### `plans/` 📄
+**Purpose**: Tactical execution documents defining achievements for a specific feature or domain  
+**Size**: 300-900 lines per document  
+**Examples**: PLAN_METHODOLOGY-HIERARCHY-EVOLUTION.md, PLAN_GRAPHRAG-VALIDATION.md
 
----
+PLANs break down work into priority-ordered achievements. With the v2.0 workflow, PLANs provide context for SUBPLAN creation only (not execution), enabling efficient context separation.
 
-## 📖 Usage Instructions
+### `subplans/` 📝
+**Purpose**: Design and execution coordination documents  
+**Size**: 200-600 lines per document  
+**Naming**: `SUBPLAN_<FEATURE>_<NUMBER>.md`
 
-### Creating Files in Workspace
+SUBPLANs define the approach for one achievement and coordinate execution. They support:
+- Single or multiple EXECUTIONs
+- Parallel execution of independent work
+- Synthesis of collective learnings from multiple EXECUTIONs
 
-**When creating a new PLAN**:
-- Create file in `work-space/plans/`
-- Example: `work-space/plans/PLAN_NEW-FEATURE.md`
+### `execution/` ✅
+**Purpose**: Execution journey documents logging work attempts  
+**Size**: <200 lines per document  
+**Naming**: `EXECUTION_TASK_<FEATURE>_<SUBPLAN>_<EXECUTION>.md`
 
-**When creating a new SUBPLAN**:
-- Create file in `work-space/subplans/`
-- Example: `work-space/subplans/SUBPLAN_NEW-FEATURE_01.md`
-
-**When creating a new EXECUTION_TASK**:
-- Create file in `work-space/execution/`
-- Example: `work-space/execution/EXECUTION_TASK_NEW-FEATURE_01_01.md`
-
-### Referencing Files
-
-**From templates and protocols**:
-- Reference files using workspace paths: `work-space/plans/PLAN_*.md`
-- Update file paths in documentation to reflect workspace location
-
-**From command line**:
-```bash
-# List all PLANs
-ls -1 work-space/plans/
-
-# List all SUBPLANs
-ls -1 work-space/subplans/
-
-# List all EXECUTION_TASKs
-ls -1 work-space/execution/
-```
-
-### File Discovery
-
-**Quick discovery**:
-- All active PLANs: `work-space/plans/`
-- All active SUBPLANs: `work-space/subplans/`
-- All active EXECUTION_TASKs: `work-space/execution/`
-
-**Search**:
-```bash
-# Find PLAN by name
-find work-space/plans/ -name "*FEATURE*"
-
-# Find all files for a feature
-find work-space/ -name "*FEATURE*"
-```
+EXECUTIONs log the journey of executing according to the SUBPLAN design. Multiple EXECUTIONs can exist for:
+- Different approaches (A/B testing)
+- Sequential refinement (iteration)
+- Parallel independent work
 
 ---
 
-## 🔄 Migration Notes
+## 🔄 Workflow: From PLAN to Execution
 
-### Current State
+### Phase 1: Design (Designer)
+1. Create SUBPLAN (200-600 lines)
+2. Design approach thoroughly
+3. Plan execution strategy (single or multiple?)
+4. Plan parallelization if applicable
 
-**Existing files in root**:
-- Many PLANs, SUBPLANs, and EXECUTION_TASKs currently exist in project root
-- These files will remain in root until manually migrated (if desired)
+### Phase 2: Execution Planning (Designer)
+1. Create EXECUTION_TASK file(s)
+2. Mark executability in SUBPLAN
 
-### Migration Strategy (Optional)
+### Phase 3: Execution (Executor)
+1. Read SUBPLAN objective + approach only
+2. Execute according to plan
+3. May run in parallel with other Executors
+4. Document journey and learnings
 
-**If you want to migrate existing files**:
-
-1. **Identify files to migrate**:
-   ```bash
-   # Find all PLANs in root
-   ls -1 PLAN_*.md
-   
-   # Find all SUBPLANs in root
-   ls -1 SUBPLAN_*.md
-   
-   # Find all EXECUTION_TASKs in root
-   ls -1 EXECUTION_TASK_*.md
-   ```
-
-2. **Move files**:
-   ```bash
-   # Move PLANs
-   mv PLAN_*.md work-space/plans/
-   
-   # Move SUBPLANs
-   mv SUBPLAN_*.md work-space/subplans/
-   
-   # Move EXECUTION_TASKs
-   mv EXECUTION_TASK_*.md work-space/execution/
-   ```
-
-3. **Update references**:
-   - Update ACTIVE_PLANS.md with new paths
-   - Update any scripts that reference these files
-   - Update documentation references
-
-**Note**: Migration is optional. You can keep existing files in root and only use workspace for new files.
-
-### Future Files
-
-**All new files**:
-- New PLANs, SUBPLANs, and EXECUTION_TASKs should be created in workspace
-- Templates and protocols will be updated to use workspace paths
-- This ensures root stays clean going forward
+### Phase 4: Synthesis (Designer)
+1. Review results from all EXECUTIONs
+2. Synthesize collective learnings
+3. Recommend best approach
+4. Mark SUBPLAN complete
 
 ---
 
-## 🔗 Related Documentation
+## 📊 Statistics
 
-- **Methodology**: `LLM-METHODOLOGY.md` - Overall methodology reference
-- **Templates**: `LLM/templates/` - File templates (will reference workspace)
-- **Protocols**: `LLM/protocols/` - Entry/exit protocols (will reference workspace)
-- **Archive**: `documentation/archive/` - Completed work archives
-
----
-
-## 📊 Workspace Statistics
-
-**Current Files** (as of creation):
-- PLANs: 0 (will populate as new PLANs are created)
-- SUBPLANs: 0 (will populate as new SUBPLANs are created)
-- EXECUTION_TASKs: 0 (will populate as new EXECUTION_TASKs are created)
-
-**Note**: Statistics will be updated as files are created in workspace.
+| Document Type | Active | Total Archived | Size Range |
+|---------------|--------|----------------|-----------|
+| NORTH_STARs | 3 | - | 800-2,000 lines |
+| GrammaPlans | 6 | - | 600-1,500 lines |
+| PLANs | 17+ | - | 300-900 lines |
+| SUBPLANs | 30+ | - | 200-600 lines |
+| EXECUTION_TASKs | 31+ | - | <200 lines |
 
 ---
 
-## 🚀 Next Steps
+## 🚀 Getting Started
 
-1. **Templates Updated**: Templates will be updated to create files in workspace (Achievement 1.1)
-2. **Protocols Updated**: Protocols will be updated to reference workspace (Achievement 1.2)
-3. **Manual Archive**: Archive script will work with workspace files (Achievement 0.2)
+### For New Work
+1. Check `ACTIVE_PLANS.md` for related plans
+2. Find or create a PLAN (300-900 lines)
+3. For an achievement, create a SUBPLAN (200-600 lines)
+4. Execute via EXECUTION_TASK(s) (<200 lines each)
+
+### For Strategic Work
+1. Check if NORTH_STAR exists for your domain
+2. If not, create one (800-2,000 lines) for strategic vision
+3. Reference from related GrammaPlans or PLANs
+
+### For Large Coordination
+1. Identify 4-6 related PLANs
+2. Create GrammaPlan (600-1,500 lines) to coordinate
+3. Track child PLAN completion
 
 ---
 
-**Version**: 1.0  
-**Status**: Active  
-**Last Updated**: 2025-01-27
+## 📚 Documentation
 
+- **`LLM-METHODOLOGY.md`** - Complete methodology reference
+- **`LLM/guides/NORTH-STAR-GUIDE.md`** - NORTH_STAR creation guide
+- **`LLM/guides/GRAMMAPLAN-GUIDE.md`** - GrammaPlan creation guide
+- **`LLM/guides/SUBPLAN-WORKFLOW-GUIDE.md`** - 4-phase workflow guide
+- **`METHODOLOGY-EVOLUTION-v2.0.md`** - What changed and why
+
+---
+
+## 🔗 Archive
+
+Completed and paused work is archived in:  
+`documentation/archive/`
+
+Archive structure mirrors work-space:
+- `documentation/archive/<FEATURE>/subplans/`
+- `documentation/archive/<FEATURE>/execution/`
+
+---
+
+**This workspace represents the current state of all active LLM development work. Use the guides and templates in `LLM/` for comprehensive documentation.**

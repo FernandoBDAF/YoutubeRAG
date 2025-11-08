@@ -15,6 +15,7 @@ from business.agents.graphrag.community_detection import CommunityDetectionAgent
 from business.agents.graphrag.community_summarization import CommunitySummarizationAgent
 from core.models.graphrag import ResolvedEntity, ResolvedRelationship, CommunitySummary
 from business.services.graphrag.indexes import get_graphrag_collections
+from business.services.graphrag.transformation_logger import TransformationLogger
 from business.services.graphrag.run_metadata import (
     compute_params_hash,
     compute_graph_signature,
@@ -73,6 +74,10 @@ class CommunityDetectionStage(BaseStage):
 
         # Get GraphRAG collections (use write DB for output)
         self.graphrag_collections = get_graphrag_collections(self.db_write)
+
+        # Initialize TransformationLogger for logging community operations (Achievement 0.1)
+        logging_enabled = os.getenv("GRAPHRAG_TRANSFORMATION_LOGGING", "true").lower() == "true"
+        self.transformation_logger = TransformationLogger(self.db_write, enabled=logging_enabled)
 
         # Flag and lock to ensure community detection runs only once across all chunks
         # Critical for concurrent processing with 300 workers
@@ -135,9 +140,7 @@ class CommunityDetectionStage(BaseStage):
         chunk_id = doc.get("chunk_id", "unknown")
         video_id = doc.get("video_id", "unknown")
 
-        logger.debug(
-            f"Processing chunk {chunk_id} from video {video_id} for community detection"
-        )
+        logger.debug(f"Processing chunk {chunk_id} from video {video_id} for community detection")
 
         try:
             # Community detection should run ONCE for the entire graph, not per-chunk
@@ -211,6 +214,10 @@ class CommunityDetectionStage(BaseStage):
 
                 # Create new run document
                 ontology_version = self._get_ontology_version()
+                # Get trace_id from config if available (Achievement 0.1: Trace ID System Integration)
+                trace_id = (
+                    getattr(self.config, "trace_id", None) if hasattr(self, "config") else None
+                )
                 run_id = create_run_document(
                     self.db_write,
                     "community_detection",
@@ -218,15 +225,14 @@ class CommunityDetectionStage(BaseStage):
                     graph_signature,
                     params,
                     ontology_version,
+                    trace_id=trace_id,
                 )
                 logger.info(
                     f"📝 Created new run: run_id={run_id}, params_hash={params_hash[:8]}..."
                 )
 
                 # Detect communities
-                detection_results = self.detection_agent.detect_communities(
-                    entities, relationships
-                )
+                detection_results = self.detection_agent.detect_communities(entities, relationships)
 
                 if not detection_results.get("communities"):
                     logger.warning("No communities detected after organization")
@@ -238,9 +244,7 @@ class CommunityDetectionStage(BaseStage):
                 )
 
                 # Generate community summaries (concurrent if enabled)
-                use_concurrent = (
-                    os.getenv("GRAPHRAG_USE_TPM_TRACKING", "true").lower() == "true"
-                )
+                use_concurrent = os.getenv("GRAPHRAG_USE_TPM_TRACKING", "true").lower() == "true"
                 community_summaries = self.summarization_agent.summarize_communities(
                     detection_results["communities"],
                     entities,
@@ -296,17 +300,13 @@ class CommunityDetectionStage(BaseStage):
 
                 # Batch update ALL chunks at once (much faster than one-by-one updates)
                 # This includes the current triggering chunk, so no need for individual update
-                logger.info(
-                    "📝 Batch updating all chunks with community detection status..."
-                )
+                logger.info("📝 Batch updating all chunks with community detection status...")
                 self._batch_update_all_chunks(
                     detection_results, len(stored_communities), run_id, params_hash
                 )
 
                 # Done! All chunks updated in batch, return immediately
-                logger.info(
-                    "✅ All chunks updated. Community detection stage complete!"
-                )
+                logger.info("✅ All chunks updated. Community detection stage complete!")
                 return None
 
             # This code should never be reached (batch update handles everything)
@@ -336,12 +336,9 @@ class CommunityDetectionStage(BaseStage):
                 )
                 if (
                     existing
-                    and existing.get("graphrag_communities", {}).get("status")
-                    == "completed"
+                    and existing.get("graphrag_communities", {}).get("status") == "completed"
                 ):
-                    logger.debug(
-                        f"Skipping chunk {chunk_id} - already has completed detection"
-                    )
+                    logger.debug(f"Skipping chunk {chunk_id} - already has completed detection")
                     self.stats["skipped"] += 1
                     return None
 
@@ -361,9 +358,7 @@ class CommunityDetectionStage(BaseStage):
             return None
 
         except Exception as e:
-            logger.error(
-                f"Error processing chunk {chunk_id} for community detection: {e}"
-            )
+            logger.error(f"Error processing chunk {chunk_id} for community detection: {e}")
             return self._mark_detection_failed(doc, str(e))
 
     def _collect_detection_params(self) -> Dict[str, Any]:
@@ -504,9 +499,7 @@ class CommunityDetectionStage(BaseStage):
         for community_id, summary in community_summaries.items():
             try:
                 # Check if community already exists
-                existing_community = communities_collection.find_one(
-                    {"community_id": community_id}
-                )
+                existing_community = communities_collection.find_one({"community_id": community_id})
 
                 if existing_community:
                     # Update existing community
@@ -520,9 +513,7 @@ class CommunityDetectionStage(BaseStage):
                     )
                 else:
                     # Insert new community
-                    self._insert_new_community(
-                        summary, chunk_id, video_id, run_id, params_hash
-                    )
+                    self._insert_new_community(summary, chunk_id, video_id, run_id, params_hash)
 
                 stored_community_ids.append(community_id)
 
@@ -566,9 +557,7 @@ class CommunityDetectionStage(BaseStage):
         if params_hash:
             update_data["$set"]["params_hash"] = params_hash
 
-        communities_collection.update_one(
-            {"community_id": summary.community_id}, update_data
-        )
+        communities_collection.update_one({"community_id": summary.community_id}, update_data)
 
     def _insert_new_community(
         self,
@@ -608,9 +597,19 @@ class CommunityDetectionStage(BaseStage):
 
         communities_collection.insert_one(community_doc)
 
-    def _update_entity_communities(
-        self, community_summaries: Dict[str, CommunitySummary]
-    ) -> None:
+        # Achievement 0.1: Log community formation
+        trace_id = self.config.trace_id if hasattr(self.config, "trace_id") else None
+        self.transformation_logger.log_community_form(
+            community_id=summary.community_id,
+            entities=[{"id": eid, "name": ""} for eid in summary.entities],
+            modularity=summary.coherence_score,
+            coherence=summary.coherence_score,
+            algorithm=self.config.algorithm,
+            resolution_parameter=self.config.resolution_parameter,
+            trace_id=trace_id,
+        )
+
+    def _update_entity_communities(self, community_summaries: Dict[str, CommunitySummary]) -> None:
         """
         Update entities with their community assignments.
 
@@ -624,12 +623,21 @@ class CommunityDetectionStage(BaseStage):
             entities_collection.update_many(
                 {"entity_id": {"$in": summary.entities}},
                 {
-                    "$addToSet": {
-                        f"community_assignments.level_{summary.level}": community_id
-                    },
+                    "$addToSet": {f"community_assignments.level_{summary.level}": community_id},
                     "$set": {"community_updated_at": time.time()},
                 },
             )
+
+            # Achievement 0.1: Log entity cluster assignments
+            trace_id = self.config.trace_id if hasattr(self.config, "trace_id") else None
+            for entity_id in summary.entities:
+                self.transformation_logger.log_entity_cluster(
+                    entity={"id": entity_id, "name": ""},
+                    community_id=community_id,
+                    reason="algorithm_assignment",
+                    neighbors=len(summary.entities) - 1,
+                    trace_id=trace_id,
+                )
 
     def _mark_detection_failed(self, doc: Dict[str, Any], error_message: str) -> None:
         """
@@ -668,9 +676,7 @@ class CommunityDetectionStage(BaseStage):
         return None
 
     @handle_errors(fallback=[], log_traceback=True, reraise=False)
-    def process_batch(
-        self, docs: List[Dict[str, Any]]
-    ) -> List[Optional[Dict[str, Any]]]:
+    def process_batch(self, docs: List[Dict[str, Any]]) -> List[Optional[Dict[str, Any]]]:
         """
         Process a batch of documents for community detection.
 
@@ -699,9 +705,7 @@ class CommunityDetectionStage(BaseStage):
                 results.append(None)
 
         successful_count = sum(1 for r in results if r is not None)
-        logger.info(
-            f"Batch processing completed: {successful_count}/{len(docs)} successful"
-        )
+        logger.info(f"Batch processing completed: {successful_count}/{len(docs)} successful")
 
         return results
 
@@ -788,14 +792,10 @@ class CommunityDetectionStage(BaseStage):
         )
 
         # Count detected chunks
-        detected_chunks = collection.count_documents(
-            {"graphrag_communities.status": "completed"}
-        )
+        detected_chunks = collection.count_documents({"graphrag_communities.status": "completed"})
 
         # Count failed chunks
-        failed_chunks = collection.count_documents(
-            {"graphrag_communities.status": "failed"}
-        )
+        failed_chunks = collection.count_documents({"graphrag_communities.status": "failed"})
 
         # Count pending chunks
         pending_chunks = total_constructed - detected_chunks - failed_chunks
@@ -806,9 +806,7 @@ class CommunityDetectionStage(BaseStage):
         # Count communities by level
         level_pipeline = [{"$group": {"_id": "$level", "count": {"$sum": 1}}}]
         level_results = list(communities_collection.aggregate(level_pipeline))
-        level_distribution = {
-            str(result["_id"]): result["count"] for result in level_results
-        }
+        level_distribution = {str(result["_id"]): result["count"] for result in level_results}
 
         return {
             "total_constructed_chunks": total_constructed,
@@ -820,9 +818,7 @@ class CommunityDetectionStage(BaseStage):
             "completion_rate": (
                 detected_chunks / total_constructed if total_constructed > 0 else 0
             ),
-            "failure_rate": (
-                failed_chunks / total_constructed if total_constructed > 0 else 0
-            ),
+            "failure_rate": (failed_chunks / total_constructed if total_constructed > 0 else 0),
         }
 
     def cleanup_failed_detections(self) -> int:
@@ -869,12 +865,9 @@ class CommunityDetectionStage(BaseStage):
 
             # Calculate size distribution histogram
             size_distribution = {}
-            for level, level_communities in detection_results.get(
-                "communities", {}
-            ).items():
+            for level, level_communities in detection_results.get("communities", {}).items():
                 sizes = [
-                    comm_data.get("entity_count", 0)
-                    for comm_data in level_communities.values()
+                    comm_data.get("entity_count", 0) for comm_data in level_communities.values()
                 ]
                 if sizes:
                     size_distribution[level] = {
@@ -950,9 +943,7 @@ class CommunityDetectionStage(BaseStage):
         for size in sizes:
             for i in range(len(bins) - 1):
                 if bins[i] <= size < bins[i + 1]:
-                    bin_label = (
-                        f"{bins[i]}-{bins[i+1] if bins[i+1] != float('inf') else 'inf'}"
-                    )
+                    bin_label = f"{bins[i]}-{bins[i+1] if bins[i+1] != float('inf') else 'inf'}"
                     histogram[bin_label] = histogram.get(bin_label, 0) + 1
                     break
 

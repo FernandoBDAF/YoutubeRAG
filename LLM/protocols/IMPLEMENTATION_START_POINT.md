@@ -2,7 +2,7 @@
 
 **Purpose**: Entry point for all new work using structured LLM development methodology  
 **Status**: Foundation Document - Permanent Reference  
-**Last Updated**: November 7, 2025 (GrammaPlan support added)
+**Last Updated**: November 9, 2025 (Designer/Executor phase separation added)
 
 ---
 
@@ -84,12 +84,15 @@ EXECUTION_TASK (logs execution - the journey)
   - Orchestrates multiple child PLANs
   - See "When to Use GrammaPlan" section below
 - **PLAN**: `PLAN_<FEATURE>.md` (e.g., `PLAN_OPTIMIZE-EXTRACTION.md`)
+  - **Location**: `work-space/plans/PLAN_<FEATURE>.md`
   - Child PLANs under GrammaPlan: `PLAN_<GRAMMAPLAN-NAME>-<DOMAIN>.md`
-  - Example: `PLAN_CODE-QUALITY-GRAPHRAG.md` (child of GRAMMAPLAN_CODE-QUALITY)
+  - Example: `work-space/plans/PLAN_CODE-QUALITY-GRAPHRAG.md` (child of GRAMMAPLAN_CODE-QUALITY)
 - **SUBPLAN**: `SUBPLAN_<FEATURE>_<NUMBER>.md` (e.g., `SUBPLAN_OPTIMIZE-EXTRACTION_01.md`)
+  - **Location**: `work-space/subplans/SUBPLAN_<FEATURE>_<NUMBER>.md`
 - **EXECUTION_TASK**: `EXECUTION_TASK_<FEATURE>_<SUBPLAN>_<EXECUTION>.md`
-  - Example: `EXECUTION_TASK_OPTIMIZE-EXTRACTION_01_01.md` (first execution of subplan 01)
-  - Example: `EXECUTION_TASK_OPTIMIZE-EXTRACTION_01_02.md` (second execution - new strategy)
+  - **Location**: `work-space/execution/EXECUTION_TASK_<FEATURE>_<SUBPLAN>_<EXECUTION>.md`
+  - Example: `work-space/execution/EXECUTION_TASK_OPTIMIZE-EXTRACTION_01_01.md` (first execution of subplan 01)
+  - Example: `work-space/execution/EXECUTION_TASK_OPTIMIZE-EXTRACTION_01_02.md` (second execution - new strategy)
 - **EXECUTION_ANALYSIS**: `EXECUTION_ANALYSIS_<TOPIC>.md` (for analysis work that isn't execution tracking)
   - Example: `EXECUTION_ANALYSIS_METHODOLOGY-REVIEW.md` (performance review/post-mortem)
   - Example: `EXECUTION_ANALYSIS_ENTITY-RESOLUTION-BUGS.md` (critical analysis)
@@ -351,7 +354,7 @@ Facing complex decision or issue?
 
 **Why**: Archive folder must exist before work starts so completed SUBPLANs and EXECUTION_TASKs can be immediately archived.
 
-**Result**: Clean root directory, completed work immediately moved to archive.
+**Result**: Clean root directory, active work in workspace (`work-space/`), completed work archived to `documentation/archive/`.
 
 ---
 

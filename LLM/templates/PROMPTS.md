@@ -3,7 +3,8 @@
 **Purpose**: Standard, reusable prompts for common methodology workflows  
 **Status**: Foundation Document  
 **Created**: 2025-11-07  
-**Version**: 1.0
+**Last Updated**: 2025-11-09 (Designer/Executor phase separation added)  
+**Version**: 1.1
 
 ---
 
@@ -62,7 +63,7 @@ GrammaPlan Decision:
 → Decision: [Single PLAN / GrammaPlan]
 
 If Single PLAN:
-- Create PLAN_[FEATURE_NAME].md using @LLM/templates/PLAN-TEMPLATE.md
+- Create work-space/plans/PLAN_[FEATURE_NAME].md using @LLM/templates/PLAN-TEMPLATE.md
 - Follow all template sections
 - List priority-ordered achievements (WHAT, not HOW)
 - Include GrammaPlan Consideration section with rationale
@@ -82,14 +83,14 @@ After Creation:
 VALIDATION ENFORCEMENT:
 
 After PLAN creation, these scripts will run:
-✓ check_plan_size.py (validates 600 lines / 32 hours limit)
+✓ check_plan_size.py (validates 900 lines / 40 hours limit)
 ✓ validate_plan_compliance.py (checks template compliance)
 
 If issues found: BLOCKS with error + fix prompt
 
 DO NOT:
 ❌ Skip template sections ("it's simple" - NO)
-❌ Exceed size limits (must convert to GrammaPlan if >600 lines)
+❌ Exceed size limits (must convert to GrammaPlan if >900 lines)
 ❌ Create PLAN without following template
 ```
 
@@ -116,7 +117,7 @@ GrammaPlan Decision:
 - Spans 3+ domains? No (single domain: validation)
 → Decision: Single PLAN
 
-Create PLAN_GRAPHRAG-VALIDATION.md using @LLM/templates/PLAN-TEMPLATE.md
+Create work-space/plans/PLAN_GRAPHRAG-VALIDATION.md using @LLM/templates/PLAN-TEMPLATE.md
 [... LLM proceeds to create the PLAN ...]
 ```
 
@@ -950,6 +951,309 @@ Add Mid-Plan Review summary to PLAN "Current Status & Handoff"
 
 ---
 
+### 10. Create NORTH_STAR (New)
+
+**When to Use**:
+
+- Creating strategic vision document for methodology, learning frameworks, or cross-domain principles
+- Document spans 800-2,000 lines of strategic guidance
+- Need to illuminate/coordinate multiple GrammaPlans or PLANs
+
+**Template**:
+
+```
+Create a new NORTH_STAR for [TOPIC] following @LLM/guides/NORTH-STAR-GUIDE.md
+
+Context:
+- Topic: [STRATEGIC TOPIC - e.g., METHODOLOGY-EVOLUTION, MULTI-AGENT-COORDINATION]
+- Strategic Vision: [2-3 sentences of strategic intent]
+- Scope: [What domains/areas does this illuminate?]
+
+Deliverables:
+- Location: work-space/north-stars/NORTH_STAR_[TOPIC].md
+- Use: @LLM/templates/NORTH_STAR-TEMPLATE.md
+- Size: 800-2,000 lines (strategic vision expected to be comprehensive)
+
+Key Sections (from template):
+- Strategic Vision (2-4 paragraphs explaining long-term direction)
+- Core Principles (5-7 guiding principles)
+- Coordination (which PLANs/GrammaPlans does this illuminate?)
+- Current State (where are we now?)
+- Evolution History (how have we gotten here?)
+
+After Creation:
+- Verify size 800-2,000 lines (informational warning if <800, must split if >2,000)
+- Update @ACTIVE_PLANS.md if tracking methodology work
+- Reference from related GrammaPlans or PLANs
+
+═══════════════════════════════════════════════════════════════════════
+
+VALIDATION ENFORCEMENT:
+
+After NORTH_STAR creation, these scripts will run:
+✓ check_north_star_size.py (validates 800-2,000 line limits)
+
+If issues found: BLOCKS with error + fix prompt
+
+DO NOT:
+❌ Create NORTH_STAR for tactical work (use PLAN instead)
+❌ Exceed 2,000 lines (must split into multiple NORTH_STARs)
+❌ Make NORTH_STAR too vague (must be specific principles/vision)
+```
+
+**Placeholders to Replace**:
+
+- `[TOPIC]`: Strategic topic in kebab-case (e.g., `LLM-METHODOLOGY`, `MULTI-AGENT-LEARNING`)
+- `[2-3 sentences...]`: Clear strategic intent
+
+**Example**:
+
+```
+Create a new NORTH_STAR for MULTI-AGENT-COORDINATION following @LLM/guides/NORTH-STAR-GUIDE.md
+
+Context:
+- Topic: MULTI-AGENT-COORDINATION
+- Strategic Vision: Enable parallel concurrent execution of multiple LLM agents with coordination, learning, and shared context
+- Scope: Agent design patterns, execution coordination, learning synthesis, context management
+
+[... LLM proceeds to create NORTH_STAR ...]
+```
+
+---
+
+### 11. Create SUBPLAN (Designer Phase) (New)
+
+**When to Use**:
+
+- You have selected an achievement from a PLAN
+- You're ready to design the approach (Designer phase)
+- You need to plan execution strategy (single or multiple EXECUTIONs)
+
+**Template**:
+
+```
+Create SUBPLAN for @PLAN_[FEATURE_NAME].md Achievement [X.Y] following @LLM/protocols/CREATE_SUBPLAN.md
+
+Achievement Context:
+- Achievement: [X.Y: Title]
+- Mother PLAN: PLAN_[FEATURE_NAME].md
+- Strategic Goal: [One sentence from PLAN achievement]
+
+Design Phase (READ ONLY these from PLAN):
+- Read PLAN achievement section [X.Y] (50-100 lines)
+- Read any achievement prerequisites
+- Understand required deliverables
+- **Do NOT read full PLAN** (Designer focuses on one achievement)
+
+Designer Responsibilities:
+1. Create SUBPLAN_[FEATURE]_[NEXT_NUMBER].md in work-space/subplans/
+2. Design approach (strategy, key steps, HOW to do it)
+3. Decide execution strategy:
+   - Single EXECUTION? (linear work)
+   - Multiple EXECUTIONs? (parallel or sequential)
+4. If multiple: plan each EXECUTION's purpose and coordination
+5. Specify exact deliverables and success criteria
+6. Document in SUBPLAN following @LLM/templates/SUBPLAN-TEMPLATE.md
+
+Location: work-space/subplans/SUBPLAN_[FEATURE]_[NUMBER].md
+Size: 200-600 lines
+Template: @LLM/templates/SUBPLAN-TEMPLATE.md
+Guide: @LLM/guides/SUBPLAN-WORKFLOW-GUIDE.md
+
+Key Sections:
+- Objective: What we're achieving
+- Deliverables: Exact files/functions to create/modify
+- Approach: Strategy and key steps (how, not what)
+- Execution Strategy: Single or Multiple EXECUTIONs?
+- Planned Executions (if multiple): Purpose, parallelization, coordination
+- Expected Results: Observable outcomes, success criteria
+
+After SUBPLAN Complete:
+- Size validation will run automatically
+- Next step: Create EXECUTION_TASK(s) for Phase 2 (Execution Planning)
+
+═══════════════════════════════════════════════════════════════════════
+
+DO NOT:
+❌ Execute while designing (design first, execute later)
+❌ Make SUBPLAN too prescriptive (Executor needs some autonomy)
+❌ Skip execution strategy decision
+❌ Forget to specify deliverables
+```
+
+**Placeholders to Replace**:
+
+- `[FEATURE_NAME]`: Feature name from PLAN
+- `[X.Y]`: Achievement number (e.g., 2.1)
+- `[NEXT_NUMBER]`: Sequential number for this SUBPLAN (01, 02, etc.)
+
+**Example**:
+
+```
+Create SUBPLAN for @PLAN_GRAPHRAG-VALIDATION.md Achievement 1.1 following @LLM/protocols/CREATE_SUBPLAN.md
+
+Achievement Context:
+- Achievement: 1.1: End-to-End Pipeline Validation
+- Mother PLAN: PLAN_GRAPHRAG-VALIDATION.md
+- Strategic Goal: Validate GraphRAG pipeline with production data
+
+[... LLM creates SUBPLAN_GRAPHRAG-VALIDATION_01.md ...]
+```
+
+---
+
+### 12. Create EXECUTION from SUBPLAN (Executor Phase) (New)
+
+**When to Use**:
+
+- Designer has completed SUBPLAN (Phase 1)
+- You're ready to execute the SUBPLAN (Executor phase)
+- You need to create EXECUTION_TASK and start work
+
+**Template**:
+
+```
+Create and start EXECUTION_TASK for @SUBPLAN_[FEATURE]_[NUMBER].md following @LLM/protocols/CREATE_EXECUTION.md
+
+SUBPLAN Context (READ ONLY):
+- Read SUBPLAN objective (1-2 sentences) ← That's all you need
+- Read SUBPLAN approach summary (3-5 sentences) ← Designer's plan
+- **Do NOT read full SUBPLAN** (Designer already decided approach)
+- If parallel: Read parallelization context section
+
+Executor Responsibilities:
+1. Create EXECUTION_TASK_[FEATURE]_[SUBPLAN]_[EXEC].md in work-space/execution/
+2. Set up header with SUBPLAN/PLAN references
+3. Add SUBPLAN context section (minimal reading!)
+4. Create tests (if code work) and run initially (should fail)
+5. Iterate: make changes → run tests → document
+6. After every iteration: update EXECUTION_TASK with learnings
+7. Check for circular debugging every 3 iterations
+8. When complete: mark EXECUTION_TASK complete and update SUBPLAN
+
+Location: work-space/execution/EXECUTION_TASK_[FEATURE]_[SUBPLAN]_[EXEC].md
+Size: <200 lines
+Template: @LLM/templates/EXECUTION_TASK-TEMPLATE.md
+Guide: @LLM/protocols/CREATE_EXECUTION.md
+
+Key Sections:
+- Header: SUBPLAN/PLAN references, execution number
+- SUBPLAN Context: Read objective + approach only!
+- Test Creation Phase (if applicable)
+- Iteration Log: Updated after EVERY iteration
+- Circular Debug Check: Every 3 iterations
+- Learning Summary: Captured learnings
+
+During Execution:
+- Follow Designer's plan (that's what SUBPLAN is for)
+- Test-driven development (write tests first)
+- Document every iteration
+- Capture learnings in code comments
+- If circular debugging: abandon EXECUTION, create new one
+
+═══════════════════════════════════════════════════════════════════════
+
+DO NOT:
+❌ Read full SUBPLAN (it's too much context, Designer already decided)
+❌ Skip test creation (tests define what success means)
+❌ Skip iteration documentation (every iteration matters)
+❌ Modify tests to make them pass (fix implementation instead)
+❌ Continue past circular debugging (change strategy, create new EXECUTION)
+```
+
+**Placeholders to Replace**:
+
+- `[FEATURE]`: Feature name from PLAN
+- `[SUBPLAN]`: SUBPLAN number (01, 02, etc.)
+- `[EXEC]`: Execution number (01, 02, etc.)
+
+**Example**:
+
+```
+Create and start EXECUTION_TASK for @SUBPLAN_GRAPHRAG-VALIDATION_01.md following @LLM/protocols/CREATE_EXECUTION.md
+
+SUBPLAN Context:
+- Objective: Validate GraphRAG query pipeline end-to-end
+- Approach: Test with production-scale data, capture metrics, verify correctness
+
+[... LLM creates EXECUTION_TASK_GRAPHRAG-VALIDATION_01_01.md and begins execution ...]
+```
+
+---
+
+### 13. Synthesize SUBPLAN Results (New)
+
+**When to Use**:
+
+- Multiple EXECUTION_TASKs (parallel or sequential) have completed
+- Designer phase: need to synthesize collective learnings
+- SUBPLAN needs synthesis section populated
+- Ready to mark SUBPLAN complete
+
+**Template**:
+
+```
+Synthesize results from completed EXECUTION_TASKs for @SUBPLAN_[FEATURE]_[NUMBER].md
+
+SUBPLAN Context:
+- Read full SUBPLAN including all EXECUTION results
+- Review each completed EXECUTION_TASK:
+  - EXECUTION_TASK_[FEATURE]_[NUMBER]_01.md
+  - EXECUTION_TASK_[FEATURE]_[NUMBER]_02.md
+  - [etc.]
+
+Synthesis Responsibilities:
+1. Review all EXECUTION_TASK learnings and results
+2. In SUBPLAN "Execution Results Synthesis" section:
+   a) Compare results (if parallel executions)
+   b) Evaluate success of each execution
+   c) Document collective learnings
+   d) Recommend best approach (if A/B testing)
+   e) Identify patterns across executions
+   f) Extract insights for future work
+
+3. If multiple EXECUTIONs:
+   - Create comparison table or analysis
+   - Evaluate which approach was most effective
+   - Document why (what made it better?)
+   - Recommend for production/future work
+
+4. Update SUBPLAN:
+   - Mark "Execution Results Synthesis" section complete
+   - Mark SUBPLAN status as "Complete"
+   - Archive entire SUBPLAN + all EXECUTION_TASKs
+
+Follow: @LLM/protocols/IMPLEMENTATION_END_POINT.md for archival
+
+═══════════════════════════════════════════════════════════════════════
+
+DO NOT:
+❌ Mark SUBPLAN complete until ALL EXECUTIONs complete
+❌ Skip synthesis section
+❌ Leave execution results undocumented
+❌ Fail to recommend best approach (if applicable)
+```
+
+**Placeholders to Replace**:
+
+- `[FEATURE]`: Feature name from PLAN
+- `[NUMBER]`: SUBPLAN number
+- List all EXECUTION_TASK files by number
+
+**Example**:
+
+```
+Synthesize results from completed EXECUTION_TASKs for @SUBPLAN_GRAPHRAG-VALIDATION_01.md
+
+EXECUTIONs to synthesize:
+- EXECUTION_TASK_GRAPHRAG-VALIDATION_01_01.md ✅ Complete
+- EXECUTION_TASK_GRAPHRAG-VALIDATION_01_02.md ✅ Complete
+
+[... LLM synthesizes learnings and completes SUBPLAN ...]
+```
+
+---
+
 ## 🔄 Maintenance
 
 ### When to Update Prompts
@@ -963,10 +1267,11 @@ Add Mid-Plan Review summary to PLAN "Current Status & Handoff"
 
 ### Prompt Versioning
 
-**Current Version**: 1.0 (November 2025)
+**Current Version**: 1.1 (November 2025)
 
 **Version History**:
 
+- 1.1 (2025-11-09): Added Designer/Executor phase separation prompts (NORTH_STAR, Create SUBPLAN, Create EXECUTION, Synthesize)
 - 1.0 (2025-11-07): Initial prompt library created
 
 **To Update**:

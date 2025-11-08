@@ -3,10 +3,13 @@
 Check PLAN Size Limits - Blocking Validation Script
 
 Enforces PLAN size limits:
-- Warning at 400 lines: "Consider GrammaPlan"
-- Error at 600 lines: "MUST convert to GrammaPlan" (exit code 1)
-- Warning at 24 hours: "Consider GrammaPlan"
-- Error at 32 hours: "MUST convert to GrammaPlan" (exit code 1)
+- Warning at 700 lines: "Approaching limit, ensure focus maintained"
+- Error at 900 lines: "MUST convert to GrammaPlan or split" (exit code 1)
+- Warning at 30 hours: "Consider GrammaPlan"
+- Error at 40 hours: "MUST convert to GrammaPlan" (exit code 1)
+
+Note: With workflow separation, PLANs provide context for SUBPLAN creation only,
+not execution. This enables larger PLANs (900 lines) without context bloat.
 
 Usage:
     python LLM/scripts/check_plan_size.py @PLAN_FILE.md
@@ -89,16 +92,16 @@ def check_limits(file_path: Path) -> tuple[bool, str]:
     warnings = []
 
     # Line count checks
-    if line_count > 600:
-        errors.append(f"❌ Line count: {line_count} (exceeds 600-line limit)")
-    elif line_count > 400:
-        warnings.append(f"⚠️  Line count: {line_count} (consider GrammaPlan at 400+)")
+    if line_count > 900:
+        errors.append(f"❌ Line count: {line_count} (exceeds 900-line limit)\n   → MUST convert to GrammaPlan or split")
+    elif line_count > 700:
+        warnings.append(f"⚠️  Line count: {line_count} (approaching 900-line limit)\n   → Approaching limit, ensure focus maintained")
 
     # Effort checks
-    if estimated_hours > 32:
-        errors.append(f"❌ Estimated effort: {estimated_hours}h (exceeds 32-hour limit)")
-    elif estimated_hours > 24:
-        warnings.append(f"⚠️  Estimated effort: {estimated_hours}h (consider GrammaPlan at 24+)")
+    if estimated_hours > 40:
+        errors.append(f"❌ Estimated effort: {estimated_hours}h (exceeds 40-hour limit)\n   → MUST convert to GrammaPlan")
+    elif estimated_hours > 30:
+        warnings.append(f"⚠️  Estimated effort: {estimated_hours}h (approaching 40-hour limit)\n   → Consider GrammaPlan")
 
     # Build message
     if errors:
@@ -121,9 +124,9 @@ def check_limits(file_path: Path) -> tuple[bool, str]:
 
     # Within limits
     message = f"✅ PLAN WITHIN LIMITS\n\n"
-    message += f"Lines: {line_count} / 600 ✅\n"
+    message += f"Lines: {line_count} / 900 ✅\n"
     if estimated_hours > 0:
-        message += f"Estimated: {estimated_hours}h / 32h ✅\n"
+        message += f"Estimated: {estimated_hours}h / 40h ✅\n"
     else:
         message += f"Estimated: Not specified (check manually)\n"
     return True, message
@@ -132,16 +135,19 @@ def check_limits(file_path: Path) -> tuple[bool, str]:
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Check PLAN size limits (600 lines / 32 hours)",
+        description="Check PLAN size limits (900 lines / 40 hours)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python LLM/scripts/check_plan_size.py @PLAN_FEATURE.md
-  python LLM/scripts/check_plan_size.py PLAN_FEATURE.md
+  python LLM/scripts/validation/check_plan_size.py @PLAN_FEATURE.md
+  python LLM/scripts/validation/check_plan_size.py PLAN_FEATURE.md
 
 Limits:
-  - Lines: 600 maximum (warning at 400)
-  - Hours: 32 maximum (warning at 24)
+  - Lines: 900 maximum (warning at 700)
+  - Hours: 40 maximum (warning at 30)
+
+Note: With workflow separation, PLANs can be larger since they provide context
+for SUBPLAN creation only, not execution.
 
 Exit Codes:
   0 = Within limits (OK to proceed)

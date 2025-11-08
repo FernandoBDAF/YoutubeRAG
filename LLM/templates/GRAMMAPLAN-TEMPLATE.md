@@ -18,7 +18,17 @@
 
 **When to Use**: See `LLM/guides/GRAMMAPLAN-GUIDE.md`
 
-**Key Principle**: Keep this document LEAN (~150-300 lines). Do NOT replicate child PLAN content here.
+**File Location**: Save this file in `work-space/grammaplans/GRAMMAPLAN_[NAME].md`
+
+**Size**: 600-1,500 lines (strategic coordination needs space)
+
+- **600-999 lines**: Typical GrammaPlan (coordinates 3-5 PLANs)
+- **1,000-1,499 lines**: Large GrammaPlan (coordinates 6-8 PLANs) - **Warning**: Consider splitting or simplifying
+- **1,500+ lines**: **Error** - Must split into multiple GrammaPlans or convert to NORTH_STAR
+
+**Key Principle**: Focus on coordination and orchestration. Do NOT replicate child PLAN content here.
+
+**Validation**: Use `LLM/scripts/validation/check_grammaplan_size.py` to validate size
 
 ---
 

@@ -570,7 +570,20 @@ This completion review:
 
 ### How to Archive
 
-**Option 1: Batch Archive with Helper Script** (Recommended):
+**Option 1: Manual Archive Script** (Recommended for workspace files):
+
+```bash
+# Archive files from workspace (user-controlled, on-demand)
+python LLM/scripts/archiving/manual_archive.py --workspace work-space/
+
+# Dry-run to see what would be archived
+python LLM/scripts/archiving/manual_archive.py --dry-run --workspace work-space/
+
+# Archive specific files
+python LLM/scripts/archiving/manual_archive.py work-space/subplans/SUBPLAN_FEATURE_XX.md
+```
+
+**Option 2: Batch Archive with Helper Script** (For root directory files):
 
 ```bash
 # Archive all files for a completed achievement
@@ -580,12 +593,12 @@ python LLM/scripts/archiving/archive_completed.py --batch @SUBPLAN_FEATURE_XX.md
 python LLM/scripts/archiving/archive_completed.py @SUBPLAN_FEATURE_XX.md
 ```
 
-**Option 2: Manual Batch Move**:
+**Option 3: Manual Batch Move**:
 
 ```bash
-# Move all files for completed achievement together
-mv SUBPLAN_FEATURE_XX.md ./feature-archive/subplans/
-mv EXECUTION_TASK_FEATURE_XX_YY.md ./feature-archive/execution/
+# Move all files for completed achievement together (from workspace)
+mv work-space/subplans/SUBPLAN_FEATURE_XX.md documentation/archive/<feature>/subplans/
+mv work-space/execution/EXECUTION_TASK_FEATURE_XX_YY.md documentation/archive/<feature>/execution/
 ```
 
 ### Archive Location
@@ -605,7 +618,7 @@ mv EXECUTION_TASK_FEATURE_XX_YY.md ./feature-archive/execution/
 - **Cleaner Workflow**: Files stay accessible until achievement completion
 - **Batch Efficiency**: Multiple files archived together at once
 
-**Result**: Faster execution, less overhead, same clean root directory at completion!
+**Result**: Faster execution, less overhead, clean root directory, active work organized in workspace (`work-space/`), user-controlled archiving when convenient!
 
 ---
 

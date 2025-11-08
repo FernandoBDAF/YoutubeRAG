@@ -21,33 +21,47 @@ from pathlib import Path
 
 
 def find_subplans_for_plan(plan_path: Path) -> list:
-    """Find all SUBPLAN files for a PLAN."""
+    """Find all SUBPLAN files for a PLAN (nested structure)."""
     feature = plan_path.stem.replace('PLAN_', '')
-    subplan_pattern = f"SUBPLAN_{feature}_*.md"
-    subplan_files = list(Path('.').glob(subplan_pattern))
-    # Also check archive
+    subplan_files = []
+    
+    # Check nested structure: work-space/plans/PLAN_NAME/subplans/
+    plan_folder = plan_path.parent
+    nested_subplans_dir = plan_folder / "subplans"
+    if nested_subplans_dir.exists():
+        subplan_files.extend(nested_subplans_dir.glob("SUBPLAN_*.md"))
+    
+    # Also check archive for archived SUBPLANs
     archive_location = get_archive_location(plan_path)
     if archive_location.exists():
         archived = list((archive_location / 'subplans').glob(f"SUBPLAN_{feature}_*.md"))
         subplan_files.extend(archived)
+    
     return subplan_files
 
 
 def find_execution_tasks_for_plan(plan_path: Path) -> list:
-    """Find all EXECUTION_TASK files for a PLAN."""
+    """Find all EXECUTION_TASK files for a PLAN (nested structure)."""
     feature = plan_path.stem.replace('PLAN_', '')
-    execution_pattern = f"EXECUTION_TASK_{feature}_*.md"
-    execution_files = list(Path('.').glob(execution_pattern))
-    # Also check archive
+    execution_files = []
+    
+    # Check nested structure: work-space/plans/PLAN_NAME/execution/
+    plan_folder = plan_path.parent
+    nested_execution_dir = plan_folder / "execution"
+    if nested_execution_dir.exists():
+        execution_files.extend(nested_execution_dir.glob("EXECUTION_TASK_*.md"))
+    
+    # Also check archive for archived EXECUTION_TASKs
     archive_location = get_archive_location(plan_path)
     if archive_location.exists():
         archived = list((archive_location / 'execution').glob(f"EXECUTION_TASK_{feature}_*.md"))
         execution_files.extend(archived)
+    
     return execution_files
 
 
 def find_execution_tasks_for_subplan(subplan_path: Path) -> list:
-    """Find all EXECUTION_TASK files for a SUBPLAN."""
+    """Find all EXECUTION_TASK files for a SUBPLAN (nested structure)."""
     # Extract feature and subplan number
     match = re.match(r'SUBPLAN_([A-Z0-9-]+)_(\d+)\.md', subplan_path.name)
     if not match:
@@ -55,15 +69,25 @@ def find_execution_tasks_for_subplan(subplan_path: Path) -> list:
     
     feature = match.group(1)
     subplan_num = match.group(2)
-    execution_pattern = f"EXECUTION_TASK_{feature}_{subplan_num}_*.md"
-    execution_files = list(Path('.').glob(execution_pattern))
-    # Also check archive
-    plan_path = Path(f"PLAN_{feature}.md")
+    execution_files = []
+    
+    # Check nested structure: work-space/plans/PLAN_NAME/execution/
+    # SUBPLAN is in work-space/plans/PLAN_NAME/subplans/, so parent's parent is the plan folder
+    plan_folder = subplan_path.parent.parent
+    nested_execution_dir = plan_folder / "execution"
+    if nested_execution_dir.exists():
+        execution_files.extend(nested_execution_dir.glob(f"EXECUTION_TASK_{feature}_{subplan_num}_*.md"))
+    
+    # Also check archive for archived EXECUTION_TASKs
+    plan_path = Path(f"work-space/plans/PLAN_{feature}/PLAN_{feature}.md")
+    if not plan_path.exists():
+        plan_path = Path(f"PLAN_{feature}.md")
     if plan_path.exists():
         archive_location = get_archive_location(plan_path)
         if archive_location.exists():
             archived = list((archive_location / 'execution').glob(f"EXECUTION_TASK_{feature}_{subplan_num}_*.md"))
             execution_files.extend(archived)
+    
     return execution_files
 
 

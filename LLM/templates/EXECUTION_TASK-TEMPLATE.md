@@ -14,6 +14,8 @@
 
 **Metadata Tags**: See `LLM/guides/METADATA-TAGS.md` for virtual organization system
 
+**File Location**: Create this EXECUTION*TASK in `work-space/execution/EXECUTION_TASK*[FEATURE]_[SUBPLAN]_[EXECUTION].md`
+
 [FILL: Use UTC timestamps for precise tracking. Example: 2025-11-05 14:30 UTC]
 
 [FILL: Brief title describes what you're doing. Execution number shows if this is 1st, 2nd, 3rd attempt at the subplan.]
@@ -59,22 +61,40 @@
 **✅ READ ONLY**:
 
 - This EXECUTION_TASK file (complete file)
-- Immediate parent SUBPLAN objective (1-2 sentences only)
+- Parent SUBPLAN objective (1-2 sentences only) - see "SUBPLAN Context" section above
+- Parent SUBPLAN approach summary (3-5 sentences only) - see "SUBPLAN Context" section above
 - Code files being modified (if code work)
 
 **❌ DO NOT READ**:
 
-- Parent SUBPLAN full content
+- Parent SUBPLAN full content (Designer already decided approach)
 - Parent PLAN (except current achievement section)
-- Other EXECUTION_TASKs
+- Other EXECUTION_TASKs (unless part of parallel group)
 - Completed work
 - Other achievements
 
 **Context Budget**: ~200 lines (EXECUTION_TASK size limit)
 
-**Why**: EXECUTION_TASK is the smallest unit of focus. Reading parent documents adds unnecessary context and slows execution.
+**SUBPLAN-Based Execution**:
+- **Executor reads**: SUBPLAN objective (~2 sentences) + approach summary (~3-5 sentences)
+- **Executor does NOT read**: Full SUBPLAN (400-600 lines)
+- **Why**: Designer already analyzed requirements and designed approach
+- **Executor role**: Follow Designer's plan, execute according to approach
 
-**📖 See**: `LLM/guides/FOCUS-RULES.md` for complete focus rules and examples.
+**Minimal Reading Pattern**:
+1. Read SUBPLAN objective (what we're achieving)
+2. Read SUBPLAN approach summary (how we'll do it)
+3. Execute according to plan
+4. Document journey in EXECUTION_TASK
+
+**Parallel Execution** (if applicable):
+- Read "Parallelization Context" section above
+- Work independently (no coordination during execution)
+- Results synthesized in SUBPLAN (Phase 4)
+
+**Why**: EXECUTION_TASK is the smallest unit of focus. Minimal SUBPLAN reading reduces context budget and speeds execution. Executor follows Designer's plan.
+
+**📖 See**: `LLM/guides/FOCUS-RULES.md` for complete focus rules and `LLM/guides/SUBPLAN-WORKFLOW-GUIDE.md` (Phase 3: Execution) for workflow.
 
 ---
 
@@ -83,6 +103,55 @@
 [FILL: Brief description of what this execution is creating/implementing]
 
 **Success**: [FILL: How we know we're done]
+
+---
+
+## 📖 SUBPLAN Context
+
+**Parent SUBPLAN**: [SUBPLAN file path, e.g., `work-space/subplans/SUBPLAN_[FEATURE]_[NUMBER].md`]
+
+**SUBPLAN Objective** (read only this, 1-2 sentences):
+- [FILL: Copy SUBPLAN objective here - this is what we're achieving]
+
+**SUBPLAN Approach Summary** (read only this, 3-5 sentences):
+- [FILL: Copy SUBPLAN approach summary here - this is how we'll do it]
+
+**⚠️ DO NOT READ**: Full SUBPLAN (Designer already decided approach)
+
+**Why Minimal Reading**: 
+- Designer already analyzed requirements and designed approach
+- Executor follows Designer's plan (no re-design during execution)
+- Minimal reading reduces context budget (~10 lines vs. 400+ lines)
+- Focus on execution, not design
+
+**See**: `LLM/guides/SUBPLAN-WORKFLOW-GUIDE.md` (Phase 3: Execution) for complete workflow
+
+---
+
+## 🔀 Parallelization Context (If Applicable)
+
+**If this EXECUTION is part of a parallel group, document here:**
+
+**Parallel Group**: [Which other EXECUTIONs run simultaneously?]
+- EXECUTION_TASK_[FEATURE]_[SUBPLAN]_01: [Purpose]
+- EXECUTION_TASK_[FEATURE]_[SUBPLAN]_02: [Purpose] (this one)
+- EXECUTION_TASK_[FEATURE]_[SUBPLAN]_03: [Purpose]
+
+**Independence Rationale**: [Why this EXECUTION is independent?]
+- Example: "No dependencies on other EXECUTIONs, can run simultaneously"
+- Example: "Testing different approach, results compared in SUBPLAN synthesis"
+
+**Results Comparison**: [How results will be compared in SUBPLAN synthesis?]
+- Example: "Performance metrics compared side-by-side"
+- Example: "Accuracy scores compared, best approach adopted"
+
+**Coordination**: [How to coordinate with other parallel EXECUTIONs?]
+- Example: "No coordination needed - work independently"
+- Example: "Share intermediate results via SUBPLAN Active EXECUTION_TASKs section"
+
+**If Not Parallel**: Remove this section or state "Single execution - no parallelization"
+
+**See**: `LLM/guides/SUBPLAN-WORKFLOW-GUIDE.md` (Parallel Execution Pattern) for examples
 
 ---
 

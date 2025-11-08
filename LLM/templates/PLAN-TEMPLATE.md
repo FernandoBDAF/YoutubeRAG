@@ -35,6 +35,8 @@
 
 **Self-Contained**: This PLAN contains everything you need to execute it.
 
+**File Location**: Create this PLAN in `work-space/plans/PLAN_[FEATURE].md`
+
 [FILL: Make this section specific to your plan. Provide enough context that an LLM can understand and execute without external information.]
 
 ---
@@ -133,8 +135,22 @@
 
 **⚠️ HARD LIMITS** (Must not exceed):
 
-- **Lines**: 600 lines maximum
-- **Estimated Effort**: 32 hours maximum
+- **Lines**: 900 lines maximum
+- **Estimated Effort**: 40 hours maximum
+
+**Size Guidelines**:
+
+- **300-699 lines**: Typical PLAN (comfortable size)
+- **700-899 lines**: Large PLAN - **Warning**: Approaching limit, ensure focus maintained
+- **900+ lines**: **Error** - Must convert to GrammaPlan or split
+
+**Workflow Context**:
+
+- **PLANs now provide context for SUBPLAN creation only, not execution**
+- With workflow separation, larger PLANs don't bloat execution context
+- Planner agent reads PLAN achievement (~100 lines) when creating SUBPLAN
+- Executor agent reads SUBPLAN objective (~2 sentences), not full PLAN
+- This enables realistic size limits without context bloat
 
 **If your PLAN exceeds these limits**:
 
@@ -145,8 +161,8 @@
 **Validation**:
 
 - Script will **BLOCK** (exit code 1) if limits exceeded
-- Warning at 400 lines: "Consider GrammaPlan"
-- Error at 600 lines: "MUST convert to GrammaPlan"
+- Warning at 700 lines: "Approaching limit, ensure focus maintained"
+- Error at 900 lines: "MUST convert to GrammaPlan or split"
 
 ---
 
@@ -156,9 +172,9 @@
 
 **Decision Criteria Checked**:
 
-- [ ] Plan would exceed 600 lines? [Yes/No] ⚠️ **HARD LIMIT**
-- [ ] Estimated effort > 32 hours? [Yes/No] ⚠️ **HARD LIMIT**
-- [ ] Work spans 3+ domains? [Yes/No]
+- [ ] Plan would exceed 900 lines? [Yes/No] ⚠️ **HARD LIMIT**
+- [ ] Estimated effort > 40 hours? [Yes/No] ⚠️ **HARD LIMIT**
+- [ ] Work spans 4+ domains? [Yes/No]
 - [ ] Natural parallelism opportunities? [Yes/No]
 
 **Decision**: [Single PLAN / GrammaPlan]
@@ -192,6 +208,19 @@
 - [Why it's valuable]
 - Success: [How we know it's done]
 - Effort: [Hours estimate]
+- **Deliverables**:
+  - [List of files, functions, features to create]
+  - **Test file** (required for code work): `tests/LLM/scripts/<domain>/test_<script_name>.py`
+- **Testing Requirements** (required for code work, optional for documentation):
+  - **Test File Naming**: `test_<script_name>.py` in `tests/LLM/scripts/<domain>/`
+  - **Coverage Requirement**: >90% for new code
+  - **Test Cases Required**:
+    - Unit tests for all new functions/classes
+    - Integration tests for workflows
+    - Edge case tests for error handling
+  - **Test Infrastructure**: Use existing fixtures from `tests/LLM/scripts/conftest.py`
+  - **TDD Workflow**: Write tests first (preferred), then implement
+  - **Example**: See `PLAN_PROMPT-GENERATOR-FIX-AND-TESTING.md` for good testing practice
 - **Archive Location**: Use archive location from PLAN's "Archive Location" section (typically `documentation/archive/FEATURE-NAME/`)
   - Create archive structure if needed: `mkdir -p documentation/archive/FEATURE-NAME/{subplans,execution}`
   - Archive SUBPLANs to `subplans/` subdirectory
@@ -520,9 +549,11 @@ _None yet - will be added as subplans are created_
 
 **⚠️ CRITICAL**: Create archive folder at PLAN start (see IMPLEMENTATION_START_POINT.md).
 
-**Default Location**: `./feature-archive/` (replace `feature` with your feature name)
+**Default Location**: `documentation/archive/<feature>-<date>/` (replace `feature` with your feature name)
 
-**Example**: `./methodology-v2-enhancements-archive/`
+**Example**: `documentation/archive/methodology-v2-enhancements-nov2025/`
+
+**Note**: PLAN files are created in `work-space/plans/` directory. Archive location is separate from workspace.
 
 **Structure**:
 

@@ -30,6 +30,7 @@ Add comprehensive project context to PLAN_FILE-MOVING-OPTIMIZATION.md "Context f
 ### Content to Add
 
 **Project Context Subsection**:
+
 - Project: YoutubeRAG - GraphRAG pipeline for YouTube video analysis
 - Methodology Location: All LLM methodology files in `LLM/` directory
 - Key Directories: LLM/protocols/, LLM/templates/, LLM/guides/, LLM/scripts/
@@ -38,6 +39,7 @@ Add comprehensive project context to PLAN_FILE-MOVING-OPTIMIZATION.md "Context f
 - Related Work: Other active/paused PLANs
 
 **Archive Location Instructions**:
+
 - Archive location: `documentation/archive/file-moving-optimization-nov2025/`
 - Archive structure: `subplans/` and `execution/` subdirectories
 - When to archive: At achievement completion (deferred archiving policy)
@@ -78,6 +80,7 @@ Add comprehensive project context to PLAN_FILE-MOVING-OPTIMIZATION.md "Context f
 **Validation Method** (documentation work):
 
 **Completeness Check**:
+
 - [ ] Project Context subsection added
 - [ ] Archive location explicitly stated
 - [ ] Archive structure requirements included
@@ -85,16 +88,19 @@ Add comprehensive project context to PLAN_FILE-MOVING-OPTIMIZATION.md "Context f
 - [ ] All required elements from analysis present
 
 **Structure Validation**:
+
 - [ ] Content integrates well with existing section
 - [ ] Formatting consistent with PLAN structure
 - [ ] Clear and actionable instructions
 
 **Review Against Requirements**:
+
 - [ ] Achievement 1.1 requirements met
 - [ ] Success criteria from PLAN met
 - [ ] All deliverables present
 
 **Verification Commands**:
+
 ```bash
 # Verify PLAN file exists and updated
 ls PLAN_FILE-MOVING-OPTIMIZATION.md
@@ -140,15 +146,18 @@ grep -i "how to archive\|archive structure" PLAN_FILE-MOVING-OPTIMIZATION.md
 ## 🔍 Conflict Analysis with Other Subplans
 
 **Review Existing Subplans**:
+
 - SUBPLAN_01: Achievement 0.1 (Fix Archive Location Issues) - Complete
 
 **Check for**:
+
 - **Overlap**: No overlap (different achievements)
 - **Conflicts**: None
 - **Dependencies**: None (can work independently)
 - **Integration**: This enhances PLAN_FILE-MOVING-OPTIMIZATION.md, which was fixed in Achievement 0.1
 
 **Analysis**:
+
 - No conflicts detected
 - Independent work (enhancing different PLAN)
 - Safe to proceed
@@ -160,12 +169,15 @@ grep -i "how to archive\|archive structure" PLAN_FILE-MOVING-OPTIMIZATION.md
 ## 🔗 Dependencies
 
 ### Other Subplans
+
 - None (independent work)
 
 ### External Dependencies
+
 - None (documentation work only)
 
 ### Prerequisite Knowledge
+
 - Understanding of project structure
 - Understanding of archive conventions
 - Understanding of PLAN structure
@@ -199,12 +211,14 @@ _None yet - will be created when execution starts_
 ## 📝 Notes
 
 **Common Pitfalls**:
+
 - Missing required elements from analysis
 - Unclear instructions
 - Breaking existing content structure
 - Inconsistent formatting
 
 **Resources**:
+
 - PLAN_NEW-SESSION-CONTEXT-ENHANCEMENT.md (Achievement 1.1 section)
 - EXECUTION_ANALYSIS_NEW-SESSION-CONTEXT-GAP.md (context gap analysis with example)
 - PLAN_FILE-MOVING-OPTIMIZATION.md (target file to enhance)
@@ -216,6 +230,7 @@ _None yet - will be created when execution starts_
 **When working on this SUBPLAN**, follow these focus rules to minimize context:
 
 **✅ READ ONLY**:
+
 - This SUBPLAN file (complete file)
 - Parent PLAN Achievement 1.1 section (14 lines)
 - Active EXECUTION_TASKs (if any exist)
@@ -223,6 +238,7 @@ _None yet - will be created when execution starts_
 - PLAN_FILE-MOVING-OPTIMIZATION.md "Context for LLM Execution" section (for modification)
 
 **❌ DO NOT READ**:
+
 - Parent PLAN full content
 - Other achievements in PLAN
 - Other SUBPLANs

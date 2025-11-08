@@ -11,9 +11,15 @@
 
 **Metadata Tags**: See `LLM/guides/METADATA-TAGS.md` for virtual organization system
 
+**File Location**: Create this SUBPLAN in `work-space/subplans/SUBPLAN_[FEATURE]_[NUMBER].md`
+
+**Size**: 200-600 lines (increased to support multi-execution planning)
+
 [FILL: Use UTC timestamps. Example: 2025-11-05 14:30 UTC]
 
 [FILL: Brief title should describe what you're creating/doing. Achievement reference shows which goal this addresses.]
+
+**Note**: This SUBPLAN operates independently - Designer creates design, plans execution(s), then Executor(s) execute. See `LLM/guides/SUBPLAN-WORKFLOW-GUIDE.md` for complete workflow.
 
 ---
 
@@ -75,11 +81,80 @@
 
 ---
 
-## 🧪 Tests Required (if applicable)
+## 🔄 Execution Strategy
+
+**Execution Count**: [Single / Multiple]
+
+**If Single**:
+
+- **Rationale**: [Why single execution?]
+  - Example: "Single clear approach, straightforward implementation"
+- **EXECUTION_TASK**: `EXECUTION_TASK_[FEATURE]_[SUBPLAN_NUMBER]_01.md`
+
+**If Multiple**:
+
+- **Parallelization**: [Yes / No]
+- **Rationale**: [Why multiple executions?]
+  - Example: "A/B testing two approaches", "Iterative refinement", "Parallel independent components"
+- **Execution Type**: [Parallel / Sequential]
+  - **Parallel**: Independent work, can run simultaneously
+  - **Sequential**: Later executions depend on earlier results
+- **Planned Executions**: See "Planned Executions" section below
+
+**Decision Guidance**:
+
+- **Single**: Clear approach, straightforward work, no comparison needed
+- **Multiple - Parallel**: A/B testing, independent components, comparison needed
+- **Multiple - Sequential**: Iterative refinement, later builds on earlier, progressive improvement
+
+**See**: `LLM/guides/SUBPLAN-WORKFLOW-GUIDE.md` for complete decision trees
+
+---
+
+## 🔀 Planned Executions (If Multiple)
+
+**If execution count is "Multiple", document planned executions here:**
+
+| EXECUTION                               | Purpose   | Type                  | Estimated | Dependencies                |
+| --------------------------------------- | --------- | --------------------- | --------- | --------------------------- |
+| EXECUTION*TASK*[FEATURE]\_[SUBPLAN]\_01 | [Purpose] | [Sequential/Parallel] | [X hours] | [None / Previous execution] |
+| EXECUTION*TASK*[FEATURE]\_[SUBPLAN]\_02 | [Purpose] | [Sequential/Parallel] | [X hours] | [None / EXECUTION_01]       |
+| EXECUTION*TASK*[FEATURE]\_[SUBPLAN]\_03 | [Purpose] | [Sequential/Parallel] | [X hours] | [None / EXECUTION_02]       |
+
+**Coordination Strategy**:
+
+- [How executions coordinate]
+- [If parallel: How results will be compared]
+- [If sequential: How later executions use earlier results]
+- [How synthesis will proceed]
+
+**Example (Parallel)**:
+
+- EXECUTION_01: Test Algorithm A (baseline)
+- EXECUTION_02: Test Algorithm B (optimized)
+- EXECUTION_03: Test Algorithm C (alternative)
+- Coordination: All run in parallel, results compared in synthesis
+
+**Example (Sequential)**:
+
+- EXECUTION_01: Implement baseline (accuracy: 75%)
+- EXECUTION_02: Add fuzzy matching (uses baseline, accuracy: 82%)
+- EXECUTION_03: Add embedding similarity (uses EXECUTION_02, accuracy: 90%)
+- Coordination: Each builds on previous, progressive improvement
+
+**If Single**: Remove this section or state "Single execution - see Execution Strategy above"
+
+---
+
+## 🧪 Tests Required
+
+**Note**: Required for all code implementations, optional for documentation-only work.
 
 ### Test File
 
 - [FILL: Path to test file to create]
+- **Naming Convention**: `test_<script_name>.py` in `tests/LLM/scripts/<domain>/`
+- **Test Infrastructure**: Use existing fixtures from `tests/LLM/scripts/conftest.py`
 
 ### Test Cases to Cover
 
@@ -88,13 +163,21 @@
 3. [FILL: Edge case 1]
 4. [FILL: Edge case 2]
 
+### Coverage Requirements
+
+- **Target Coverage**: >90% for new code
+- **Required Test Types**:
+  - Unit tests for all new functions/classes
+  - Integration tests for workflows
+  - Edge case tests for error handling
+
 ### Test-First Requirement
 
-- [ ] Tests written before implementation
+- [ ] Tests written before implementation (TDD workflow preferred)
 - [ ] Initial test run shows all failing
 - [ ] Tests define success criteria
 
-[FILL: For code work, define comprehensive test coverage. For documentation work, define validation approach.]
+[FILL: For code work, define comprehensive test coverage. For documentation work, define validation approach. See PLAN template "Testing Requirements" section for complete guidance.]
 
 ---
 
@@ -240,21 +323,119 @@ _None yet - will be created when execution starts_
 
 ---
 
-## 🔄 Active EXECUTION_TASKs (Updated When Created)
+## 🔄 Active EXECUTION_TASKs
 
-**Current Active Work** (register EXECUTION_TASKs immediately when created):
+**Real-Time Tracking** (update as EXECUTIONs progress):
 
-- [ ] **EXECUTION_TASK_FEATURE_XX_01**: Status: In Progress
-- [ ] **EXECUTION_TASK_FEATURE_XX_02**: Status: In Progress (if multiple attempts)
+| EXECUTION                               | Status                                     | Progress | Notes   |
+| --------------------------------------- | ------------------------------------------ | -------- | ------- |
+| EXECUTION*TASK*[FEATURE]\_[SUBPLAN]\_01 | [Planning / Executing / Complete / Failed] | [0-100%] | [Notes] |
+| EXECUTION*TASK*[FEATURE]\_[SUBPLAN]\_02 | [Planning / Executing / Complete / Failed] | [0-100%] | [Notes] |
 
-**Registration Workflow**:
+**Status Options**:
 
-1. When creating EXECUTION_TASK: Add to this list immediately
-2. When archiving: Remove from this list
+- **Planning**: EXECUTION_TASK created, not yet executing
+- **Executing**: Work in progress
+- **Complete**: Execution finished, deliverables verified
+- **Failed**: Execution encountered issues (document in notes)
 
-**Why**: Immediate parent awareness ensures SUBPLAN knows about its active EXECUTION_TASKs.
+**Update Frequency**: Update this table as EXECUTIONs progress
+
+**For Single Execution**: Single row in table
+
+**For Multiple Executions**: One row per planned execution
+
+**Why**: Real-time tracking enables Designer to monitor progress, coordinate parallel executions, and plan synthesis.
 
 ---
 
-**Ready to Execute**: Create EXECUTION_TASK and begin work  
-**Reference**: IMPLEMENTATION_START_POINT.md for workflows
+## 📊 Execution Results Synthesis
+
+**Review All Results** (complete after all EXECUTIONs finish):
+
+**EXECUTION Summary**:
+
+- **EXECUTION_01 Results**: [Summary of what was achieved, learnings, outcomes]
+- **EXECUTION_02 Results**: [Summary of what was achieved, learnings, outcomes]
+- **EXECUTION_03 Results**: [Summary of what was achieved, learnings, outcomes]
+
+**Collective Learnings**:
+
+- [What worked across all EXECUTIONs?]
+- [What didn't work?]
+- [What patterns emerged?]
+- [What should be adopted?]
+
+**Comparison** (if parallel experiments):
+
+- [Compare results side-by-side]
+- [Which approach performed best?]
+- [Why did one succeed over others?]
+- [What factors made the difference?]
+
+**Best Approach** (if multiple):
+
+- [Which execution achieved best results?]
+- [Why this approach?]
+- [What should be adopted for production?]
+
+**Recommendations**:
+
+- [What to adopt from successful EXECUTIONs?]
+- [What to avoid from failed EXECUTIONs?]
+- [What to try next (if iterative)?]
+
+**Example Synthesis**:
+
+- EXECUTION_01 (Algorithm A): 50ms average, simple implementation
+- EXECUTION_02 (Algorithm B): 30ms average, optimized ✅ Best
+- EXECUTION_03 (Algorithm C): 45ms average, alternative approach
+- **Learnings**: Algorithm B 40% faster, optimization technique X was key
+- **Decision**: Adopt Algorithm B for production
+
+**For Single Execution**: Document learnings from that execution
+
+**When to Complete**: After all EXECUTIONs finish, before marking SUBPLAN complete
+
+---
+
+## 📖 What to Read (Focus Rules)
+
+**When working on this SUBPLAN**, follow these focus rules to minimize context:
+
+**✅ READ ONLY**:
+
+- This SUBPLAN file (complete file)
+- Parent PLAN current achievement section (50-100 lines)
+- Active EXECUTION_TASKs (if any exist)
+- Parent PLAN "Current Status & Handoff" section (30-50 lines)
+
+**❌ DO NOT READ**:
+
+- Parent PLAN full content
+- Other achievements in PLAN
+- Other SUBPLANs
+- Completed EXECUTION_TASKs (unless needed for context)
+- Completed work
+
+**Context Budget**: ~400-600 lines (increased for multi-execution planning)
+
+**Independent Operation**: This SUBPLAN operates independently:
+
+- **Designer Phase**: Create SUBPLAN, design approach, plan execution(s)
+- **Executor Phase**: Execute EXECUTION_TASK(s) according to plan
+- **Synthesis Phase**: Review results, synthesize learnings, complete SUBPLAN
+
+**Executor Context**: Executor reads SUBPLAN objective (~2 sentences) and approach section only, not full SUBPLAN.
+
+**Why**: SUBPLAN defines HOW to achieve one achievement. Reading other achievements or full PLAN adds scope and confusion.
+
+**📖 See**: `LLM/guides/FOCUS-RULES.md` for complete focus rules and `LLM/guides/SUBPLAN-WORKFLOW-GUIDE.md` for workflow.
+
+---
+
+**Ready to Execute**:
+
+- **Designer**: Complete SUBPLAN design, plan execution(s), then create EXECUTION_TASK(s)
+- **Executor**: Read SUBPLAN objective, execute according to plan
+- **Reference**: `LLM/guides/SUBPLAN-WORKFLOW-GUIDE.md` for complete workflow, `LLM/protocols/IMPLEMENTATION_START_POINT.md` for execution workflows
