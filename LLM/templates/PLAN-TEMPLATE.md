@@ -1,9 +1,12 @@
 # PLAN: [Feature Name]
 
+**Type**: PLAN  
 **Status**: Planning / In Progress / Complete  
+**Priority**: Critical / High / Medium / Low  
 **Created**: [YYYY-MM-DD HH:MM UTC]  
-**Goal**: [One sentence describing what this plan achieves]  
-**Priority**: Critical / High / Medium / Low
+**Goal**: [One sentence describing what this plan achieves]
+
+**Metadata Tags**: See `LLM/guides/METADATA-TAGS.md` for virtual organization system
 
 [FILL: Use UTC timestamps for precise tracking. Example: 2025-11-05 14:30 UTC]
 
@@ -25,6 +28,10 @@
    - Follow the TDD workflow in IMPLEMENTATION_START_POINT.md
 4. **What You'll Create**: [List of deliverables]
 5. **Where to Get Help**: IMPLEMENTATION_START_POINT.md, templates, related docs
+6. **Project Context**: For essential project knowledge (structure, domain, conventions, architecture), see `LLM/PROJECT-CONTEXT.md`
+   - **When to Reference**: New sessions, unfamiliar domains, architecture questions, convention questions
+   - **Automatic Injection**: The prompt generator (`generate_prompt.py`) automatically includes project context in generated prompts
+   - **Manual Reference**: If you need more detail, read `LLM/PROJECT-CONTEXT.md` directly
 
 **Self-Contained**: This PLAN contains everything you need to execute it.
 
@@ -185,6 +192,11 @@
 - [Why it's valuable]
 - Success: [How we know it's done]
 - Effort: [Hours estimate]
+- **Archive Location**: Use archive location from PLAN's "Archive Location" section (typically `documentation/archive/FEATURE-NAME/`)
+  - Create archive structure if needed: `mkdir -p documentation/archive/FEATURE-NAME/{subplans,execution}`
+  - Archive SUBPLANs to `subplans/` subdirectory
+  - Archive EXECUTION_TASKs to `execution/` subdirectory
+  - **Deferred Archiving**: Archive at achievement completion (not immediately upon file completion)
 
 **Sub-Achievements** (may be discovered during execution):
 
@@ -196,12 +208,22 @@
 - [Description]
 - Success: [Criteria]
 - Effort: [Estimate]
+- **Archive Location**: Use archive location from PLAN's "Archive Location" section (typically `documentation/archive/FEATURE-NAME/`)
+  - Create archive structure if needed: `mkdir -p documentation/archive/FEATURE-NAME/{subplans,execution}`
+  - Archive SUBPLANs to `subplans/` subdirectory
+  - Archive EXECUTION_TASKs to `execution/` subdirectory
+  - **Deferred Archiving**: Archive at achievement completion (not immediately upon file completion)
 
 ### Priority 2: HIGH
 
 **Achievement 2.1**: [Title]
 
 - [Description]
+- **Archive Location**: Use archive location from PLAN's "Archive Location" section (typically `documentation/archive/FEATURE-NAME/`)
+  - Create archive structure if needed: `mkdir -p documentation/archive/FEATURE-NAME/{subplans,execution}`
+  - Archive SUBPLANs to `subplans/` subdirectory
+  - Archive EXECUTION_TASKs to `execution/` subdirectory
+  - **Deferred Archiving**: Archive at achievement completion (not immediately upon file completion)
 
 ### Priority 3: MEDIUM
 
@@ -507,9 +529,9 @@ _None yet - will be added as subplans are created_
 ```
 ./feature-archive/
 ├── subplans/
-│   └── SUBPLAN_FEATURE_*.md (archived immediately on completion)
+│   └── SUBPLAN_FEATURE_*.md (archived at achievement/plan completion)
 └── execution/
-    └── EXECUTION_TASK_FEATURE_*_*.md (archived immediately on completion)
+    └── EXECUTION_TASK_FEATURE_*_*.md (archived at achievement/plan completion)
 ```
 
 **Creation**:
@@ -518,7 +540,7 @@ _None yet - will be added as subplans are created_
 - Document location here
 - Reference: IMPLEMENTATION_START_POINT.md "Create Archive Folder at Plan Start"
 
-**Immediate Archiving**: SUBPLANs and EXECUTION_TASKs are archived immediately upon completion (not at END_POINT). See IMPLEMENTATION_END_POINT.md "Immediate Archiving" section.
+**Deferred Archiving**: SUBPLANs and EXECUTION_TASKs are archived at achievement completion or plan completion (not immediately upon individual file completion). See IMPLEMENTATION_END_POINT.md "Deferred Archiving" section.
 
 ---
 

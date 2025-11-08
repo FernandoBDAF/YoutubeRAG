@@ -17,7 +17,7 @@ import sys
 
 
 # Add project root to Python path for imports
-_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
@@ -162,7 +162,13 @@ class PipelineStatsHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path != "/api/pipeline/stats":
             self.send_response(404)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
+            error_response = json.dumps(
+                {"error": "Not found", "message": f"Unknown endpoint: {parsed.path}"}
+            )
+            self.wfile.write(error_response.encode("utf-8"))
             return
 
         # Parse query parameters
@@ -189,9 +195,19 @@ class PipelineStatsHandler(BaseHTTPRequestHandler):
             logger.error(f"Error in stats endpoint: {e}")
             self.send_response(500)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             error_response = json.dumps({"error": str(e)})
             self.wfile.write(error_response.encode("utf-8"))
+
+    def do_OPTIONS(self):
+        """Handle CORS preflight requests."""
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "3600")
+        self.end_headers()
 
     def log_message(self, format, *args):
         """Suppress default HTTP logging."""
@@ -237,5 +253,3 @@ if __name__ == "__main__":
 
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
     start_stats_server(port=port)
-
-

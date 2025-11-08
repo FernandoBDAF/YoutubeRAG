@@ -430,7 +430,30 @@ Without these enhancements:
 
 ### Priority 6: VALIDATION - Testing
 
-**Achievement 6.1**: Test Methodology Improvements
+**Achievement 6.1**: Prompt Generation Scripts for Plan Management
+
+- **Goal**: Automate prompt generation for plan management workflows (verify, pause, resume)
+- **What**:
+  - Update validate_mid_plan.py: Add --generate-fix-prompt flag (generates prompt to fix issues)
+  - Create LLM/scripts/generation/generate_pause_prompt.py:
+    - Generates prompt to pause PLAN following IMPLEMENTATION_RESUME.md
+    - Includes checklist, status update instructions
+  - Create LLM/scripts/generation/generate_resume_prompt.py:
+    - Generates prompt to resume PLAN following IMPLEMENTATION_RESUME.md
+    - Includes pre-resume checklist, context gathering steps
+  - Create LLM/scripts/generation/generate_verify_prompt.py:
+    - Generates prompt to verify PLAN status and fix inconsistencies
+    - Checks statistics, registration, archive compliance
+    - Generates fix prompt if issues found
+- **Success**: All 3 scripts working, prompts generated correctly
+- **Effort**: 2-3 hours
+- **Deliverables**:
+  - Updated validate_mid_plan.py (--generate-fix-prompt flag)
+  - LLM/scripts/generation/generate_pause_prompt.py
+  - LLM/scripts/generation/generate_resume_prompt.py
+  - LLM/scripts/generation/generate_verify_prompt.py
+
+**Achievement 6.2**: Test Methodology Improvements
 
 - **Goal**: Validate all enhancements work with real small PLAN execution
 - **What**:
@@ -441,12 +464,14 @@ Without these enhancements:
     - Use immediate archiving
     - Test blocking validation
     - Practice focus rules
+  - Test new prompt generation scripts (pause, resume, verify)
   - Verify:
     - Size limits enforced (scripts block)
     - Focus rules reduce context
     - Immediate archiving works
     - Entry points handle scenarios
     - Registration system works
+    - Prompt generation scripts work
   - Document results in EXECUTION_ANALYSIS_METHODOLOGY-V2-TEST-RESULTS.md
 - **Success**: Test PLAN complete, all improvements validated, issues identified and fixed
 - **Effort**: 4-5 hours (includes test PLAN execution)
@@ -642,7 +667,7 @@ Without these enhancements:
 - Priority 3 (Validation): 5-6 hours (1 achievement)
 - Priority 4 (Sessions): 3 hours (1 achievement)
 - Priority 5 (Organization): 6 hours (3 achievements)
-- Priority 6 (Testing): 4-5 hours (1 achievement)
+- Priority 6 (Automation & Testing): 6-8 hours (2 achievements)
 
 **By Achievement**:
 
@@ -656,7 +681,8 @@ Without these enhancements:
 - 5.1: Component registration (3h)
 - 5.2: Script organization (1-2h)
 - 5.3: Validation visibility (2h)
-- 6.1: Test methodology (4-5h)
+- 6.1: Prompt generation scripts (2-3h)
+- 6.2: Test methodology (4-5h)
 
 ---
 
@@ -735,8 +761,8 @@ _To be populated during execution_
 
 ## 📝 Current Status & Handoff (For Pause/Resume)
 
-**Last Updated**: 2025-11-07 17:30 UTC  
-**Status**: In Progress
+**Last Updated**: 2025-11-07 22:00 UTC  
+**Status**: ⏸️ Paused
 
 **What's Done**:
 
@@ -820,21 +846,33 @@ _To be populated during execution_
   - Script paths correct (validation/ directory)
   - EXECUTION_TASK was 75 lines (well under 200-line limit ✅)
 
-**Progress**: 11/12 achievements (92%), 29.5/22 hours (134% - over estimate)
+**Progress**: 11/13 achievements (85%), 29.5/22 hours (134% - over estimate)
 
-**What's Next**:
+**Paused At**: Achievement 5.3 (Validation Visibility in Prompts) - COMPLETE  
+**Next Achievement**: 6.1 (Prompt Generation Scripts for Plan Management)
 
-- ⏳ Achievement 6.1 (Test Methodology Improvements) - NOT YET STARTED
+**What's Next When Resuming**:
+
+- ⏳ Achievement 6.1 (Prompt Generation Scripts for Plan Management) - Scripts pre-created for testing
+- ⏳ Achievement 6.2 (Test Methodology Improvements) - NOT YET STARTED
 - Use generator for Achievement 6.1!
 - Command: `python LLM/scripts/generation/generate_prompt.py @PLAN_METHODOLOGY-V2-ENHANCEMENTS.md --next --clipboard`
+
+**⚠️ Known Issues to Fix When Resuming**:
+
+1. **PLAN Size**: 899 lines (exceeds 600-line limit) - Consider converting to GrammaPlan or splitting
+2. **Statistics Mismatch**: Claimed 11 SUBPLANs/EXECUTION_TASKs, but validation found more - Need to verify actual counts
+3. **Uncommitted Changes**: Some files not committed - Commit before resuming
 
 **When Resuming**:
 
 1. Read this section
 2. Review "Subplan Tracking" above (check what's done)
-3. Check achievement-v2-enhancements-archive/ for completed work
-4. Select next achievement
-5. Create SUBPLAN and continue
+3. Check methodology-v2-enhancements-archive/ for completed work
+4. Fix known issues above
+5. Run: `python LLM/scripts/generation/generate_verify_prompt.py @PLAN_METHODOLOGY-V2-ENHANCEMENTS.md` to verify status
+6. Use resume prompt generator: `python LLM/scripts/generation/generate_resume_prompt.py @PLAN_METHODOLOGY-V2-ENHANCEMENTS.md --clipboard`
+7. Select next achievement and continue
 
 ---
 

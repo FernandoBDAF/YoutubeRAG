@@ -181,7 +181,11 @@ class ProgressSSEHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path != "/api/pipeline/progress":
             self.send_response(404)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
+            error_response = json.dumps({"error": "Not found", "message": f"Unknown endpoint: {parsed.path}"})
+            self.wfile.write(error_response.encode("utf-8"))
             return
 
         # Parse query parameters

@@ -1,13 +1,18 @@
 # EXECUTION_TASK: [Brief Title]
 
+**Type**: EXECUTION_TASK  
 **Subplan**: SUBPLAN*[FEATURE]*[NUMBER].md  
 **Mother Plan**: PLAN\_[FEATURE].md  
+**Plan**: [FEATURE-NAME]  
 **Achievement**: [Which achievement from PLAN]  
+**Iteration**: [1/2/3]  
 **Execution Number**: XX (first attempt, second attempt, etc.)  
 **Previous Execution**: [Link if 2nd+ attempt, N/A if first]  
 **Circular Debug Flag**: Yes / No [Yes if this is recovery from circular debugging]  
 **Started**: [YYYY-MM-DD HH:MM UTC]  
 **Status**: In Progress / Complete / Abandoned / Blocked
+
+**Metadata Tags**: See `LLM/guides/METADATA-TAGS.md` for virtual organization system
 
 [FILL: Use UTC timestamps for precise tracking. Example: 2025-11-05 14:30 UTC]
 

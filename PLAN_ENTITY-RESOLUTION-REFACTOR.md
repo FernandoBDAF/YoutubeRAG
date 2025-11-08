@@ -582,7 +582,7 @@ Refactor entity resolution to implement proper cross-chunk resolution with fuzzy
 
 **Added**: November 6, 2025  
 **Trigger**: ChatGPT feedback review + production data validation after Priority 0-3 completion  
-**Source**: EXECUTION_ANALYSIS_ENTITY-RESOLUTION-BUGS.md
+**Source**: `documentation/archive/execution-analyses/implementation-review/2025-11/EXECUTION_ANALYSIS_ENTITY-RESOLUTION-BUGS.md`
 
 **Analysis Process**:
 
@@ -623,7 +623,7 @@ Refactor entity resolution to implement proper cross-chunk resolution with fuzzy
 
 **Non-Critical Items**: 6 enhancement items added to IMPLEMENTATION_BACKLOG.md (IMPL-ER-001 through IMPL-ER-006)
 
-**See Also**: EXECUTION_ANALYSIS_ENTITY-RESOLUTION-BUGS.md for complete analysis
+**See Also**: `documentation/archive/execution-analyses/implementation-review/2025-11/EXECUTION_ANALYSIS_ENTITY-RESOLUTION-BUGS.md` for complete analysis
 
 ---
 

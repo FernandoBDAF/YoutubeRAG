@@ -81,6 +81,10 @@ Use this when:
 - [ ] **Read last EXECUTION_TASK**: See where you left off
 - [ ] **Check for blockers**: Any dependencies or issues noted?
 - [ ] **Review learnings**: What was discovered in last execution?
+- [ ] **Review relevant EXECUTION_ANALYSIS documents**: Check archive for analyses related to current PLAN/feature
+  - Look in `documentation/archive/execution-analyses/` by feature name or category
+  - Check INDEX.md catalog for quick reference
+  - Useful for: Understanding past decisions, avoiding repeated issues, learning from similar work
 
 ### 5. Update ACTIVE_PLANS.md (REQUIRED)
 
@@ -147,6 +151,26 @@ Resume @PLAN_ENTITY-RESOLUTION-REFACTOR.md following @LLM/protocols/IMPLEMENTATI
 3. Check "Subplan Tracking" to see if SUBPLAN already exists for this achievement
 4. If SUBPLAN exists: Check if EXECUTION_TASK exists
 5. If both exist but incomplete: Continue existing EXECUTION_TASK or create new one (new strategy)
+
+**💡 Finding Relevant EXECUTION_ANALYSIS Documents**:
+
+Before starting work, check for relevant analyses that might inform your approach:
+
+1. **By Feature Name**: Look in `documentation/archive/execution-analyses/` for analyses matching your feature
+2. **By Category**: Check category subdirectories (methodology-review, planning-strategy, bug-analysis, etc.)
+3. **By INDEX.md**: Review `documentation/archive/execution-analyses/INDEX.md` for catalog of all analyses
+4. **Search by Topic**: Look for analyses covering similar problems, blockers, or decisions
+
+**Why This Matters**:
+- Learn from past decisions and avoid repeating mistakes
+- Understand context from previous work on same feature
+- Find solutions to similar problems
+- Discover methodology improvements or patterns
+
+**Example**: If resuming `PLAN_ENTITY-RESOLUTION-REFACTOR.md`, check for:
+- `EXECUTION_ANALYSIS_ENTITY-RESOLUTION-*.md` files
+- Analyses in `bug-analysis/` category related to entity resolution
+- Methodology reviews that mention entity resolution work
 
 **Decision Tree**:
 

@@ -282,18 +282,40 @@ class EntityAPIHandler(BaseHTTPRequestHandler):
                         self.wfile.write(response_json.encode("utf-8"))
                 else:
                     self.send_response(404)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Access-Control-Allow-Origin", "*")
                     self.end_headers()
+                    error_response = json.dumps(
+                        {"error": "Not found", "message": f"Unknown endpoint: {parsed.path}"}
+                    )
+                    self.wfile.write(error_response.encode("utf-8"))
             else:
                 self.send_response(404)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
+                error_response = json.dumps(
+                    {"error": "Not found", "message": f"Unknown endpoint: {parsed.path}"}
+                )
+                self.wfile.write(error_response.encode("utf-8"))
 
         except Exception as e:
             logger.error(f"Error in entity API: {e}")
             self.send_response(500)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             error_response = json.dumps({"error": str(e)})
             self.wfile.write(error_response.encode("utf-8"))
+
+    def do_OPTIONS(self):
+        """Handle CORS preflight requests."""
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "3600")
+        self.end_headers()
 
     def log_message(self, format, *args):
         """Suppress default HTTP logging."""

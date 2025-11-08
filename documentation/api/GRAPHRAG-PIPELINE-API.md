@@ -615,6 +615,375 @@ All endpoints may return error responses in the following format:
 - `400`: Bad Request (missing or invalid parameters)
 - `404`: Not Found (resource doesn't exist)
 - `500`: Internal Server Error
+- `501`: Method Not Allowed (e.g., OPTIONS not supported)
+
+### Error Response Examples
+
+**400 Bad Request (Missing Required Parameter):**
+```json
+{
+  "error": "Missing required parameter: pipeline_id"
+}
+```
+
+**400 Bad Request (Invalid Parameter):**
+```json
+{
+  "error": "Invalid parameter: limit must be a positive integer"
+}
+```
+
+**404 Not Found (Resource Doesn't Exist):**
+```json
+{
+  "error": "Pipeline not found: pipeline_123"
+}
+```
+
+**404 Not Found (Invalid Endpoint):**
+```json
+{
+  "error": "Endpoint not found: /api/invalid/path"
+}
+```
+
+**500 Internal Server Error:**
+```json
+{
+  "error": "Internal server error occurred"
+}
+```
+
+**Note**: As of the latest review, some endpoints may return HTML error pages or empty bodies for 404 errors instead of JSON. This is a known issue (see Known Issues section below).
+
+### CORS Headers in Error Responses
+
+All error responses should include CORS headers for cross-origin requests:
+
+```
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET, POST, OPTIONS
+Access-Control-Allow-Headers: Content-Type
+```
+
+**Note**: Some endpoints may be missing CORS headers on error responses. This is a known issue (see Known Issues section below).
+
+---
+
+## Test Results Summary
+
+**Last Updated**: 2025-11-08  
+**Test Coverage**: 28 endpoints across 12 API files
+
+### Test Execution Status
+
+| Test Type | Status | Coverage | Notes |
+|-----------|--------|----------|-------|
+| Existing Unit Tests | ✅ Passing | 13 tests | 12 passed, 1 skipped |
+| Curl Integration Tests | ⚠️ Not Executed | 45+ test cases | Server required |
+| CORS & OPTIONS Tests | ⚠️ Not Executed | 11 test cases | Server required |
+| Error Handling Tests | ⚠️ Not Executed | 14 test cases | Server required |
+| Input Validation Review | ✅ Complete | 28 endpoints | 45+ gaps identified |
+
+### Overall Assessment
+
+**Status**: ⚠️ **APIs need improvements before production deployment**
+
+**Key Findings**:
+- ✅ All files have Python path handling (fixed)
+- ✅ Existing tests passing (12/13 passed, 1 skipped)
+- ❌ Only 1/12 files has OPTIONS handler (CORS preflight support)
+- ❌ 11/12 files have incomplete 404 error handling (missing JSON/CORS)
+- ❌ 45+ input validation gaps identified
+- ⚠️ Security concerns: MongoDB query injection, XSS, type confusion
+
+**Total Issues Identified**: 80+ (2 Critical, 37 High, 30+ Medium, 10+ Low)
+
+**Recommendation**: Address Critical and High priority issues before production deployment.
+
+**Reference**: See `documentation/api/API-TEST-RESULTS-COMPREHENSIVE.md` for detailed test results.
+
+---
+
+## Known Issues
+
+**Last Updated**: 2025-11-08
+
+### Critical Issues (2)
+
+#### 1. Missing OPTIONS Handlers
+
+**Impact**: CORS preflight requests fail with HTTP 501  
+**Affected**: 11/12 API files (all POST endpoints except `pipeline_control.py`)  
+**Status**: ⚠️ **Partially Fixed** (Achievement 3.2 added OPTIONS handlers to 11 files)
+
+**Description**: 
+- Browser CORS preflight requests send OPTIONS requests before POST requests
+- Most API handlers don't have `do_OPTIONS` method, causing HTTP 501 errors
+- Only `pipeline_control.py` had OPTIONS handler initially
+
+**Workaround**: 
+- Use server-side requests (no CORS preflight)
+- Or use a proxy server to handle OPTIONS requests
+
+**Fix Status**: OPTIONS handlers were added in Achievement 3.2, but verification requires server testing.
+
+#### 2. Incomplete 404 Error Handling
+
+**Impact**: 404 responses return empty body or HTML instead of JSON  
+**Affected**: 11/12 API files (all except `pipeline_control.py`)  
+**Status**: ⚠️ **Partially Fixed** (Achievement 3.2 improved error handling)
+
+**Description**:
+- Some endpoints return empty bodies or HTML error pages for 404 errors
+- Error responses should be JSON with CORS headers
+- Only `pipeline_control.py` had complete error handling initially
+
+**Example of Issue**:
+```bash
+# May return empty body or HTML instead of:
+{
+  "error": "Resource not found"
+}
+```
+
+**Fix Status**: Error handling was improved in Achievement 3.2, but verification requires server testing.
+
+### High Priority Issues (37)
+
+#### Missing CORS Headers on Error Responses
+
+**Impact**: Cross-origin requests fail when errors occur  
+**Affected**: 11/12 API files  
+**Status**: ⚠️ **Partially Fixed** (Achievement 3.2 added CORS headers)
+
+**Description**: Error responses (404, 500) may be missing CORS headers, causing browser CORS errors.
+
+#### Type Conversion Errors Not Caught
+
+**Impact**: Invalid parameters cause 500 errors instead of 400  
+**Affected**: 12+ endpoints  
+**Status**: ⚠️ **Not Fixed**
+
+**Description**: 
+- Type conversion errors (e.g., `int("abc")`) raise exceptions
+- These propagate as 500 errors instead of being caught and returned as 400 errors
+- Should validate types before conversion
+
+**Example**:
+```bash
+# Request: GET /api/pipeline/status?pipeline_id=test&limit=abc
+# Current: Returns 500 Internal Server Error
+# Expected: Returns 400 Bad Request with error message
+```
+
+#### No Range Validation for Numeric Parameters
+
+**Impact**: Invalid values accepted (negative numbers, very large values)  
+**Affected**: 15+ endpoints  
+**Status**: ⚠️ **Not Fixed**
+
+**Description**: 
+- Parameters like `limit`, `offset`, `max_hops`, `max_nodes` accept any integer
+- No validation for negative values or unreasonably large values
+- Should validate ranges (e.g., `limit` between 1-1000)
+
+#### No Format Validation for IDs and Enums
+
+**Impact**: Invalid IDs/enums accepted, causing downstream errors  
+**Affected**: 10+ endpoints  
+**Status**: ⚠️ **Not Fixed**
+
+**Description**:
+- Entity IDs, pipeline IDs, community IDs not validated for format
+- Enum values (status, entity_type) not validated
+- Should validate format before querying database
+
+### Medium Priority Issues (11)
+
+- Weak error messages (not descriptive enough)
+- No length validation for string parameters
+- No structure validation for request bodies
+- Edge case handling incomplete (empty strings, null values)
+
+### Security Concerns
+
+#### MongoDB Query Injection
+
+**Risk**: Medium  
+**Status**: ⚠️ **Not Fixed**
+
+**Description**: 
+- User input directly used in MongoDB queries without sanitization
+- Potential for NoSQL injection attacks
+- Should use parameterized queries or input sanitization
+
+#### XSS (Cross-Site Scripting)
+
+**Risk**: Low (API-only, no HTML rendering)  
+**Status**: ⚠️ **Not Fixed**
+
+**Description**: 
+- String parameters not escaped in responses
+- Low risk since API returns JSON (not HTML)
+- Should escape user input if used in future HTML responses
+
+#### Type Confusion
+
+**Risk**: Medium  
+**Status**: ⚠️ **Not Fixed**
+
+**Description**:
+- Type conversion errors not caught
+- Could lead to unexpected behavior or errors
+- Should validate types before conversion
+
+---
+
+## Input Validation
+
+**Last Updated**: 2025-11-08
+
+### Validation Status
+
+**Endpoints Reviewed**: 28/28 (100%)  
+**Validation Gaps Identified**: 45+  
+**High Priority Gaps**: 15  
+**Medium Priority Gaps**: 20  
+**Low Priority Gaps**: 10+
+
+### Current Validation
+
+✅ **What's Working**:
+- Basic type conversion present (`int()`, `float()`)
+- Some required parameter checks (`pipeline_id`, `entity_id`)
+- Basic error handling for missing parameters
+
+❌ **What's Missing**:
+- Range validation (negative numbers, very large values)
+- Format validation (IDs, strings, enums)
+- Length validation (string parameters)
+- Type conversion error handling (ValueError exceptions)
+
+### Validation Rules by Endpoint Type
+
+#### Pipeline Control Endpoints
+
+**Required Parameters**:
+- `pipeline_id`: Required for status, cancel, resume
+- `config`: Required for start, resume (must be valid JSON object)
+
+**Optional Parameters**:
+- `db_name`: String, no format validation
+- `limit`: Integer, no range validation (should be 1-1000)
+- `offset`: Integer, no range validation (should be >= 0)
+- `status`: String enum, no validation (should be: completed, failed, running, cancelled)
+- `experiment_id`: String, no format validation
+
+#### Entity/Relationship/Community Endpoints
+
+**Required Parameters**:
+- `entity_id`: Required for detail endpoints (no format validation)
+- `community_id`: Required for detail endpoints (no format validation)
+
+**Optional Parameters**:
+- `db_name`: String, no format validation
+- `query`: String, no length validation
+- `entity_type`: String enum, no validation (should match ontology types)
+- `min_confidence`: Float, no range validation (should be 0.0-1.0)
+- `min_source_count`: Integer, no range validation (should be >= 0)
+- `limit`: Integer, no range validation (should be 1-1000)
+- `offset`: Integer, no range validation (should be >= 0)
+- `max_hops`: Integer, no range validation (should be 1-10)
+- `max_nodes`: Integer, no range validation (should be 1-10000)
+
+#### Export Endpoints
+
+**Optional Parameters**:
+- `db_name`: String, no format validation
+- `entity_ids`: Comma-separated string, no format validation
+- `community_id`: String, no format validation
+
+### Validation Error Responses
+
+When validation fails, endpoints should return:
+
+```json
+{
+  "error": "Validation error: [specific message]",
+  "field": "parameter_name",
+  "value": "invalid_value",
+  "expected": "description of expected format/range"
+}
+```
+
+**Example**:
+```json
+{
+  "error": "Validation error: limit must be between 1 and 1000",
+  "field": "limit",
+  "value": "-5",
+  "expected": "Integer between 1 and 1000"
+}
+```
+
+**Note**: Currently, most validation errors result in 500 errors instead of 400 errors with descriptive messages.
+
+**Reference**: See `documentation/api/INPUT-VALIDATION-REVIEW.md` for detailed validation gaps.
+
+---
+
+## Security Considerations
+
+**Last Updated**: 2025-11-08
+
+### Current Security Posture
+
+**Authentication**: ❌ None (all endpoints publicly accessible)  
+**Authorization**: ❌ None (no access control)  
+**Rate Limiting**: ❌ None (no protection against abuse)  
+**Input Validation**: ⚠️ Basic (45+ gaps identified)  
+**Error Information Disclosure**: ⚠️ Medium (detailed error messages may leak information)
+
+### Security Recommendations
+
+#### Before Production Deployment
+
+1. **Implement Authentication**:
+   - Add API key or OAuth2 authentication
+   - Protect sensitive endpoints (pipeline control, export)
+
+2. **Implement Rate Limiting**:
+   - Prevent abuse and DoS attacks
+   - Recommended: 100 requests/minute per IP
+
+3. **Fix Input Validation**:
+   - Address 15 High priority validation gaps
+   - Prevent injection attacks
+   - Validate all user input
+
+4. **Sanitize MongoDB Queries**:
+   - Use parameterized queries
+   - Prevent NoSQL injection
+
+5. **Implement CORS Properly**:
+   - Restrict `Access-Control-Allow-Origin` to specific domains
+   - Don't use `*` in production
+
+6. **Error Message Sanitization**:
+   - Don't expose internal errors to clients
+   - Return generic error messages in production
+
+### Security Best Practices
+
+- **Never trust user input**: Always validate and sanitize
+- **Use parameterized queries**: Prevent injection attacks
+- **Limit error information**: Don't expose internal details
+- **Implement proper CORS**: Restrict origins in production
+- **Monitor API usage**: Detect and prevent abuse
+- **Keep dependencies updated**: Patch security vulnerabilities
+
+**Reference**: See `documentation/api/INPUT-VALIDATION-REVIEW.md` for detailed security concerns.
 
 ---
 
@@ -622,9 +991,14 @@ All endpoints may return error responses in the following format:
 
 Currently, no rate limiting is enforced. In production, consider implementing rate limiting to prevent abuse.
 
+**Recommended Limits**:
+- **Read endpoints**: 100 requests/minute per IP
+- **Write endpoints**: 20 requests/minute per IP
+- **Export endpoints**: 10 requests/minute per IP
+
 ---
 
-## Examples
+## Usage Examples
 
 ### Example: Start a Pipeline
 
@@ -635,11 +1009,83 @@ curl -X POST "http://localhost:8000/api/pipeline/start?db_name=mongo_hack" \
     "config": {
       "extraction": {
         "read_db_name": "mongo_hack",
-        "write_db_name": "mongo_hack"
+        "write_db_name": "mongo_hack",
+        "model_name": "gpt-4o-mini"
       },
-      "selected_stages": "extraction,resolution"
+      "selected_stages": "extraction,resolution,construction,detection",
+      "resume_from_failure": false
     }
   }'
+```
+
+**Response**:
+```json
+{
+  "pipeline_id": "pipeline_1234567890_abc123",
+  "status": "starting",
+  "message": "Pipeline started"
+}
+```
+
+### Example: Get Pipeline Status
+
+```bash
+curl "http://localhost:8000/api/pipeline/status?pipeline_id=pipeline_123&db_name=mongo_hack"
+```
+
+**Response**:
+```json
+{
+  "pipeline_id": "pipeline_123",
+  "status": "running",
+  "started_at": "2025-11-07T10:00:00",
+  "completed_at": null,
+  "configuration": {}
+}
+```
+
+### Example: Get Pipeline History
+
+```bash
+curl "http://localhost:8000/api/pipeline/history?db_name=mongo_hack&limit=10&offset=0&status=completed"
+```
+
+### Example: Cancel Pipeline
+
+```bash
+curl -X POST "http://localhost:8000/api/pipeline/cancel" \
+  -H "Content-Type: application/json" \
+  -d '{"pipeline_id": "pipeline_123"}'
+```
+
+### Example: Search Entities
+
+```bash
+curl "http://localhost:8000/api/entities/search?db_name=mongo_hack&query=John&entity_type=PERSON&min_confidence=0.8&limit=50"
+```
+
+### Example: Get Entity Details
+
+```bash
+curl "http://localhost:8000/api/entities/entity_123?db_name=mongo_hack"
+```
+
+### Example: Search Relationships
+
+```bash
+curl "http://localhost:8000/api/relationships/search?db_name=mongo_hack&predicate=works_for&limit=50"
+```
+
+### Example: Search Communities
+
+```bash
+curl "http://localhost:8000/api/communities/search?db_name=mongo_hack&level=1&min_size=10&sort_by=entity_count&limit=50"
+```
+
+### Example: Get Community Details
+
+```bash
+curl "http://localhost:8000/api/communities/community_123?db_name=mongo_hack"
 ```
 
 ### Example: Get Entity Ego Network
@@ -654,6 +1100,37 @@ curl "http://localhost:8000/api/ego/network/entity_123?db_name=mongo_hack&max_ho
 curl "http://localhost:8000/api/export/graphml?db_name=mongo_hack&community_id=community_123" \
   -o community_123.graphml
 ```
+
+### Example: Get Quality Metrics
+
+```bash
+curl "http://localhost:8000/api/quality/metrics?db_name=mongo_hack&stage=detection"
+```
+
+### Example: Get Graph Statistics
+
+```bash
+curl "http://localhost:8000/api/graph/statistics?db_name=mongo_hack"
+```
+
+### Example: CORS Preflight Request
+
+```bash
+curl -X OPTIONS "http://localhost:8000/api/pipeline/start" \
+  -H "Origin: http://localhost:3000" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: Content-Type"
+```
+
+**Expected Response Headers**:
+```
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET, POST, OPTIONS
+Access-Control-Allow-Headers: Content-Type
+Access-Control-Max-Age: 3600
+```
+
+**Note**: CORS preflight support may vary by endpoint (see Known Issues section).
 
 ---
 
@@ -685,10 +1162,42 @@ status = requests.get(
 ).json()
 ```
 
+### JavaScript/TypeScript Example
+
+```javascript
+const BASE_URL = "http://localhost:8000";
+
+// Start pipeline
+const response = await fetch(`${BASE_URL}/api/pipeline/start?db_name=mongo_hack`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    config: {
+      extraction: {
+        read_db_name: "mongo_hack",
+        write_db_name: "mongo_hack",
+      },
+    },
+  }),
+});
+
+const data = await response.json();
+const pipelineId = data.pipeline_id;
+
+// Check status
+const statusResponse = await fetch(
+  `${BASE_URL}/api/pipeline/status?pipeline_id=${pipelineId}&db_name=mongo_hack`
+);
+const status = await statusResponse.json();
+```
+
 ---
 
 ## Version
 
 **API Version:** 1.0  
-**Last Updated:** 2025-11-07
+**Last Updated:** 2025-01-27  
+**Documentation Updated:** 2025-01-27 (Achievement 3.3: API Documentation Updated)
 

@@ -164,6 +164,9 @@ GRAMMAPLAN → PLAN → SUBPLAN → EXECUTION_TASK
 
 ```
 LLM/
+├── index/               # 🔍 File index for fast discovery
+│   ├── FILE-INDEX.md    # Central catalog of all methodology files ⭐
+│   └── README.md        # How to use the index
 ├── protocols/           # How to start, resume, complete work
 │   ├── IMPLEMENTATION_START_POINT.md
 │   ├── IMPLEMENTATION_RESUME.md
@@ -180,6 +183,10 @@ LLM/
 │   ├── MULTI-LLM-PROTOCOL.md
 │   ├── GRAMMAPLAN-GUIDE.md
 │   └── IMPLEMENTATION_MID_PLAN_REVIEW.md
+├── scripts/             # Automation scripts
+│   ├── archiving/       # Archiving scripts
+│   ├── generation/      # Prompt generation
+│   └── validation/      # Validation scripts
 ├── examples/            # Example PLANs and workflows
 │   └── (to be populated)
 ├── QUICK-START.md       # 5-minute getting started
@@ -189,6 +196,39 @@ LLM/
 **Active Work**: Lives in project root (PLAN*\*.md, SUBPLAN*_.md, EXECUTION\__.md)
 
 **Completed Work**: Lives in `documentation/archive/`
+
+**🔍 Quick File Discovery**: See `LLM/index/FILE-INDEX.md` for complete catalog of all methodology files
+
+---
+
+## 🏷️ Metadata Tags and Virtual Organization
+
+**Purpose**: Organize files by metadata rather than physical directory structure.
+
+**Key Concept**: **Virtual Organization**
+- Files stay in root directory (no physical moves needed)
+- Organized by metadata tags (type, status, plan, achievement, priority)
+- Search tool queries by tags (see `PLAN_FILE-MOVING-ADVANCED-OPTIMIZATION.md`)
+- No reference updates when organizing (tags change, not file locations)
+
+**Standard Tags**:
+- **type**: PLAN, SUBPLAN, EXECUTION_TASK, EXECUTION_ANALYSIS, GRAMMAPLAN
+- **status**: active, complete, paused, archived, abandoned
+- **plan**: Parent PLAN name (for SUBPLANs and EXECUTION_TASKs)
+- **achievement**: Achievement number (e.g., 1.1, 2.3)
+- **priority**: Priority level (0-4, for PLANs)
+- **created**: Creation date
+- **completed**: Completion date (for completed work)
+
+**Benefits**:
+- No file moving needed (eliminates all moving overhead)
+- No reference updates (files don't move)
+- Flexible organization (query by any tag combination)
+- Fast discovery with search tool (future)
+
+**Current Status**: Metadata tags documented, templates updated. Full value realized when search tool implemented (see `PLAN_FILE-MOVING-ADVANCED-OPTIMIZATION.md`).
+
+**Documentation**: See `LLM/guides/METADATA-TAGS.md` for complete tag system documentation, usage examples, and conventions.
 
 ---
 

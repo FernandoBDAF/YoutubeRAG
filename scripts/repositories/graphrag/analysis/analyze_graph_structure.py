@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 import networkx as nx
 
 # Add project root to path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
 sys.path.insert(0, project_root)
 
 from dependencies.database.mongodb import get_mongo_client
@@ -168,9 +168,7 @@ def analyze_graph_structure():
         print(f"  Top 10 most connected entities:")
         for i, (entity_id, degree) in enumerate(top_nodes, 1):
             entity_info = entity_data[entity_id]
-            print(
-                f"    {i}. {entity_info['name']} ({entity_info['type']}): {degree} connections"
-            )
+            print(f"    {i}. {entity_info['name']} ({entity_info['type']}): {degree} connections")
     else:
         print("  No highly connected entities (degree ≥ 5)")
     print()
@@ -190,9 +188,7 @@ def analyze_graph_structure():
             print(f"    Average path length: {avg_path_length:.2f}")
             print(f"    Diameter: {diameter}")
         else:
-            print(
-                f"  Largest component (size={len(largest_component)}) is not connected"
-            )
+            print(f"  Largest component (size={len(largest_component)}) is not connected")
     else:
         print("  No large connected components")
     print()

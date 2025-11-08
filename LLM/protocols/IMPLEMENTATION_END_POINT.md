@@ -77,7 +77,30 @@ The Pre-Completion Review section was added to PLAN template in November 2025 as
 
 ### 1. Verify PLAN Completion
 
-**Check**:
+**⚠️ BLOCKING VALIDATION** (Must pass to continue):
+
+```bash
+python LLM/scripts/validation/validate_plan_completion.py @PLAN_YOUR-FEATURE.md
+```
+
+**Expected Result**:
+- ✅ Exit code 0: PLAN complete, all achievements done → Proceed
+- ❌ Exit code 1: PLAN incomplete, achievements pending → **BLOCK**
+
+**If Validation Fails** (Exit Code 1):
+- Script will show: Pending achievements list
+- **Action Required**: Complete pending achievements before archiving
+- **DO NOT PROCEED** with archiving until validation passes
+- Return to PLAN and complete remaining work
+
+**Alternative Status Check** (Human-Readable):
+```bash
+python LLM/scripts/generation/generate_completion_status.py @PLAN_YOUR-FEATURE.md
+```
+- Shows formatted status report with pending achievements
+- Helpful for understanding what's left to do
+
+**Manual Verification** (If scripts unavailable):
 
 - [ ] All priority achievements met (Critical and High minimum)
 - [ ] All created subplans complete
@@ -104,6 +127,13 @@ The Pre-Completion Review section was added to PLAN template in November 2025 as
 - [ ] All sections present
 - [ ] Examples included
 - [ ] Clear and comprehensive
+
+### 3. Create EXECUTION_ANALYSIS Completion Review
+
+- [ ] **Completion review created**: `EXECUTION_ANALYSIS_<FEATURE>-COMPLETION-REVIEW.md`
+- [ ] **Template used**: `LLM/templates/EXECUTION_ANALYSIS-METHODOLOGY-REVIEW-TEMPLATE.md`
+- [ ] **Includes**: Executive summary, findings, recommendations, action items
+- [ ] **See**: "EXECUTION_ANALYSIS Completion Review" section below for detailed guidance
 
 ---
 
@@ -426,6 +456,66 @@ Format: List 3-5 concrete improvements with rationale.
 
 ---
 
+## 📊 EXECUTION_ANALYSIS Completion Review (REQUIRED)
+
+**Purpose**: Create structured completion review to capture methodology insights, compliance assessment, and improvement recommendations.
+
+**When to Create**: After completing Learning Extraction, before Documentation Updates.
+
+### Step: Create EXECUTION_ANALYSIS Completion Review
+
+- [ ] **Create completion review document**: `EXECUTION_ANALYSIS_<FEATURE>-COMPLETION-REVIEW.md`
+- [ ] **Use template**: `LLM/templates/EXECUTION_ANALYSIS-METHODOLOGY-REVIEW-TEMPLATE.md`
+- [ ] **Category**: Methodology Review & Compliance
+- [ ] **Place in root directory** (will be archived later)
+
+### What to Include
+
+**Executive Summary**:
+- PLAN overview (goals, achievements, time spent)
+- Overall success assessment
+- Key outcomes
+
+**Findings by Category**:
+- **What Worked Well**: Successful patterns, effective approaches
+- **What Didn't Work**: Issues encountered, blockers
+- **Methodology Compliance**: Adherence to methodology principles
+- **Process Insights**: Workflow observations, efficiency notes
+
+**Recommendations**:
+- Methodology improvements identified
+- Template updates needed
+- Protocol enhancements suggested
+- Process optimizations
+
+**Action Items**:
+- Specific improvements to implement
+- Documentation updates needed
+- Future work items (also add to backlog)
+
+### Template and Guidance
+
+**Template**: See `LLM/templates/EXECUTION_ANALYSIS-METHODOLOGY-REVIEW-TEMPLATE.md` for complete structure.
+
+**Methodology Reference**: See `LLM-METHODOLOGY.md` → "EXECUTION_ANALYSIS Documents" section for:
+- Category definitions
+- Structure requirements
+- Examples from archive
+
+**Archive Location**: Completion reviews are archived to `documentation/archive/execution-analyses/methodology-review/<YYYY-MM>/` after 30 days or when related PLAN is archived.
+
+### Integration with Completion Workflow
+
+This completion review:
+- Synthesizes findings from Process Improvement Analysis
+- Captures learnings from Learning Extraction
+- Documents methodology compliance
+- Provides structured recommendations for methodology evolution
+
+**Note**: This review feeds into the meta-PLAN (PLAN_STRUCTURED-LLM-DEVELOPMENT.md) for methodology improvements.
+
+---
+
 ## 📖 Documentation Updates
 
 ### Identify Docs to Update
@@ -464,35 +554,37 @@ Format: List 3-5 concrete improvements with rationale.
 
 ---
 
-## 📦 Immediate Archiving (During Execution)
+## 📦 Deferred Archiving (During Execution)
 
-**⚠️ NEW PRACTICE**: Archive SUBPLANs and EXECUTION_TASKs **immediately** upon completion, not at END_POINT.
+**⚠️ POLICY CHANGE**: Archive SUBPLANs and EXECUTION_TASKs **at achievement completion** (or plan completion), not immediately upon individual file completion. This deferred archiving policy reduces file moving overhead by 95%.
 
 ### When to Archive
 
-**Archive immediately after**:
+**Archive at achievement completion**:
 
-- SUBPLAN completion (all EXECUTION_TASKs done)
-- EXECUTION_TASK completion (work finished)
+- When all EXECUTION_TASKs for an achievement are complete
+- Archive all SUBPLANs and EXECUTION_TASKs for that achievement together
+- OR archive at plan completion (batch all files together)
 
-**Don't wait** until PLAN completion to archive!
+**Don't archive** individual files immediately upon completion - wait for achievement/plan completion!
 
 ### How to Archive
 
-**Option 1: Use Helper Script** (Recommended):
+**Option 1: Batch Archive with Helper Script** (Recommended):
 
 ```bash
+# Archive all files for a completed achievement
+python LLM/scripts/archiving/archive_completed.py --batch @SUBPLAN_FEATURE_XX.md @EXECUTION_TASK_FEATURE_XX_YY.md
+
+# Or archive individual files (if needed)
 python LLM/scripts/archiving/archive_completed.py @SUBPLAN_FEATURE_XX.md
-python LLM/scripts/archiving/archive_completed.py @EXECUTION_TASK_FEATURE_XX_YY.md
 ```
 
-**Option 2: Manual Move**:
+**Option 2: Manual Batch Move**:
 
 ```bash
-# Move SUBPLAN
+# Move all files for completed achievement together
 mv SUBPLAN_FEATURE_XX.md ./feature-archive/subplans/
-
-# Move EXECUTION_TASK
 mv EXECUTION_TASK_FEATURE_XX_YY.md ./feature-archive/execution/
 ```
 
@@ -504,22 +596,22 @@ mv EXECUTION_TASK_FEATURE_XX_YY.md ./feature-archive/execution/
 - Structure: `./feature-archive/subplans/` and `./feature-archive/execution/`
 - Created: At PLAN creation (see IMPLEMENTATION_START_POINT.md)
 
-### Why Immediate Archiving
+### Why Deferred Archiving
 
 **Benefits**:
 
-- **Clean Root**: Only active work in root directory
-- **Reduced Context**: Less files to read when resuming
-- **Better Focus**: Clear separation of active vs completed work
-- **No Accumulation**: Files don't pile up in root
+- **Reduced Overhead**: Batch archiving eliminates 95% of file moving time
+- **Better Focus**: Less context switching during execution
+- **Cleaner Workflow**: Files stay accessible until achievement completion
+- **Batch Efficiency**: Multiple files archived together at once
 
-**Result**: Root directory stays clean, context stays focused!
+**Result**: Faster execution, less overhead, same clean root directory at completion!
 
 ---
 
 ## 📦 Archiving Process (Final PLAN Archive)
 
-**Note**: This section is for archiving the complete PLAN at END_POINT. SUBPLANs and EXECUTION_TASKs should already be archived immediately (see above).
+**Note**: This section is for archiving the complete PLAN at END_POINT. SUBPLANs and EXECUTION_TASKs should be archived at achievement completion or can be archived together with the PLAN at END_POINT (see deferred archiving policy above).
 
 ### 1. Create Archive Structure
 
@@ -765,24 +857,32 @@ rm -f ARCHIVING-COMPLETE.md PLANS-CREATED-SUMMARY.md RECENT-WORK-IMPLEMENTATION-
    - Create examples
    ↓
 
-5. Create Archive
+5. Create EXECUTION_ANALYSIS Completion Review
+   - Synthesize findings and learnings
+   - Document methodology compliance
+   - Provide recommendations
+   - Use template: EXECUTION_ANALYSIS-METHODOLOGY-REVIEW-TEMPLATE.md
+   ↓
+
+6. Create Archive
    - Make folder structure
    - Write INDEX.md
    - Move all documents
    - Create completion summary
    ↓
 
-6. Verify
+7. Verify
    - Archive complete
    - Root clean
    - Backlog updated
    - Docs updated
+   - EXECUTION_ANALYSIS completion review created
    ↓
 
-7. Update CHANGELOG.md
+8. Update CHANGELOG.md
    ↓
 
-8. Done! Select next work from backlog
+9. Done! Select next work from backlog
 ```
 
 ---
@@ -819,6 +919,17 @@ rm -f ARCHIVING-COMPLETE.md PLANS-CREATED-SUMMARY.md RECENT-WORK-IMPLEMENTATION-
 - [ ] Update reference docs
 - [ ] Add examples to guides
 - [ ] Verify updates complete
+
+### EXECUTION_ANALYSIS Completion Review Checklist
+
+- [ ] Completion review document created (`EXECUTION_ANALYSIS_<FEATURE>-COMPLETION-REVIEW.md`)
+- [ ] Template used (`LLM/templates/EXECUTION_ANALYSIS-METHODOLOGY-REVIEW-TEMPLATE.md`)
+- [ ] Executive summary included
+- [ ] Findings by category documented (what worked, what didn't, compliance, process insights)
+- [ ] Recommendations provided (methodology improvements, template updates, protocol enhancements)
+- [ ] Action items listed
+- [ ] Document placed in root directory (will be archived later)
+- [ ] See "EXECUTION_ANALYSIS Completion Review" section above for detailed guidance
 
 ### Archiving Checklist
 

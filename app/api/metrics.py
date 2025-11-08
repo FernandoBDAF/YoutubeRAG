@@ -8,12 +8,13 @@ Part of the APP layer - external interface.
 """
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
+import json
 import logging
 import os
 import sys
 
 # Add project root to Python path for imports
-_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
@@ -40,12 +41,29 @@ class MetricsHandler(BaseHTTPRequestHandler):
                 self.wfile.write(metrics_text.encode("utf-8"))
             except Exception as e:
                 self.send_response(500)
-                self.send_header("Content-Type", "text/plain")
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
-                self.wfile.write(f"Error: {e}".encode("utf-8"))
+                error_response = json.dumps({"error": str(e)})
+                self.wfile.write(error_response.encode("utf-8"))
         else:
             self.send_response(404)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
+            error_response = json.dumps(
+                {"error": "Not found", "message": f"Unknown endpoint: {self.path}"}
+            )
+            self.wfile.write(error_response.encode("utf-8"))
+
+    def do_OPTIONS(self):
+        """Handle CORS preflight requests."""
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "3600")
+        self.end_headers()
 
     def log_message(self, format, *args):
         """Suppress default HTTP logging."""

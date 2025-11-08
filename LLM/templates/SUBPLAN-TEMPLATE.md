@@ -1,10 +1,15 @@
 # SUBPLAN: [Brief Title]
 
+**Type**: SUBPLAN  
 **Mother Plan**: PLAN\_[FEATURE].md  
+**Plan**: [FEATURE-NAME]  
 **Achievement Addressed**: Achievement X.Y ([Achievement title])  
+**Achievement**: [X.Y]  
 **Status**: Not Started / In Progress / Complete  
 **Created**: [YYYY-MM-DD HH:MM UTC]  
 **Estimated Effort**: [X-Y hours]
+
+**Metadata Tags**: See `LLM/guides/METADATA-TAGS.md` for virtual organization system
 
 [FILL: Use UTC timestamps. Example: 2025-11-05 14:30 UTC]
 

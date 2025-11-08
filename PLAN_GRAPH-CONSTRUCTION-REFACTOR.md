@@ -26,7 +26,7 @@
 5. **Where to Get Help**:
    - Read IMPLEMENTATION_START_POINT.md for methodology
    - Review existing code: `business/stages/graphrag/graph_construction.py`, `business/agents/graphrag/relationship_resolution.py`
-   - Check EXECUTION_ANALYSIS_GRAPH-CONSTRUCTION-REVIEW.md (analysis of ChatGPT feedback)
+   - Check `documentation/archive/execution-analyses/implementation-review/2025-11/EXECUTION_ANALYSIS_GRAPH-CONSTRUCTION-REVIEW.md` (analysis of ChatGPT feedback)
 
 **Self-Contained**: This PLAN contains everything you need to execute it.
 
@@ -695,7 +695,7 @@ Refactor graph construction to fix critical bugs (relationship existence checks,
 
 ### If Starting Now
 
-1. Read ChatGPT analysis in EXECUTION_ANALYSIS_GRAPH-CONSTRUCTION-REVIEW.md
+1. Read ChatGPT analysis in `documentation/archive/execution-analyses/implementation-review/2025-11/EXECUTION_ANALYSIS_GRAPH-CONSTRUCTION-REVIEW.md`
 2. Review current code: `business/stages/graphrag/graph_construction.py`
 3. Create SUBPLAN_01 for Achievement 0.1
 4. Write tests first (TDD)

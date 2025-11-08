@@ -289,6 +289,45 @@ Create a PLAN when:
 
 **Before Creating PLAN**: Check `ACTIVE_PLANS.md` for related PLANs and dependencies. See `LLM/guides/MULTIPLE-PLANS-PROTOCOL.md` for managing multiple PLANs.
 
+### Strategic Decision Support with EXECUTION_ANALYSIS
+
+**When facing complex decisions during planning**, consider creating an EXECUTION_ANALYSIS document to:
+
+- Analyze blockers or methodology gaps
+- Investigate quality issues or bugs
+- Review process effectiveness
+- Evaluate multiple solution options
+- Document root cause analysis
+
+**When to Create EXECUTION_ANALYSIS**:
+
+- **Blockers**: Work is blocked and root cause needs investigation
+- **Methodology Gaps**: Process or workflow issues discovered
+- **Quality Issues**: Performance, correctness, or reliability problems
+- **Strategic Decisions**: Multiple approaches to evaluate
+- **Post-Mortems**: Understanding what went wrong/right
+
+**Quick Decision Tree**:
+
+```
+Facing complex decision or issue?
+├─ Is it blocking work? → Create EXECUTION_ANALYSIS
+├─ Multiple solutions to evaluate? → Create EXECUTION_ANALYSIS
+├─ Need root cause analysis? → Create EXECUTION_ANALYSIS
+├─ Process/methodology issue? → Create EXECUTION_ANALYSIS
+└─ Simple, clear path forward? → Proceed with PLAN
+```
+
+**Templates Available**:
+
+- `LLM/templates/EXECUTION_ANALYSIS-METHODOLOGY-REVIEW-TEMPLATE.md` - For methodology reviews
+- `LLM/templates/EXECUTION_ANALYSIS-PLANNING-STRATEGY-TEMPLATE.md` - For strategic planning decisions
+- See `LLM-METHODOLOGY.md` → "EXECUTION_ANALYSIS Documents" section for all categories
+
+**Archive Location**: `documentation/archive/execution-analyses/` (organized by category and date)
+
+**Reference**: See `LLM-METHODOLOGY.md` for complete EXECUTION_ANALYSIS workflow and categorization.
+
 ### Create Archive Folder at Plan Start
 
 **⚠️ CRITICAL**: Create archive folder immediately when creating PLAN.

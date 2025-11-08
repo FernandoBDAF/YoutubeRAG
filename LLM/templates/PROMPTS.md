@@ -273,12 +273,13 @@ Completion Checklist:
    - [ ] Update technical guides with new patterns
    - [ ] Document key decisions and rationale
 
-6. Archive Creation
+6. Archive Creation (Deferred Archiving)
    - [ ] Create: documentation/archive/[feature]-[date]/
-   - [ ] Move: SUBPLANs, EXECUTION_TASKs, EXECUTION_ANALYSIS
+   - [ ] Move: SUBPLANs, EXECUTION_TASKs, EXECUTION_ANALYSIS (batch archive at plan completion)
    - [ ] Create: INDEX.md
    - [ ] Create: summary/[FEATURE]-COMPLETE.md
    - [ ] Keep PLAN in root or move based on importance
+   - Note: Files archived at plan completion per deferred archiving policy (see IMPLEMENTATION_END_POINT.md)
 
 7. Final Updates
    - [ ] Update @ACTIVE_PLANS.md (move to "Recently Completed")

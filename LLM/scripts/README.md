@@ -82,10 +82,28 @@ LLM/scripts/
 **Scripts**:
 
 1. **generate_prompt.py**
+
    - Generates methodology-compliant prompts for LLM execution
-   - Usage: `python LLM/scripts/generation/generate_prompt.py @PLAN_FEATURE.md --next`
+   - Usage: `python LLM/scripts/generation/generate_prompt.py --next --clipboard @PLAN_FEATURE.md`
    - Options: `--next`, `--achievement X.Y`, `--clipboard`
    - Auto-detects context boundaries and validation scripts
+
+2. **generate_pause_prompt.py**
+
+   - Generates prompt to pause a PLAN
+   - Usage: `python LLM/scripts/generation/generate_pause_prompt.py @PLAN_FEATURE.md --clipboard`
+   - Includes checklist for pausing properly
+
+3. **generate_resume_prompt.py**
+
+   - Generates prompt to resume a paused PLAN
+   - Usage: `python LLM/scripts/generation/generate_resume_prompt.py @PLAN_FEATURE.md --clipboard`
+   - Includes pre-resume checklist from IMPLEMENTATION_RESUME.md
+
+4. **generate_verify_prompt.py**
+   - Generates prompt to verify PLAN status and fix inconsistencies
+   - Usage: `python LLM/scripts/generation/generate_verify_prompt.py @PLAN_FEATURE.md --clipboard`
+   - Runs validate_mid_plan.py and provides fix instructions
 
 ---
 
@@ -111,6 +129,24 @@ LLM/scripts/
 
 ```bash
 python LLM/scripts/generation/generate_prompt.py @PLAN_FEATURE.md --next --clipboard
+```
+
+**Pause PLAN**:
+
+```bash
+python LLM/scripts/generation/generate_pause_prompt.py @PLAN_FEATURE.md --clipboard
+```
+
+**Resume PLAN**:
+
+```bash
+python LLM/scripts/generation/generate_resume_prompt.py @PLAN_FEATURE.md --clipboard
+```
+
+**Verify PLAN status**:
+
+```bash
+python LLM/scripts/generation/generate_verify_prompt.py @PLAN_FEATURE.md --clipboard
 ```
 
 **Validate achievement before marking complete**:

@@ -42,6 +42,7 @@ def extract_statistics(plan_path: Path) -> dict:
 def count_actual_subplans(plan_path: Path) -> int:
     """Count actual SUBPLAN files for this PLAN."""
     feature = plan_path.stem.replace("PLAN_", "")
+    # Use exact pattern to avoid matching other plans
     subplan_pattern = f"SUBPLAN_{feature}_*.md"
     subplan_files = list(Path(".").glob(subplan_pattern))
     # Also check archive
@@ -49,7 +50,9 @@ def count_actual_subplans(plan_path: Path) -> int:
     if archive_location.exists():
         archived = list((archive_location / "subplans").glob(f"SUBPLAN_{feature}_*.md"))
         subplan_files.extend(archived)
-    return len(subplan_files)
+    # Filter to ensure exact match (handle edge cases)
+    exact_matches = [f for f in subplan_files if f.stem.startswith(f"SUBPLAN_{feature}_")]
+    return len(exact_matches)
 
 
 def count_actual_execution_tasks(plan_path: Path) -> int:
@@ -62,7 +65,9 @@ def count_actual_execution_tasks(plan_path: Path) -> int:
     if archive_location.exists():
         archived = list((archive_location / "execution").glob(f"EXECUTION_TASK_{feature}_*.md"))
         execution_files.extend(archived)
-    return len(execution_files)
+    # Filter to ensure exact match (handle edge cases)
+    exact_matches = [f for f in execution_files if f.stem.startswith(f"EXECUTION_TASK_{feature}_")]
+    return len(exact_matches)
 
 
 def get_archive_location(plan_path: Path) -> Path:
@@ -224,6 +229,12 @@ Exit Codes:
 
     parser.add_argument("plan_file", help="PLAN file (e.g., @PLAN_FEATURE.md or PLAN_FEATURE.md)")
 
+    parser.add_argument(
+        "--generate-fix-prompt",
+        action="store_true",
+        help="Generate fix prompt instead of blocking (for use in generate_verify_prompt.py)",
+    )
+
     args = parser.parse_args()
 
     try:
@@ -235,6 +246,10 @@ Exit Codes:
 
         # Print message
         print(message)
+
+        # If --generate-fix-prompt, always exit 0 (prompt generation, not blocking)
+        if args.generate_fix_prompt:
+            sys.exit(0)
 
         # Exit code
         sys.exit(0 if pass_check else 1)
