@@ -465,3 +465,127 @@ python LLM/scripts/migration/validate_migration.py
 
 **Questions?** See Achievement 0.2 SUBPLAN for implementation details.
 
+---
+
+## 📋 Migration: Legacy Completion Tracking → Filesystem-First
+
+**Date Added**: 2025-11-13  
+**Related Achievement**: PLAN_PROMPT-GENERATOR-UX-AND-FOUNDATION Achievement 2.5, 2.8  
+**Migration Script**: `LLM/scripts/migration/migrate_legacy_completions.py`
+
+### What Changed
+
+**OLD Pattern** (Legacy):
+- Achievement completion tracked by markdown checkmarks in PLAN
+- "Current Status & Handoff" section manually updated with "✅ Achievement X.Y complete"
+- PLAN Achievement Index manually updated with checkmarks
+- State detection via markdown parsing
+
+**NEW Pattern** (Filesystem-First):
+- Achievement completion tracked by `APPROVED_XX.md` files in `execution/feedbacks/` folder
+- Achievement Index defines structure, NOT state
+- Filesystem = single source of truth
+- State detection via file existence checks
+
+### Why This Change
+
+- **Eliminates Markdown Parsing**: No more regex fragility
+- **Single Source of Truth**: Files, not markdown text
+- **Clear Audit Trail**: Feedback files contain timestamp, rationale, reviewer
+- **Automated Detection**: Scripts check for file existence (fast, reliable)
+- **FIX Feedback Support**: `FIX_XX.md` files for issues requiring resolution
+
+### Migration Steps
+
+**Step 1: Create Feedback Structure**
+
+```bash
+# For each PLAN in work-space/plans/
+mkdir -p work-space/plans/[FEATURE]/execution/feedbacks
+```
+
+**Step 2: Detect Legacy Completions**
+
+```bash
+# Use migration script to detect completed achievements
+python LLM/scripts/migration/migrate_legacy_completions.py --plan work-space/plans/[FEATURE]/PLAN_*.md --dry-run
+```
+
+**Script detects 3 patterns**:
+1. Checkmarks in Achievement Index: `- [x] Achievement X.Y`
+2. "Current Status & Handoff" mentions: "✅ Achievement X.Y complete"
+3. SUBPLAN + EXECUTION_TASK completed
+
+**Step 3: Generate APPROVED Files**
+
+```bash
+# Apply migration (creates APPROVED_XX.md files)
+python LLM/scripts/migration/migrate_legacy_completions.py --plan work-space/plans/[FEATURE]/PLAN_*.md --apply
+```
+
+**Step 4: Validate Migration**
+
+```bash
+# Check migration was successful
+python LLM/scripts/validation/validate_feedback_system.py --plan work-space/plans/[FEATURE]/PLAN_*.md
+```
+
+**Step 5: Update PLAN (Manual)**
+
+- Remove checkmarks from Achievement Index
+- Update "Current Status & Handoff" to reference next achievement (without "✅ complete" markers)
+- Add note: "Achievement completion tracked via execution/feedbacks/ (filesystem-first)"
+
+### Migration Example
+
+**Before** (Legacy PLAN):
+
+```markdown
+## 📋 Desirable Achievements
+
+- [x] **Achievement 0.1**: Foundation Setup
+- [x] **Achievement 0.2**: Core Implementation
+- [ ] **Achievement 0.3**: Testing & Validation
+
+## Current Status & Handoff
+
+✅ Achievement 0.1 complete (2025-11-10)
+✅ Achievement 0.2 complete (2025-11-11)
+
+Next: Achievement 0.3 (Testing & Validation)
+```
+
+**After** (Filesystem-First):
+
+```markdown
+## 📋 Desirable Achievements
+
+**Achievement 0.1**: Foundation Setup  
+**Achievement 0.2**: Core Implementation  
+**Achievement 0.3**: Testing & Validation
+
+## Current Status & Handoff
+
+**Completion Tracking**: Filesystem-first via execution/feedbacks/ (see APPROVED_01.md, APPROVED_02.md)
+
+**Next**: Achievement 0.3 (Testing & Validation)
+```
+
+**Filesystem**:
+```
+work-space/plans/FEATURE/execution/feedbacks/
+├── APPROVED_01.md  (Achievement 0.1 approved 2025-11-10)
+└── APPROVED_02.md  (Achievement 0.2 approved 2025-11-11)
+```
+
+### Reference
+
+- **Guide**: `LLM/docs/FEEDBACK_SYSTEM_GUIDE.md`
+- **Validation**: `LLM/scripts/validation/validate_feedback_system.py`
+- **Migration**: `LLM/scripts/migration/migrate_legacy_completions.py`
+- **Templates**: `LLM/templates/PLAN-TEMPLATE.md`, `LLM/templates/SUBPLAN-TEMPLATE.md`
+
+---
+
+**Migration Support**: See `LLM/docs/FEEDBACK_SYSTEM_GUIDE.md` for complete guidance.
+

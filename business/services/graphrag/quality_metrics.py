@@ -627,13 +627,17 @@ class QualityMetricsService:
             # Store in quality_metrics (time-series)
             metrics_collection = self.db[self.QUALITY_METRICS]
             
+            # Performance Optimization (Achievement 7.2):
+            # Batch all metrics into a list and use insert_many() instead of multiple insert_one() calls
+            metric_documents = []
+            
             # Store each stage's metrics separately for time-series queries
             for stage in ["extraction", "resolution", "construction", "detection"]:
                 stage_metrics = metrics.get(stage, {})
                 if not stage_metrics:
                     continue
                 
-                # Store each metric as a separate document for time-series
+                # Collect all metric documents for this stage
                 for metric_name, metric_value in stage_metrics.items():
                     # Skip non-numeric metrics
                     if not isinstance(metric_value, (int, float)):
@@ -646,7 +650,7 @@ class QualityMetricsService:
                         min_val, max_val = healthy_range
                         in_range = min_val <= metric_value <= max_val
                     
-                    metrics_collection.insert_one({
+                    metric_documents.append({
                         "trace_id": trace_id,
                         "timestamp": timestamp,
                         "stage": stage,
@@ -656,7 +660,11 @@ class QualityMetricsService:
                         "in_range": in_range,
                     })
             
-            logger.info(f"Stored metrics for trace_id={trace_id}")
+            # Batch insert all metrics at once
+            if metric_documents:
+                metrics_collection.insert_many(metric_documents, ordered=False)
+                logger.info(f"Stored {len(metric_documents)} metrics for trace_id={trace_id}")
+            
             return True
             
         except Exception as e:

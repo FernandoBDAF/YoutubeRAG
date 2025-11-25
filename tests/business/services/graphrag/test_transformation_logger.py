@@ -23,9 +23,11 @@ class TestTransformationLogger(unittest.TestCase):
 
     def test_init_enabled(self):
         """Test logger initialization with logging enabled."""
-        logger = TransformationLogger(self.db, enabled=True)
+        logger = TransformationLogger(self.db, enabled=True, batch_size=50)
         self.assertTrue(logger.enabled)
         self.assertEqual(logger.collection, self.collection)
+        self.assertEqual(logger.batch_size, 50)
+        self.assertEqual(len(logger._buffer), 0)
         # Verify indexes were created
         self.assertTrue(self.collection.create_index.called)
 
@@ -34,11 +36,72 @@ class TestTransformationLogger(unittest.TestCase):
         logger = TransformationLogger(self.db, enabled=False)
         self.assertFalse(logger.enabled)
         self.assertIsNone(logger.collection)
+    
+    def test_buffer_functionality(self):
+        """Test that logs are buffered and flushed correctly."""
+        # Configure mock to return a proper result for insert_many
+        mock_result = MagicMock()
+        mock_result.inserted_ids = ["id1", "id2", "id3"]
+        self.collection.insert_many.return_value = mock_result
+        
+        logger = TransformationLogger(self.db, enabled=True, batch_size=3)
+        
+        entity_a = {"id": "entity_a_123", "name": "Python"}
+        entity_b = {"id": "entity_b_456", "name": "Python Programming"}
+        result_entity = {"id": "entity_b_456", "name": "Python"}
+        
+        # Log 2 operations - should buffer without flush
+        logger.log_entity_merge(entity_a, entity_b, result_entity, "fuzzy_match", 0.95, 0.90, "levenshtein", "trace_1")
+        logger.log_entity_create(entity_a, "TECH", 1, 0.9, "trace_1")
+        
+        # Buffer should have 2 entries, no insert_many called yet
+        self.assertEqual(len(logger._buffer), 2)
+        self.assertFalse(self.collection.insert_many.called)
+        
+        # Log 3rd operation - should trigger flush
+        logger.log_entity_skip(entity_a, "stopword", 0.1, "trace_1")
+        
+        # Buffer should be empty after flush, insert_many should be called
+        self.assertEqual(len(logger._buffer), 0)
+        self.assertTrue(self.collection.insert_many.called)
+        # Verify 3 documents were inserted
+        call_args = self.collection.insert_many.call_args[0][0]
+        self.assertEqual(len(call_args), 3)
+    
+    def test_manual_flush(self):
+        """Test manual buffer flush."""
+        # Configure mock return value
+        mock_result = MagicMock()
+        mock_result.inserted_ids = ["id1", "id2"]
+        self.collection.insert_many.return_value = mock_result
+        
+        logger = TransformationLogger(self.db, enabled=True, batch_size=100)
+        
+        entity = {"id": "entity_123", "name": "Test"}
+        
+        # Log a few operations (less than batch_size)
+        logger.log_entity_create(entity, "TECH", 1, 0.9, "trace_1")
+        logger.log_entity_create(entity, "TECH", 1, 0.9, "trace_1")
+        
+        # Buffer should have 2 entries
+        self.assertEqual(len(logger._buffer), 2)
+        
+        # Manually flush
+        count = logger.flush_buffer()
+        
+        # Should return 2 (flushed 2 entries)
+        self.assertEqual(count, 2)
+        self.assertEqual(len(logger._buffer), 0)
+        self.assertTrue(self.collection.insert_many.called)
 
     def test_log_entity_merge(self):
         """Test logging entity merge operation."""
-        logger = TransformationLogger(self.db, enabled=True)
-        self.collection.insert_one.return_value.inserted_id = "test_id"
+        # Configure mock return value
+        mock_result = MagicMock()
+        mock_result.inserted_ids = ["id1"]
+        self.collection.insert_many.return_value = mock_result
+        
+        logger = TransformationLogger(self.db, enabled=True, batch_size=100)
 
         entity_a = {"id": "entity_a_123", "name": "Python"}
         entity_b = {"id": "entity_b_456", "name": "Python Programming"}
@@ -55,20 +118,32 @@ class TestTransformationLogger(unittest.TestCase):
             trace_id="trace_123",
         )
 
-        self.assertIsNotNone(log_id)
-        self.assertTrue(self.collection.insert_one.called)
-        call_args = self.collection.insert_one.call_args[0][0]
-        self.assertEqual(call_args["operation"], "MERGE")
-        self.assertEqual(call_args["stage"], "entity_resolution")
-        self.assertEqual(call_args["trace_id"], "trace_123")
-        self.assertEqual(call_args["reason"], "fuzzy_match")
-        self.assertEqual(call_args["similarity"], 0.95)
-        self.assertEqual(call_args["confidence"], 0.90)
+        # With batching, log_id is "buffered"
+        self.assertEqual(log_id, "buffered")
+        # Entry should be in buffer
+        self.assertEqual(len(logger._buffer), 1)
+        
+        # Flush buffer to verify data
+        logger.flush_buffer()
+        
+        self.assertTrue(self.collection.insert_many.called)
+        call_args = self.collection.insert_many.call_args[0][0]
+        self.assertEqual(len(call_args), 1)
+        self.assertEqual(call_args[0]["operation"], "MERGE")
+        self.assertEqual(call_args[0]["stage"], "entity_resolution")
+        self.assertEqual(call_args[0]["trace_id"], "trace_123")
+        self.assertEqual(call_args[0]["reason"], "fuzzy_match")
+        self.assertEqual(call_args[0]["similarity"], 0.95)
+        self.assertEqual(call_args[0]["confidence"], 0.90)
 
     def test_log_entity_create(self):
         """Test logging entity creation operation."""
-        logger = TransformationLogger(self.db, enabled=True)
-        self.collection.insert_one.return_value.inserted_id = "test_id"
+        # Configure mock return value
+        mock_result = MagicMock()
+        mock_result.inserted_ids = ["id1"]
+        self.collection.insert_many.return_value = mock_result
+        
+        logger = TransformationLogger(self.db, enabled=True, batch_size=100)
 
         entity = {"id": "entity_123", "name": "Python"}
 
@@ -80,16 +155,22 @@ class TestTransformationLogger(unittest.TestCase):
             trace_id="trace_123",
         )
 
-        self.assertIsNotNone(log_id)
-        call_args = self.collection.insert_one.call_args[0][0]
-        self.assertEqual(call_args["operation"], "CREATE")
-        self.assertEqual(call_args["entity_type"], "TECHNOLOGY")
-        self.assertEqual(call_args["sources"], 5)
+        self.assertEqual(log_id, "buffered")
+        logger.flush_buffer()
+        
+        call_args = self.collection.insert_many.call_args[0][0]
+        self.assertEqual(call_args[0]["operation"], "CREATE")
+        self.assertEqual(call_args[0]["entity_type"], "TECHNOLOGY")
+        self.assertEqual(call_args[0]["sources"], 5)
 
     def test_log_entity_skip(self):
         """Test logging entity skip operation."""
-        logger = TransformationLogger(self.db, enabled=True)
-        self.collection.insert_one.return_value.inserted_id = "test_id"
+        # Configure mock return value
+        mock_result = MagicMock()
+        mock_result.inserted_ids = ["id1"]
+        self.collection.insert_many.return_value = mock_result
+        
+        logger = TransformationLogger(self.db, enabled=True, batch_size=100)
 
         entity = {"id": "entity_123", "name": "the"}
 
@@ -100,10 +181,12 @@ class TestTransformationLogger(unittest.TestCase):
             trace_id="trace_123",
         )
 
-        self.assertIsNotNone(log_id)
-        call_args = self.collection.insert_one.call_args[0][0]
-        self.assertEqual(call_args["operation"], "SKIP")
-        self.assertEqual(call_args["reason"], "stopword")
+        self.assertEqual(log_id, "buffered")
+        logger.flush_buffer()
+        
+        call_args = self.collection.insert_many.call_args[0][0]
+        self.assertEqual(call_args[0]["operation"], "SKIP")
+        self.assertEqual(call_args[0]["reason"], "stopword")
 
     def test_log_relationship_create(self):
         """Test logging relationship creation operation."""

@@ -39,6 +39,67 @@
 
 ---
 
+## 📋 Achievement Index
+
+**All Achievements in This Plan** (for sequence reference):
+
+**Priority 0: CRITICAL FOUNDATION (COMPLETE ✅)**
+
+- ✅ Achievement 0.1: Collection Name Compatibility Resolved
+- ✅ Achievement 0.2: Configuration Compatibility Verified
+- ✅ Achievement 0.3: Environment Variables Configured
+
+**Priority 1: OBSERVABILITY STACK (COMPLETE ✅)**
+
+- ✅ Achievement 1.1: Observability Stack Running
+- ✅ Achievement 1.2: Metrics Endpoint Validated
+- ✅ Achievement 1.3: Grafana Dashboards Configured
+
+**Priority 2: PIPELINE VALIDATION (STARTED 1/3)**
+
+- ✅ Achievement 2.1: Baseline Pipeline Run Executed
+- Achievement 2.2: Observability Pipeline Run Executed
+- Achievement 2.3: Data Quality Validation
+
+**Priority 3: TOOL VALIDATION**
+
+- Achievement 3.1: Query Scripts Validated
+- Achievement 3.2: Explanation Tools Validated
+- Achievement 3.3: Quality Metrics Validated
+
+**Priority 4: COMPATIBILITY VERIFICATION**
+
+- ✅ Achievement 4.1: Stage Compatibility Verified
+- ✅ Achievement 4.2: Legacy Collection Coexistence Verified
+- Achievement 4.3: Configuration Integration Validated
+
+**Priority 5: PERFORMANCE ANALYSIS**
+
+- Achievement 5.1: Performance Impact Measured
+- Achievement 5.2: Storage Growth Analyzed
+- Achievement 5.3: Observability Overhead Assessment
+
+**Priority 6: DOCUMENTATION**
+
+- Achievement 6.1: Real-World Examples Documented
+- Achievement 6.2: Validation Case Study Created
+- Achievement 6.3: Lessons Learned Documented
+
+**Priority 7: PRODUCTION READINESS**
+
+- Achievement 7.1: Tool Enhancements Implemented
+- Achievement 7.2: Performance Optimizations Applied
+- Achievement 7.3: Production Readiness Checklist
+
+**Purpose**:
+
+- Quick reference for achievement sequence
+- Enables scripts to detect all achievements without parsing full PLAN
+- Shows progress at a glance (✅ = completed via APPROVED feedback)
+- Helps detect completion via feedback files (APPROVED_XX.md in execution/feedbacks/)
+
+---
+
 ## 🎯 Goal
 
 Validate the GraphRAG observability infrastructure through comprehensive end-to-end testing:
@@ -52,6 +113,231 @@ Validate the GraphRAG observability infrastructure through comprehensive end-to-
 **Documentation**: Systematically document all findings, issues, resolutions, and learnings using EXECUTION_OBSERVATION (real-time feedback), EXECUTION_ANALYSIS (structured investigation), EXECUTION_CASE-STUDY (pattern extraction), and EXECUTION_REVIEW (lessons learned)
 
 **Result**: Fully validated, integrated, and production-ready observability infrastructure with comprehensive documentation, enabling data-driven pipeline improvements and unblocking Priority 1 work in the parent PLAN.
+
+---
+
+## 🧪 Validation Approach
+
+**Philosophy**: All validations must be **automated, repeatable, and verifiable** through shell scripts that output clear terminal results.
+
+### Script-Based Validation Methodology
+
+**Every achievement requires**:
+
+1. **Validation Script**: A shell script (`validate-achievement-XX.sh`) that:
+
+   - Tests all success criteria automatically
+   - Outputs results to terminal in clear format
+   - Returns exit code 0 (success) or non-zero (failure)
+   - Can be run independently without manual intervention
+   - Produces a summary report at the end
+
+2. **Terminal Output**: Script must display:
+
+   - Test category headers
+   - Individual test results (✅ PASS / ❌ FAIL)
+   - Summary statistics (X/Y tests passed)
+   - Clear verdict (VALIDATED / NEEDS FIXES)
+   - Actionable next steps if failures occur
+
+3. **Exit Codes**:
+   - `0`: All tests passed, achievement validated
+   - `1`: Critical tests failed, achievement incomplete
+   - `2`: Configuration/setup issues, cannot run tests
+
+### Validation Script Structure
+
+All validation scripts follow this standard structure:
+
+```bash
+#!/bin/bash
+# validate-achievement-XX.sh - Achievement X.X Validation
+
+set -e  # Exit on error (can be disabled for full test runs)
+
+# Colors for output
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m'  # No Color
+
+# Test counters
+TESTS_RUN=0
+TESTS_PASSED=0
+TESTS_FAILED=0
+
+# Helper functions
+print_header() { echo -e "${BLUE}═══ $1 ═══${NC}"; }
+print_test() { echo -e "${YELLOW}TEST $1:${NC} $2"; }
+print_pass() { echo -e "${GREEN}✅ PASS:${NC} $1"; ((TESTS_PASSED++)); }
+print_fail() { echo -e "${RED}❌ FAIL:${NC} $1"; ((TESTS_FAILED++)); }
+run_test() { ((TESTS_RUN++)); }
+
+# Test phases
+test_phase_1() {
+    print_header "Phase 1: [Description]"
+    run_test
+    # ... test logic ...
+}
+
+# Main execution
+main() {
+    print_header "ACHIEVEMENT X.X VALIDATION"
+
+    test_phase_1
+    test_phase_2
+    # ... more phases ...
+
+    # Summary
+    print_header "SUMMARY"
+    echo "Tests Run: $TESTS_RUN"
+    echo "Passed: $TESTS_PASSED ✅"
+    echo "Failed: $TESTS_FAILED ❌"
+
+    if [ $TESTS_FAILED -eq 0 ]; then
+        echo -e "${GREEN}✅ ACHIEVEMENT X.X: VALIDATED${NC}"
+        exit 0
+    else
+        echo -e "${RED}❌ ACHIEVEMENT X.X: NEEDS FIXES${NC}"
+        exit 1
+    fi
+}
+
+main "$@"
+```
+
+### Validation Script Naming Convention
+
+| Achievement | Script Name                  | Location         |
+| ----------- | ---------------------------- | ---------------- |
+| 0.1         | `validate-achievement-01.sh` | `observability/` |
+| 0.2         | `validate-achievement-02.sh` | `observability/` |
+| 0.3         | `validate-achievement-03.sh` | `observability/` |
+| 1.1         | `validate-achievement-11.sh` | `observability/` |
+| 1.2         | `validate-achievement-12.sh` | `observability/` |
+| 1.3         | `validate-achievement-13.sh` | `observability/` |
+| 2.1         | `validate-achievement-21.sh` | `observability/` |
+| 2.2         | `validate-achievement-22.sh` | `observability/` |
+| 2.3         | `validate-achievement-23.sh` | `observability/` |
+| 3.1         | `validate-achievement-31.sh` | `observability/` |
+| 3.2         | `validate-achievement-32.sh` | `observability/` |
+| 3.3         | `validate-achievement-33.sh` | `observability/` |
+| 4.1         | `validate-achievement-41.sh` | `observability/` |
+| 4.2         | `validate-achievement-42.sh` | `observability/` |
+| 4.3         | `validate-achievement-43.sh` | `observability/` |
+| 5.1         | `validate-achievement-51.sh` | `observability/` |
+| 5.2         | `validate-achievement-52.sh` | `observability/` |
+| 5.3         | `validate-achievement-53.sh` | `observability/` |
+| 6.1         | `validate-achievement-61.sh` | `observability/` |
+| 6.2         | `validate-achievement-62.sh` | `observability/` |
+| 6.3         | `validate-achievement-63.sh` | `observability/` |
+| 7.1         | `validate-achievement-71.sh` | `observability/` |
+| 7.2         | `validate-achievement-72.sh` | `observability/` |
+| 7.3         | `validate-achievement-73.sh` | `observability/` |
+
+### Master Validation Script
+
+**Script**: `observability/validate-all-achievements.sh`
+
+Runs all achievement validation scripts in sequence and produces a comprehensive report:
+
+```bash
+#!/bin/bash
+# validate-all-achievements.sh - Run all achievement validations
+
+ACHIEVEMENTS=(01 02 03 11 12 13 21 22 23 31 32 33 41 42 43 51 52 53 61 62 63 71 72 73)
+PASSED=0
+FAILED=0
+
+for achievement in "${ACHIEVEMENTS[@]}"; do
+    if bash "observability/validate-achievement-${achievement}.sh"; then
+        ((PASSED++))
+    else
+        ((FAILED++))
+    fi
+done
+
+echo "═══════════════════════════════════════"
+echo "VALIDATION SUMMARY"
+echo "═══════════════════════════════════════"
+echo "Achievements Validated: $PASSED ✅"
+echo "Achievements Failed: $FAILED ❌"
+echo "Total: $((PASSED + FAILED))"
+
+[ $FAILED -eq 0 ] && exit 0 || exit 1
+```
+
+### Existing Validation Scripts
+
+**Already Created** (from Achievements 0.1-3.3):
+
+| Script                                    | Achievement | Tests | Status      |
+| ----------------------------------------- | ----------- | ----- | ----------- |
+| `test-achievement-1.3-dashboards.sh`      | 1.3         | 16    | ✅ Complete |
+| `test-achievement-2.1-baseline.sh`        | 2.1         | 16    | ✅ Complete |
+| `test-achievement-2.2-observability.sh`   | 2.2         | 28    | ✅ Complete |
+| `test-achievement-3.3-quality-metrics.sh` | 3.3         | 23    | ✅ Complete |
+| `test-all-query-scripts.sh`               | 3.1         | 11    | ✅ Complete |
+| `test-all-explanation-tools.sh`           | 3.2         | 5     | ✅ Complete |
+| `run-all-tests.sh`                        | Master      | All   | ✅ Complete |
+
+**Note**: Existing scripts use `test-achievement-XX.sh` naming. New scripts should use `validate-achievement-XX.sh` for consistency, or existing scripts can be renamed.
+
+### Benefits of Script-Based Validation
+
+1. **Automation**: No manual verification needed
+2. **Repeatability**: Same results every time
+3. **CI/CD Ready**: Can be integrated into automated pipelines
+4. **Clear Results**: Terminal output shows exactly what passed/failed
+5. **Fast Feedback**: Immediate validation without reading docs
+6. **Regression Detection**: Re-run scripts to catch breaking changes
+7. **Documentation**: Scripts serve as executable documentation
+
+### Achievement Validation Requirements
+
+Each achievement must specify:
+
+1. **What to Validate**: List of testable criteria
+2. **How to Validate**: Test methodology (queries, API calls, file checks)
+3. **Expected Results**: What "success" looks like
+4. **Validation Script**: Name and location of the script
+5. **Output Format**: What the terminal output should show
+
+### Example: Achievement 3.1 Validation
+
+**What to Validate**:
+
+- All 11 query scripts execute without errors
+- Scripts return data from observability collections
+- Output format is correct and readable
+
+**How to Validate**:
+
+- Run each script with `--limit 5` parameter
+- Capture exit codes and output
+- Verify data is returned (not "No data found")
+
+**Expected Results**:
+
+- 11/11 scripts execute successfully (exit code 0)
+- All scripts return data
+- No Python errors or exceptions
+
+**Validation Script**: `observability/test-all-query-scripts.sh`
+
+**Output Format**:
+
+```
+═══ QUERY SCRIPTS VALIDATION ═══
+TEST 1: query_raw_entities.py ✅ PASS
+TEST 2: query_resolved_entities.py ✅ PASS
+...
+TEST 11: query_graph_evolution.py ✅ PASS
+
+SUMMARY: 11/11 tests passed ✅
+ACHIEVEMENT 3.1: VALIDATED
+```
 
 ---
 
@@ -233,6 +519,10 @@ Without validation:
   - Configuration compatibility report
   - Integration test results
   - Configuration flow documentation
+- **Validation**:
+  - **Script**: `observability/validate-achievement-02.sh`
+  - **Tests**: Configuration file checks, trace_id propagation verification
+  - **Output**: Terminal report showing all config compatibility checks passed
 
 ---
 
@@ -280,6 +570,10 @@ Without validation:
   - `.env.observability` template
   - Environment variable documentation
   - Validation checklist
+- **Validation**:
+  - **Script**: `observability/validate-achievement-03.sh`
+  - **Tests**: Environment variable presence, value correctness, feature toggles
+  - **Output**: Terminal report showing all env vars configured correctly
 
 ---
 
@@ -321,6 +615,10 @@ Without validation:
   - Service verification checklist
   - Debug log (issues encountered and resolved)
   - Integration documentation
+- **Validation**:
+  - **Script**: `observability/validate-achievement-11.sh`
+  - **Tests**: Docker container status, service endpoints (Prometheus, Grafana, Loki), connectivity
+  - **Output**: Terminal report showing all services running and accessible
 
 ---
 
@@ -356,6 +654,10 @@ Without validation:
   - Prometheus configuration (updated if needed)
   - Debug log
   - PromQL query examples
+- **Validation**:
+  - **Script**: `observability/validate-achievement-12.sh`
+  - **Tests**: Metrics endpoint accessibility, Prometheus format validation, scraping verification
+  - **Output**: Terminal report showing metrics endpoint working and Prometheus scraping
 
 ---
 
@@ -392,6 +694,10 @@ Without validation:
   - Dashboard setup guide
   - Debug log
   - Screenshot examples
+- **Validation**:
+  - **Script**: `observability/test-achievement-1.3-dashboards.sh` ✅ **EXISTS**
+  - **Tests**: 16 automated tests (Grafana health, data sources, dashboards, panels)
+  - **Output**: Terminal report showing all dashboard tests passed
 
 ---
 
@@ -400,20 +706,34 @@ Without validation:
 **Achievement 2.1**: Baseline Pipeline Run Executed
 
 - **Goal**: Run pipeline with observability disabled to establish baseline
+- **Critical Note**: ⚠️ **Database configuration requires special attention** - see `observations/EXECUTION_RESPONSE_DATABASE-CONFIGURATION-ANALYSIS.md` for detailed analysis of `--read-db-name`/`--write-db-name` behavior
 - **What**:
-  - **Disable Observability**:
+  - **Prepare Database** (REQUIRED FIRST STEP):
+    - **Option A (Recommended)**: Copy `chunks` collection from `mongo_hack` to `validation_01`
+      ```bash
+      # Using mongodump/mongorestore
+      mongodump --uri="<MONGODB_URI>" --db=mongo_hack --collection=chunks --out=/tmp/dump
+      mongorestore --uri="<MONGODB_URI>" --db=validation_01 --collection=chunks /tmp/dump/mongo_hack/chunks.bson
+      ```
+    - **Option B**: Use MongoDB Compass/Studio to copy collection
+    - **Why**: Pipeline stages need to read from the same database they write to (see analysis doc)
+  - **Configure Environment** (Update `.env` file):
     ```bash
-    export GRAPHRAG_TRANSFORMATION_LOGGING=false
-    export GRAPHRAG_SAVE_INTERMEDIATE_DATA=false
-    export GRAPHRAG_QUALITY_METRICS=false
+    MONGODB_DB=validation_01
+    GRAPHRAG_TRANSFORMATION_LOGGING=false
+    GRAPHRAG_SAVE_INTERMEDIATE_DATA=false
+    GRAPHRAG_QUALITY_METRICS=false
     ```
-  - **Run Pipeline**:
+  - **Run Pipeline** (Single Database Mode):
     ```bash
     python business/pipelines/graphrag.py \
-      --db-name mongo_hack \
+      --db-name validation_01 \
       --experiment-id baseline-no-observability \
       --stages all
     ```
+    - ⚠️ **DO NOT USE** `--read-db-name` and `--write-db-name` together for full pipeline
+    - **Reason**: These are STAGE-LEVEL settings (all stages get same values), NOT pipeline-level source→destination
+    - **Impact**: Using both causes stages 2-4 to read from wrong database (see analysis doc for details)
   - **Measure Baseline**:
     - Pipeline runtime
     - Memory usage
@@ -423,12 +743,20 @@ Without validation:
     - Create EXECUTION_OBSERVATION during run
     - Capture metrics, errors, warnings
     - Note any issues
-- **Success**: Baseline established for comparison
-- **Effort**: 2-3 hours (pipeline runtime + monitoring)
+- **Success**: Baseline established for comparison, database configuration correct
+- **Effort**: 3-4 hours (database prep + pipeline runtime + monitoring)
 - **Deliverables**:
   - Baseline metrics document
   - EXECUTION_OBSERVATION_BASELINE-PIPELINE-RUN_2025-11-10.md
   - Performance baseline data
+  - Database configuration validation
+- **Validation**:
+  - **Script**: `observability/test-achievement-2.1-baseline.sh` ✅ **EXISTS**
+  - **Tests**: 16 automated tests (database, collections, data quality, observability disabled)
+  - **Output**: Terminal report showing baseline pipeline validated
+- **References**:
+  - `observations/EXECUTION_RESPONSE_DATABASE-CONFIGURATION-ANALYSIS.md` - Critical database config analysis (574 lines)
+  - `observations/EXECUTION_ANALYSIS_BASELINE-SETUP.md` - Initial setup analysis (contains incorrect conclusion about `--read-db-name`/`--write-db-name`)
 
 ---
 
@@ -473,6 +801,10 @@ Without validation:
   - Performance comparison (vs. baseline)
   - Collection verification report
   - Grafana dashboard screenshots
+- **Validation**:
+  - **Script**: `observability/test-achievement-2.2-observability.sh` ✅ **EXISTS**
+  - **Tests**: 28 automated tests (collections, population, trace_id, schema, data quality)
+  - **Output**: Terminal report showing observability pipeline validated
 
 ---
 
@@ -523,6 +855,10 @@ Without validation:
   - Schema verification results
   - Sample data examples
   - Issue log (if any)
+- **Validation**:
+  - **Script**: `observability/validate-achievement-23.sh`
+  - **Tests**: Collection existence, document counts, trace_id consistency, schema validation
+  - **Output**: Terminal report showing all data quality checks passed
 
 ---
 
@@ -802,10 +1138,14 @@ Without validation:
 - **Success**: Performance overhead measured, acceptable (<30%), optimizations identified
 - **Effort**: 2-3 hours
 - **Deliverables**:
-  - Performance impact analysis
+  - Performance impact analysis (`documentation/Performance-Impact-Analysis.md`)
   - Feature overhead breakdown
   - Optimization recommendations
   - Acceptance decision
+- **Validation**:
+  - **Script**: `observability/validate-achievement-51.sh`
+  - **Tests**: Performance metrics comparison (baseline vs observability), per-feature overhead, bottleneck identification, acceptance criteria
+  - **Output**: Terminal report showing performance overhead within acceptable limits (<30%)
 
 ---
 
@@ -843,10 +1183,14 @@ Without validation:
 - **Success**: Storage impact measured, acceptable (<500 MB), TTL working
 - **Effort**: 2-3 hours
 - **Deliverables**:
-  - Storage impact analysis
+  - Storage impact analysis (`documentation/Storage-Impact-Analysis.md`)
   - TTL validation report
   - Growth projections
   - Storage optimization guide
+- **Validation**:
+  - **Script**: `observability/validate-achievement-52.sh`
+  - **Tests**: Collection size measurements, storage overhead calculation, TTL index verification, growth projections, acceptance criteria
+  - **Output**: Terminal report showing storage impact within acceptable limits (<500 MB)
 
 ---
 
@@ -877,8 +1221,12 @@ Without validation:
 - **Effort**: 2-3 hours
 - **Deliverables**:
   - EXECUTION_ANALYSIS_OBSERVABILITY-COST-BENEFIT.md
-  - Production recommendations
+  - Production recommendations (`documentation/Production-Recommendations.md`)
   - Feature toggle strategy
+- **Validation**:
+  - **Script**: `observability/validate-achievement-53.sh`
+  - **Tests**: Cost-benefit analysis completeness, production recommendations verification, feature toggle strategy validation, deliverables existence
+  - **Output**: Terminal report showing comprehensive cost-benefit assessment complete
 
 ---
 
@@ -912,7 +1260,11 @@ Without validation:
   - Updated documentation (5 guides)
   - Real example outputs
   - Screenshots
-  - Verification checklist
+  - Verification checklist (`documentation/Documentation-Update-Checklist.md`)
+- **Validation**:
+  - **Script**: `observability/validate-achievement-61.sh`
+  - **Tests**: Documentation files updated, real trace_ids present, examples tested, screenshots included, verification checklist complete
+  - **Output**: Terminal report showing all documentation updated with real examples
 
 ---
 
@@ -943,8 +1295,12 @@ Without validation:
 - **Effort**: 2-3 hours
 - **Deliverables**:
   - EXECUTION_CASE-STUDY_OBSERVABILITY-INFRASTRUCTURE-VALIDATION.md
-  - Validation workflow guide
+  - Validation workflow guide (`documentation/Validation-Workflow-Guide.md`)
   - Pattern extraction
+- **Validation**:
+  - **Script**: `observability/validate-achievement-62.sh`
+  - **Tests**: Case study completeness, validation workflow documented, patterns extracted, recommendations provided, deliverables existence
+  - **Output**: Terminal report showing validation case study complete
 
 ---
 
@@ -974,8 +1330,12 @@ Without validation:
 - **Effort**: 2-3 hours
 - **Deliverables**:
   - EXECUTION_REVIEW_OBSERVABILITY-VALIDATION-PROCESS.md
-  - Best practices guide
+  - Best practices guide (`documentation/Validation-Best-Practices.md`)
   - Lessons learned summary
+- **Validation**:
+  - **Script**: `observability/validate-achievement-63.sh`
+  - **Tests**: Lessons learned documented, categories complete, best practices extracted, recommendations provided, deliverables existence
+  - **Output**: Terminal report showing all lessons learned documented
 
 ---
 
@@ -1009,8 +1369,12 @@ Without validation:
 - **Deliverables**:
   - Enhanced tool implementations
   - Updated documentation
-  - Performance comparison
+  - Performance comparison (`documentation/Tool-Enhancement-Report.md`)
   - Feature list
+- **Validation**:
+  - **Script**: `observability/validate-achievement-71.sh`
+  - **Tests**: Tool enhancements implemented, bugs fixed, features added, performance improved, documentation updated
+  - **Output**: Terminal report showing all tools enhanced and tested
 
 ---
 
@@ -1040,8 +1404,12 @@ Without validation:
 - **Effort**: 3-4 hours
 - **Deliverables**:
   - Optimized implementations
-  - Performance comparison
+  - Performance comparison (`documentation/Performance-Optimization-Report.md`)
   - Optimization documentation
+- **Validation**:
+  - **Script**: `observability/validate-achievement-72.sh`
+  - **Tests**: Optimizations applied, performance improved, functionality preserved, before/after comparison, documentation complete
+  - **Output**: Terminal report showing performance optimizations validated
 
 ---
 
@@ -1072,9 +1440,13 @@ Without validation:
 - **Success**: Complete production readiness package
 - **Effort**: 2-3 hours
 - **Deliverables**:
-  - Production readiness checklist
-  - Deployment guide
-  - Operations runbook
+  - Production readiness checklist (`documentation/Production-Readiness-Checklist.md`)
+  - Deployment guide (`documentation/Production-Deployment-Guide.md`)
+  - Operations runbook (`documentation/Operations-Runbook.md`)
+- **Validation**:
+  - **Script**: `observability/validate-achievement-73.sh`
+  - **Tests**: Checklist completeness, deployment guide steps, runbook procedures, all deliverables exist, production readiness verified
+  - **Output**: Terminal report showing production readiness package complete
 
 ---
 
@@ -1210,12 +1582,13 @@ graphrag-observability-validation-nov2025/
 
 ## 🔄 Subplan Tracking
 
-**Summary Statistics**: (updated 2025-11-10 after Achievement 0.1)
+**Summary Statistics**: (updated 2025-11-13 after Achievements 0.1-0.3 + 1.1-1.3 + 2.1 completion)
 
-- **SUBPLANs**: 1 created
-- **EXECUTION_TASKs**: 1 created
-- **Completed Achievements**: 1/1 (Priority 0.1)
-- **Total Time Spent**: 0.75h (45 minutes)
+- **SUBPLANs**: 7 created
+- **EXECUTION_TASKs**: 7 created (0.1 complete, 0.2 phases 1-2 complete, 0.3 complete, 1.1 complete, 1.2 complete, 1.3 complete, 2.1 complete)
+- **Completed Achievements**: 7/18 (39%) - Priority 0 complete (3/3) + Priority 1 complete (3/3) + Priority 2 started (1/3)
+- **In Progress Achievements**: Achievement 0.2 Phase 3 (mini pipeline test pending)
+- **Total Time Spent**: 21.75h (1305 minutes: 45 min 0.1 + 90 min 0.2 phases 1-2 + 90 min 0.3 + 240 min 1.1 + 240 min 1.2 + 120 min 1.3 + 480 min 2.1)
 
 **Subplans Created for This PLAN**:
 
@@ -1237,12 +1610,153 @@ graphrag-observability-validation-nov2025/
       - ✅ Collection-Usage-Patterns.md (20 KB, 6 code examples)
     - Test Results: 6/6 tests passed (100%)
 
+### Achievement 0.2: Configuration Compatibility Verified ✅ PHASES 1-2 COMPLETE (Phase 3 Pending)
+
+- [x] **SUBPLAN_GRAPHRAG-OBSERVABILITY-VALIDATION_02**: Configuration compatibility verification
+
+  - Location: Root directory
+  - Status: ✅ Phases 1-2 Complete | ⏳ Phase 3 Pending (mini pipeline test)
+  - Strategy: 3-phase approach (Audit → Verify → Test)
+  - Actual Time: 90 minutes for phases 1-2 (vs 2-2.5h estimate = 36% of budget used)
+  - Execution Status: In Progress (2/3 phases complete)
+
+  - [x] **EXECUTION_TASK_GRAPHRAG-OBSERVABILITY-VALIDATION_02_01**: Phases 1-2 Execution
+
+    - Phase 1 (Audit): ✅ COMPLETE (45 min)
+      - Audited all 4 config files: graphrag.py, stage.py, agent.py, config.py
+      - Documented findings: All files compatible, no breaking changes
+    - Phase 2 (Verification): ✅ COMPLETE (45 min)
+      - Tests 1-4 passed (100%): Config loading, trace_id propagation, env vars, DB connection
+      - MAJOR FINDING: trace_id already implemented in GraphRAGPipeline - observability pre-integrated
+      - Result: 0 critical issues, production-ready
+    - Phase 3 (Integration Testing): ⏳ READY
+      - Tests 5-6 pending: Mini pipeline run (5 chunks), legacy compatibility
+      - Estimated time: 30-45 minutes
+      - All prerequisites met, ready to execute
+
+  - Deliverables:
+    - ✅ Configuration audit findings documented (in EXECUTION_TASK)
+    - ✅ Integration tests designed (6 tests, 4/6 passed)
+    - ⏳ Mini pipeline test results (pending phase 3)
+    - Implementation review: A+ for Phases 1-2 (in feedbacks/)
+
+### Achievement 0.3: Environment Variables Configured ✅ COMPLETE
+
+- [x] **SUBPLAN_GRAPHRAG-OBSERVABILITY-VALIDATION_03**: Environment variables configuration
+  - Location: subplans/
+  - Status: ✅ Complete
+  - Execution Time: 90 minutes (4 phases)
+  - [x] **EXECUTION_TASK_GRAPHRAG-OBSERVABILITY-VALIDATION_03_01**: Achievement 0.3 execution
+    - Status: ✅ Complete
+    - Deliverables:
+      - ✅ Environment-Variables-Guide.md (38 variables documented)
+      - ✅ ENV-OBSERVABILITY-TEMPLATE.md (template file)
+      - ✅ Validation-Checklist.md (validation steps)
+    - Implementation review: A+ (in feedbacks/)
+
+### Achievement 1.1: Observability Stack Running ✅ COMPLETE
+
+- [x] **SUBPLAN_GRAPHRAG-OBSERVABILITY-VALIDATION_11**: Observability stack deployment
+  - Location: subplans/
+  - Status: ✅ Complete
+  - Execution Time: 240 minutes (Hybrid Execution Model)
+  - [x] **EXECUTION_TASK_GRAPHRAG-OBSERVABILITY-VALIDATION_11_01**: Achievement 1.1 execution
+    - Status: ✅ Complete
+    - Deliverables:
+      - ✅ 8 automation scripts (1680+ lines)
+      - ✅ 3 comprehensive guides
+      - ✅ All 4 services deployed (Prometheus, Grafana, Loki, Promtail)
+    - Implementation review: A+ (in feedbacks/)
+
+### Achievement 1.2: Metrics Endpoint Validated ✅ COMPLETE
+
+- [x] **SUBPLAN_GRAPHRAG-OBSERVABILITY-VALIDATION_12**: Metrics endpoint validation
+  - Location: subplans/
+  - Status: ✅ Complete
+  - Execution Time: 240 minutes (5 phases)
+  - [x] **EXECUTION_TASK_GRAPHRAG-OBSERVABILITY-VALIDATION_12_01**: Achievement 1.2 execution
+    - Status: ✅ Complete
+    - Deliverables:
+      - ✅ Metrics-Endpoint-Validation-Report-1.2.md
+      - ✅ PromQL-Examples-Achievement-1.2.md (5 tested queries)
+      - ✅ Metrics-Validation-Debug-Log-1.2.md
+    - Test Results: 5/6 execution tests, 5/5 PromQL queries
+    - Implementation review: A (in feedbacks/)
+
+### Achievement 1.3: Grafana Dashboards Configured ✅ COMPLETE
+
+- [x] **SUBPLAN_GRAPHRAG-OBSERVABILITY-VALIDATION_13**: Grafana dashboard configuration
+  - Location: subplans/
+  - Status: ✅ Complete
+  - Execution Time: 120 minutes (5 phases)
+  - [x] **EXECUTION_TASK_GRAPHRAG-OBSERVABILITY-VALIDATION_13_01**: Achievement 1.3 execution
+    - Status: ✅ Complete
+    - Deliverables:
+      - ✅ Dashboard-Setup-Guide-1.3.md
+      - ✅ Grafana-Dashboards-Debug-Log-1.3.md
+      - ✅ Dashboard-Queries-1.3.md (15 PromQL queries)
+    - Test Results: 6/6 execution tests, 12/12 panels operational
+    - Critical bug fixed: JSON structure bug in graphrag-pipeline.json
+    - Implementation review: A+ (in feedbacks/)
+
+### Achievement 2.1: Baseline Pipeline Run Executed ✅ COMPLETE
+
+- [x] **SUBPLAN_GRAPHRAG-OBSERVABILITY-VALIDATION_21**: Baseline pipeline run (observability disabled)
+  - Location: subplans/
+  - Status: ✅ Complete
+  - Execution Time: 480 minutes (~8 hours, including debugging)
+  - [x] **EXECUTION_TASK_GRAPHRAG-OBSERVABILITY-VALIDATION_21_01**: Achievement 2.1 execution
+    - Status: ✅ Complete
+    - Deliverables:
+      - ✅ EXECUTION_OBSERVATION_BASELINE-PIPELINE-RUN_2025-11-12.md (343 lines)
+      - ✅ Baseline-Performance-Report.md (393 lines)
+      - ✅ Baseline-Run-Summary.md (158 lines)
+      - ✅ 8 debug documents (comprehensive bug analysis)
+    - Pipeline Results:
+      - Total Runtime: ~510 seconds (~8.5 minutes)
+      - Chunks Processed: 50/50 (100%)
+      - Entities: 220 (4.4 per chunk)
+      - Relations: 71 (1.42 per chunk)
+      - Communities: 26 (8.46 entities per community)
+      - Exit Code: 0 (success)
+    - Critical Bugs Fixed: 6 bugs discovered and resolved
+      1. Decorator Syntax Error (Stage 2)
+      2. MongoDB Conflict (Stage 2)
+      3. AttributeError (Stage 2)
+      4. Race Condition (Stage 2)
+      5. TransformationLogger Bug (Stage 3)
+      6. NotAPartition Error (Stage 4)
+    - Key Finding: Stage 4 (Community Detection) is 76.5% of runtime
+    - Implementation review: A+ Exceptional (in feedbacks/)
+
+### Achievement 2.2: Observability Pipeline Run Executed 📋 DESIGN COMPLETE
+
+- [ ] **SUBPLAN_GRAPHRAG-OBSERVABILITY-VALIDATION_22**: Observability pipeline run (full features enabled)
+  - Location: subplans/
+  - Status: 📋 Design Complete (Ready for Executor)
+  - Created: 2025-11-12
+  - Estimated Time: 180-240 minutes (3-4 hours)
+  - [ ] **EXECUTION_TASK_GRAPHRAG-OBSERVABILITY-VALIDATION_22_01**: Achievement 2.2 execution
+    - Status: ⏳ Ready for Execution
+    - Approach: 4-phase sequential execution (setup, execution, analysis, documentation)
+    - Deliverables Planned:
+      - EXECUTION_OBSERVATION_OBSERVABILITY-PIPELINE-RUN_2025-11-12.md
+      - Observability-Performance-Report.md
+      - Observability-Collections-Report.md
+      - Observability-Comparison-Summary.md
+    - Expected Results:
+      - Runtime: ~550-610s (10-20% overhead vs baseline)
+      - Storage: ~800-900 KB (30-50% overhead vs baseline)
+      - 8 new observability collections created
+      - Data quality preserved (same entity/relation/community counts)
+    - Tests Defined: 8 tests (stack health, env vars, collections, overhead, data quality)
+
 ---
 
 ## 📝 Current Status & Handoff
 
-**Last Updated**: 2025-11-10 04:00 UTC  
-**Status**: 🚀 **READY TO EXECUTE**
+**Last Updated**: 2025-11-13 (after Achievement 2.1 completion)  
+**Status**: 🚀 **PRIORITY 0 COMPLETE | PRIORITY 1 COMPLETE | PRIORITY 2 STARTED (1/3) | BASELINE ESTABLISHED**
 
 **What's Done**:
 
@@ -1251,35 +1765,70 @@ graphrag-observability-validation-nov2025/
 - ✅ Strategic documentation created (3 docs, 2,116 lines)
 - ✅ Problem analysis complete
 - ✅ Achievements defined (18 achievements across 7 priorities)
+- ✅ **Priority 0 COMPLETE**: All 3 foundation achievements done (3/3)
+  - Achievement 0.1: Collection Name Compatibility Resolved (45 min, A+)
+  - Achievement 0.2: Configuration Compatibility Verified (90 min phases 1-2, A+) - Phase 3 pending
+  - Achievement 0.3: Environment Variables Configured (90 min, A+)
+- ✅ **Priority 1 COMPLETE**: All 3 observability stack achievements done (3/3)
+  - Achievement 1.1: Observability Stack Running (240 min, A+) - Hybrid Execution Model
+  - Achievement 1.2: Metrics Endpoint Validated (240 min, A) - 5/6 tests, 5/5 PromQL queries
+  - Achievement 1.3: Grafana Dashboards Configured (120 min, A+) - 12/12 panels operational
+- ✅ **Priority 2 STARTED**: Baseline pipeline run complete (1/3)
+  - Achievement 2.1: Baseline Pipeline Run Executed (480 min, A+ Exceptional)
+    - 50 chunks processed successfully
+    - 220 entities, 71 relations, 26 communities created
+    - 6 critical bugs discovered and fixed
+    - Comprehensive baseline metrics documented
+    - Ready for Achievement 2.2 comparison
 
 **What's Next**:
 
-**Immediate Priority**: Priority 0 (Environment & Compatibility)
+**Immediate Priority**: Achievement 2.2 (Observability-Enabled Pipeline Run)
 
-1. Achievement 0.1: Resolve collection name compatibility
-2. Achievement 0.2: Verify configuration compatibility
-3. Achievement 0.3: Configure environment variables
+1. ✅ Achievement 2.1: Baseline run (observability disabled) - **COMPLETE**
+   - Valid baseline established (~510s runtime, 50 chunks)
+   - 6 bugs fixed (all production code)
+   - 3 deliverables + 8 debug documents created
+   - Comparison template ready
+2. 📋 Achievement 2.2: Observability run (full features) - **DESIGN COMPLETE**
+   - ✅ SUBPLAN created: `SUBPLAN_GRAPHRAG-OBSERVABILITY-VALIDATION_22.md`
+   - ✅ EXECUTION_TASK created: `EXECUTION_TASK_GRAPHRAG-OBSERVABILITY-VALIDATION_22_01.md`
+   - ⏳ Ready for executor to run
+   - Enable observability flags (TRANSFORMATION_LOGGING, SAVE_INTERMEDIATE_DATA, QUALITY_METRICS)
+   - Run same configuration (50 chunks, validation_01 database)
+   - Measure overhead (runtime, storage, memory)
+   - Compare with baseline using template
+3. 📋 Achievement 2.3: Data quality validation - **DESIGN COMPLETE**
+   - ✅ SUBPLAN created: `SUBPLAN_GRAPHRAG-OBSERVABILITY-VALIDATION_23.md`
+   - ✅ EXECUTION_TASK created: `EXECUTION_TASK_GRAPHRAG-OBSERVABILITY-VALIDATION_23_01.md`
+   - ⏳ Ready for executor to run
+   - Validate all 8 observability collections
+   - Verify trace_id consistency
+   - Check data quality and schemas
+   - Document findings
 
-**Then**: Priority 1 (Observability Stack)
+**Then**: Priority 3 (Tool Validation)
 
-1. Achievement 1.1: Get observability stack running
-2. Achievement 1.2: Validate metrics endpoint
-3. Achievement 1.3: Configure Grafana dashboards
+1. Achievement 3.1: Query scripts validated
+2. Achievement 3.2: Explanation tools validated
+3. Achievement 3.3: Quality metrics validated
 
-**Then**: Priority 2 (Pipeline Execution)
+**Critical Path**: 2.1 ✅ → 2.2 → 2.3 → 3 (sequential dependencies)
 
-1. Achievement 2.1: Baseline run (no observability)
-2. Achievement 2.2: Observability run (full features)
-3. Achievement 2.3: Data quality validation
+**Blockers**: None (Achievement 0.2 Phase 3 pending but not blocking Priority 2)
 
-**Critical Path**: 0 → 1 → 2 → 3 (sequential dependencies)
+**Progress**: 7/18 achievements complete (39%)
 
-**Blockers**: None (ready to start)
+- Priority 0: 3/3 complete (100%)
+- Priority 1: 3/3 complete (100%)
+- Priority 2: 1/3 complete (33%)
+- **Total Time**: 21.75 hours
 
 **Coordination**:
 
 - This PLAN validates parent PLAN (GRAPHRAG-OBSERVABILITY-EXCELLENCE)
-- Unblocks Priority 1 work in parent PLAN
+- Achievement 0.1 unblocked all configuration-dependent work
+- Unblocks Priority 1 work in parent PLAN after validation complete
 - Enables full observability usage across all GraphRAG work
 
 ---

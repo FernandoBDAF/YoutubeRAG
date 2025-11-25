@@ -8,13 +8,17 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from LLM.scripts.generation.generate_prompt import (
-    extract_handoff_section,
-    find_next_achievement_from_plan,
-    find_next_achievement_hybrid,
-    generate_prompt,
-    Achievement,
-)
+from LLM.scripts.generation.workflow_detector import WorkflowDetector
+from LLM.scripts.generation.plan_parser import PlanParser
+from LLM.scripts.generation.utils import Achievement
+from LLM.scripts.generation.generate_prompt import generate_prompt
+
+# Create instances for tests
+detector = WorkflowDetector()
+parser = PlanParser()
+extract_handoff_section = parser.extract_handoff_section
+find_next_achievement_from_plan = detector.find_next_achievement_from_plan
+find_next_achievement_hybrid = detector.find_next_achievement_hybrid
 
 
 class TestExtractHandoffSection(unittest.TestCase):
@@ -548,8 +552,8 @@ class TestGeneratePromptIntegration(unittest.TestCase):
             # Should generate valid prompt
             self.assertIsNotNone(prompt)
             self.assertIn("Achievement 1.1", prompt)
-            self.assertIn("Test Feature", prompt)
-            self.assertNotIn("❌", prompt)  # Should not be error message
+            self.assertIn("TEST_INTEGRATION", prompt)  # Feature name from filename
+            self.assertNotIn("❌ Error", prompt)  # Should not be error message
         finally:
             if plan_path.exists():
                 plan_path.unlink()

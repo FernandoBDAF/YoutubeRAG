@@ -1,0 +1,32 @@
+
+═══════════════════════════════════════════════════════════════
+   ENTITY JOURNEY: unknown
+═══════════════════════════════════════════════════════════════
+
+Trace ID: 6088e6bd-e305-42d8-9210-e2d3f1dda035
+Entity ID: d67d90cf515817148f6703f2cabb68c3
+Type: unknown
+Final Confidence: 0.900
+
+Stage 1: EXTRACTION
+---------------------------------------------------------------
+
+✅ Extracted from 0 chunks
+
+Stage 2: RESOLUTION
+---------------------------------------------------------------
+
+✅ No merges (unique entity)
+Final Entity ID: d67d90cf515817148f6703f2cabb68c3
+Confidence Preserved: 0.900
+
+Stage 3: GRAPH CONSTRUCTION
+---------------------------------------------------------------
+
+✅ Connected to 0 entities
+Node Degree: 0
+
+Stage 4: COMMUNITY DETECTION
+---------------------------------------------------------------
+
+❌ Not assigned to any community

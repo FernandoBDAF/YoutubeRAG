@@ -1,8 +1,13 @@
 """Pytest configuration and shared fixtures for LLM script tests."""
 
 import pytest
+import sys
 import tempfile
 from pathlib import Path
+
+# Add project root to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+
 from tests.LLM.scripts.fixtures.sample_plans import (
     get_sample_plan_content,
     get_minimal_plan_content,

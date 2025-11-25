@@ -1,301 +1,334 @@
 {
-  "dashboard": {
-    "title": "GraphRAG Pipeline Dashboard",
-    "description": "Real-time monitoring of GraphRAG pipeline execution, stage progress, throughput, and errors",
-    "tags": ["graphrag", "pipeline", "monitoring"],
-    "timezone": "browser",
-    "schemaVersion": 16,
-    "version": 1,
-    "refresh": "10s",
-    "panels": [
-      {
-        "id": 1,
-        "title": "Pipeline Status",
-        "type": "stat",
-        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
-        "targets": [
-          {
-            "expr": "graphrag_pipeline_status",
-            "legendFormat": "Status",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "mappings": [
-              {"type": "value", "options": {"0": {"text": "Idle", "color": "gray"}}},
-              {"type": "value", "options": {"1": {"text": "Running", "color": "blue"}}},
-              {"type": "value", "options": {"2": {"text": "Completed", "color": "green"}}},
-              {"type": "value", "options": {"3": {"text": "Failed", "color": "red"}}}
-            ],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {"value": 0, "color": "gray"},
-                {"value": 1, "color": "blue"},
-                {"value": 2, "color": "green"},
-                {"value": 3, "color": "red"}
-              ]
+  "title": "GraphRAG Pipeline Dashboard",
+  "description": "Real-time monitoring of GraphRAG pipeline execution, stage progress, throughput, and errors",
+  "tags": ["graphrag", "pipeline", "monitoring"],
+  "timezone": "browser",
+  "schemaVersion": 16,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Pipeline Status",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "graphrag_pipeline_status",
+          "legendFormat": "Status",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "name": "Prometheus" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": { "0": { "text": "Idle", "color": "gray" } }
             },
-            "unit": "none"
-          }
-        }
-      },
-      {
-        "id": 2,
-        "title": "Pipeline Runs",
-        "type": "stat",
-        "gridPos": {"h": 4, "w": 3, "x": 6, "y": 0},
-        "targets": [
-          {
-            "expr": "sum(increase(pipeline_runs{pipeline_type=\"graphrag\"}[1h]))",
-            "legendFormat": "Runs (1h)",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "short",
-            "color": {"mode": "palette-classic"}
-          }
-        }
-      },
-      {
-        "id": 3,
-        "title": "Pipeline Duration",
-        "type": "stat",
-        "gridPos": {"h": 4, "w": 3, "x": 9, "y": 0},
-        "targets": [
-          {
-            "expr": "avg(pipeline_duration_seconds_sum{pipeline_type=\"graphrag\"} / pipeline_duration_seconds_count{pipeline_type=\"graphrag\"})",
-            "legendFormat": "Avg Duration",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "s",
-            "decimals": 1
-          }
-        }
-      },
-      {
-        "id": 4,
-        "title": "Stage Progress",
-        "type": "bargauge",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
-        "targets": [
-          {
-            "expr": "graphrag_pipeline_stage_progress",
-            "legendFormat": "{{stage}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "percentunit",
-            "min": 0,
-            "max": 1,
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {"value": 0, "color": "red"},
-                {"value": 0.5, "color": "yellow"},
-                {"value": 0.9, "color": "green"}
-              ]
+            {
+              "type": "value",
+              "options": { "1": { "text": "Running", "color": "blue" } }
+            },
+            {
+              "type": "value",
+              "options": { "2": { "text": "Completed", "color": "green" } }
+            },
+            {
+              "type": "value",
+              "options": { "3": { "text": "Failed", "color": "red" } }
             }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "gray" },
+              { "value": 1, "color": "blue" },
+              { "value": 2, "color": "green" },
+              { "value": 3, "color": "red" }
+            ]
+          },
+          "unit": "none"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Pipeline Runs",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 4, "w": 3, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(increase(pipeline_runs{pipeline_type=\"graphrag\"}[1h]))",
+          "legendFormat": "Runs (1h)",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "name": "Prometheus" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Pipeline Duration",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 4, "w": 3, "x": 9, "y": 0 },
+      "targets": [
+        {
+          "expr": "avg(pipeline_duration_seconds_sum{pipeline_type=\"graphrag\"} / pipeline_duration_seconds_count{pipeline_type=\"graphrag\"})",
+          "legendFormat": "Avg Duration",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "name": "Prometheus" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 1
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Stage Progress",
+      "type": "bargauge",
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "graphrag_pipeline_stage_progress",
+          "legendFormat": "{{stage}}",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "name": "Prometheus" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "red" },
+              { "value": 0.5, "color": "yellow" },
+              { "value": 0.9, "color": "green" }
+            ]
           }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient"
+      }
+    },
+    {
+      "id": 5,
+      "title": "Chunks Processed by Stage",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "expr": "rate(graphrag_pipeline_stage_chunks_processed[5m])",
+          "legendFormat": "{{stage}} - Processed",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "name": "Prometheus" }
         },
-        "options": {
-          "orientation": "horizontal",
-          "displayMode": "gradient"
+        {
+          "expr": "rate(graphrag_pipeline_stage_chunks_failed[5m])",
+          "legendFormat": "{{stage}} - Failed",
+          "refId": "B",
+          "datasource": { "type": "prometheus", "name": "Prometheus" }
         }
-      },
-      {
-        "id": 5,
-        "title": "Chunks Processed by Stage",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
-        "targets": [
-          {
-            "expr": "rate(graphrag_pipeline_stage_chunks_processed[5m])",
-            "legendFormat": "{{stage}} - Processed",
-            "refId": "A"
-          },
-          {
-            "expr": "rate(graphrag_pipeline_stage_chunks_failed[5m])",
-            "legendFormat": "{{stage}} - Failed",
-            "refId": "B"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "ops",
-            "color": {"mode": "palette-classic"}
-          }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" }
         }
-      },
-      {
-        "id": 6,
-        "title": "Throughput - Entities/sec",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 12},
-        "targets": [
-          {
-            "expr": "graphrag_pipeline_throughput_entities_per_sec",
-            "legendFormat": "{{stage}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "ops",
-            "color": {"mode": "palette-classic"}
-          }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Throughput - Entities/sec",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "expr": "graphrag_pipeline_throughput_entities_per_sec",
+          "legendFormat": "{{stage}}",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "name": "Prometheus" }
         }
-      },
-      {
-        "id": 7,
-        "title": "Throughput - Relationships/sec",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 12},
-        "targets": [
-          {
-            "expr": "graphrag_pipeline_throughput_relationships_per_sec",
-            "legendFormat": "{{stage}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "ops",
-            "color": {"mode": "palette-classic"}
-          }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" }
         }
-      },
-      {
-        "id": 8,
-        "title": "Throughput - Communities/sec",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 12},
-        "targets": [
-          {
-            "expr": "graphrag_pipeline_throughput_communities_per_sec",
-            "legendFormat": "{{stage}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "ops",
-            "color": {"mode": "palette-classic"}
-          }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Throughput - Relationships/sec",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 12 },
+      "targets": [
+        {
+          "expr": "graphrag_pipeline_throughput_relationships_per_sec",
+          "legendFormat": "{{stage}}",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "name": "Prometheus" }
         }
-      },
-      {
-        "id": 9,
-        "title": "Stage Duration",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
-        "targets": [
-          {
-            "expr": "rate(graphrag_pipeline_stage_duration_seconds_sum[5m]) / rate(graphrag_pipeline_stage_duration_seconds_count[5m])",
-            "legendFormat": "{{stage}} - Avg",
-            "refId": "A"
-          },
-          {
-            "expr": "graphrag_pipeline_stage_duration_seconds_max",
-            "legendFormat": "{{stage}} - Max",
-            "refId": "B"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "s",
-            "color": {"mode": "palette-classic"}
-          }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" }
         }
-      },
-      {
-        "id": 10,
-        "title": "Error Rate by Stage",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
-        "targets": [
-          {
-            "expr": "rate(graphrag_pipeline_stage_errors_total[5m])",
-            "legendFormat": "{{stage}} - {{error_type}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "ops",
-            "color": {"mode": "palette-classic"}
-          }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Throughput - Communities/sec",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 12 },
+      "targets": [
+        {
+          "expr": "graphrag_pipeline_throughput_communities_per_sec",
+          "legendFormat": "{{stage}}",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "name": "Prometheus" }
         }
-      },
-      {
-        "id": 11,
-        "title": "Chunk Processing Time",
-        "type": "histogram",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
-        "targets": [
-          {
-            "expr": "rate(graphrag_pipeline_chunk_processing_time_seconds_sum[5m]) / rate(graphrag_pipeline_chunk_processing_time_seconds_count[5m])",
-            "legendFormat": "{{stage}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "s",
-            "color": {"mode": "palette-classic"}
-          }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" }
         }
-      },
-      {
-        "id": 12,
-        "title": "Stage Failures",
-        "type": "stat",
-        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 28},
-        "targets": [
-          {
-            "expr": "sum(increase(pipeline_stage_failures{pipeline_type=\"graphrag\"}[1h]))",
-            "legendFormat": "Failures (1h)",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "short",
-            "color": {"mode": "thresholds"},
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {"value": 0, "color": "green"},
-                {"value": 1, "color": "yellow"},
-                {"value": 5, "color": "red"}
-              ]
-            }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Stage Duration",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        {
+          "expr": "rate(graphrag_pipeline_stage_duration_seconds_sum[5m]) / rate(graphrag_pipeline_stage_duration_seconds_count[5m])",
+          "legendFormat": "{{stage}} - Avg",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "name": "Prometheus" }
+        },
+        {
+          "expr": "graphrag_pipeline_stage_duration_seconds_max",
+          "legendFormat": "{{stage}} - Max",
+          "refId": "B",
+          "datasource": { "type": "prometheus", "name": "Prometheus" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Error Rate by Stage",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        {
+          "expr": "rate(graphrag_pipeline_stage_errors_total[5m])",
+          "legendFormat": "{{stage}} - {{error_type}}",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "name": "Prometheus" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" }
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Chunk Processing Time",
+      "type": "histogram",
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "targets": [
+        {
+          "expr": "rate(graphrag_pipeline_chunk_processing_time_seconds_sum[5m]) / rate(graphrag_pipeline_chunk_processing_time_seconds_count[5m])",
+          "legendFormat": "{{stage}}",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "name": "Prometheus" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" }
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Stage Failures",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 28 },
+      "targets": [
+        {
+          "expr": "sum(increase(pipeline_stage_failures{pipeline_type=\"graphrag\"}[1h]))",
+          "legendFormat": "Failures (1h)",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "name": "Prometheus" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 1, "color": "yellow" },
+              { "value": 5, "color": "red" }
+            ]
           }
         }
       }
-    ],
-    "time": {
-      "from": "now-1h",
-      "to": "now"
-    },
-    "timepicker": {},
-    "templating": {
-      "list": []
-    },
-    "annotations": {
-      "list": []
-    },
-    "links": []
-  }
+    }
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": []
 }
-
-
-

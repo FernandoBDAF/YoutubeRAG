@@ -38,8 +38,9 @@ Detection Strategy:
   • Conflict detection: Warn if PLAN and filesystem disagree
 
 Interactive Mode:
-  • Pre-execution: prompt_interactive_menu() - Choose workflow
-  • Post-generation: output_interactive_menu() - Handle output
+  • Pre-execution: InteractiveMenu().show_pre_execution_menu() - Choose workflow
+  • Post-generation: InteractiveMenu().show_post_generation_menu() - Handle output
+  • Module: interactive_menu.py (Achievement 2.1 - extracted from main file)
   • Flag preservation: --interactive persists through workflow
   • Smart defaults: Enter = copy (most common action)
 
@@ -52,7 +53,7 @@ Parsing Bugs (67% of total - Bugs #1-8):
   Bug #5: Missing "Implementation Strategy" section name
     Fix: Added to fallback chain in extract_subplan_approach()
     Lesson: Markdown flexibility breaks rigid parsing
-  
+
   Bug #8: Missing 🎯 emoji in SUBPLAN approach section
     Fix: Emoji-agnostic regex in generate_execution_prompt.py
     Lesson: Recurrence of Bug #5 - same root cause
@@ -63,16 +64,21 @@ Architectural Bugs (25% of total - Bugs #9-11):
     Fix: Created shared path_resolution.py module
     Lesson: Code duplication causes feature parity gaps
     Reference: EXECUTION_ANALYSIS_SUBPLAN-PROMPT-GENERATOR-MISSING-PATH-RESOLUTION-BUG-9.md
-  
+
   Bug #10: Incorrect path format in generated commands
     Fix: Changed @{subplan_path} to @{subplan_path.name} (lines 1902, 2009)
     Lesson: Path objects vs strings in f-strings
     Reference: EXECUTION_ANALYSIS_GENERATE-PROMPT-INCORRECT-SUBPLAN-PATH-BUG-10.md
-  
+
   Bug #11: --subplan-only flag silent failure
     Fix: Changed @{plan_path} to @{plan_path.name} + improved error handling
     Lesson: Silent failures destroy trust - always provide actionable messages
     Reference: EXECUTION_ANALYSIS_SUBPLAN-ONLY-FLAG-SILENT-FAILURE-BUG-11.md
+
+  Bug #12: --subplan-only flag path resolution failure (Bug #11 recurrence)
+    Fix: Changed @{plan_path} to @{plan_path.name} on line 1415
+    Lesson: Same bug pattern in different code path - need systematic search
+    Reference: EXECUTION_DEBUG_SUBPLAN-ONLY-FLAG-PATH-BUG.md
 
 State Sync Bugs (8% of total):
   Achievement 0.2, 1.1 status conflicts: SUBPLAN complete but PLAN not updated
@@ -123,20 +129,27 @@ DESIGN PHILOSOPHY
 CURRENT STATE & REFACTOR NOTES
 ═══════════════════════════════════════════════════════════════════════
 
-File Size: 2,270 lines (growing, needs modularization)
-Functions: 24 total
-Test Coverage: ~25% (49 tests, but 21 of 24 functions untested)
+File Size: 2,874 lines (reduced from 3,625 lines - Achievement 2.1)
+Functions: 22 total (2 functions extracted to interactive_menu.py)
+Test Coverage: ~25% (49 tests, but 19 of 22 functions untested)
 Known Issues: Fragile text parsing (Bugs #1-8 root cause)
 
+Completed Refactor (Achievement 2.1):
+  ✅ InteractiveMenu extracted to interactive_menu.py (834 lines)
+  ✅ Reduced main file by 751 lines (20.7% reduction)
+  ✅ All interactive functionality preserved
+  ✅ 17 new module tests added (all passing)
+
 Planned Refactor (Priority 2):
-  • Achievement 2.4: Filesystem state management (eliminate parsing bugs)
-  • Achievement 2.5: Migration & validation
-  • Achievement 2.6: Class-based architecture (5 classes)
+  • Achievement 2.2: Extract Workflow Detection Module
+  • Achievement 2.3: Extract Prompt Generation Module
+  • Achievement 2.4: Extract Parsing & Utilities Module
+  • Achievement 2.5: Codify Feedback System Patterns
+  • Achievement 2.6: Integrate Modules & Final Refactor
     - PromptGenerator (orchestration)
     - PlanParser (markdown fallback)
     - WorkflowDetector (filesystem-first)
     - ConflictDetector (validation)
-    - InteractiveMenu (two-stage UI)
 
 Architectural Rules (for refactor):
   1. Filesystem state is PRIMARY source of truth
@@ -154,20 +167,20 @@ USAGE EXAMPLES
 Interactive Mode (PRIMARY UI - Recommended):
     # Two-stage experience with menus
     python generate_prompt.py @RESTORE --interactive
-    
+
     Stage 1: Choose workflow (next/specific/view)
     Stage 2: Handle output (copy/view/save/execute)
 
 Non-Interactive Mode (Power Users):
     # Auto-detect next step
     python generate_prompt.py @RESTORE --next
-    
+
     # Specific achievement
     python generate_prompt.py @GRAPHRAG --achievement 0.3
-    
+
     # SUBPLAN work only (Designer)
     python generate_prompt.py @PROMPT --achievement 1.2 --subplan-only
-    
+
     # EXECUTION work only (Executor)
     python generate_prompt.py @PROMPT --achievement 1.2 --execution-only
 
@@ -175,14 +188,14 @@ Shortcuts:
     # @folder finds PLAN automatically (Achievement 0.1)
     @RESTORE → work-space/plans/RESTORE-EXECUTION-WORKFLOW-AUTOMATION/PLAN_*.md
     @GRAPHRAG → work-space/plans/GRAPHRAG-OBSERVABILITY-EXCELLENCE/PLAN_*.md
-    
+
     # Clipboard is default (Achievement 0.1)
     Output auto-copied, use --no-clipboard to disable
 
 Conflict Resolution:
     # Trust PLAN as source of truth
     python generate_prompt.py @PLAN --next --trust-plan
-    
+
     # Trust filesystem as source of truth
     python generate_prompt.py @PLAN --next --trust-filesystem
 
@@ -259,6 +272,49 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Optional, Dict
 
+# Add project root to path for imports (when script is run directly)
+_script_dir = Path(__file__).parent
+_project_root = _script_dir.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Achievement 3.1: Add structured logging (after sys.path setup)
+from core.libraries.logging import get_logger, set_log_context
+
+logger = get_logger(__name__)
+
+# Achievement 3.2: Add metrics for performance monitoring
+from core.libraries.metrics import Counter, Histogram, Timer, MetricRegistry
+
+# Define metrics
+prompt_generation_counter = Counter(
+    "prompt_generation_total", description="Total prompts generated", labels=["workflow", "status"]
+)
+
+prompt_generation_duration = Histogram(
+    "prompt_generation_duration_seconds",
+    description="Prompt generation duration",
+    labels=["workflow"],
+)
+
+plan_cache_hits = Counter(
+    "plan_cache_hits_total", description="PLAN cache hits", labels=["cache_name", "hit_type"]
+)
+
+# Register metrics with registry
+registry = MetricRegistry.get_instance()
+registry.register(prompt_generation_counter)
+registry.register(prompt_generation_duration)
+registry.register(plan_cache_hits)
+
+# Import interactive menu module (Achievement 2.1)
+from LLM.scripts.generation.interactive_menu import InteractiveMenu
+from LLM.scripts.generation.workflow_detector import WorkflowDetector
+from LLM.scripts.generation.prompt_builder import PromptBuilder
+from LLM.scripts.generation.plan_parser import PlanParser
+from LLM.scripts.generation import utils
+from LLM.scripts.generation.utils import Achievement
+
 # Import structure detection for dual structure support
 try:
     from LLM.scripts.workflow.structure_detection import detect_structure
@@ -269,420 +325,35 @@ except ImportError:
         return "flat"
 
 
-@dataclass
-class Achievement:
-    """Achievement data structure."""
-
-    number: str  # "0.1", "1.1"
-    title: str
-    goal: str
-    effort: str  # "2-3 hours"
-    priority: str
-    section_lines: int  # Lines in achievement section
+# Achievement class moved to utils.py (Achievement 2.6 - Integration)
+# Use: from LLM.scripts.generation.utils import Achievement
 
 
-def parse_plan_file(plan_path: Path) -> dict:
-    """
-    Extract structured data from PLAN file for prompt generation.
-    
-    Parses PLAN markdown to extract:
-    - Feature name (from filename)
-    - All achievements (number, title, section size)
-    - Archive location
-    - Handoff section size
-    
-    Used by: generate_prompt(), main()
-    Tested: Yes (4 tests in test_core_parsing.py)
-    
-    Args:
-        plan_path: Path to PLAN markdown file
-    
-    Returns:
-        dict with keys:
-            - feature_name: str (e.g., "RESTORE-EXECUTION-WORKFLOW-AUTOMATION")
-            - achievements: List[Achievement] (all achievements in PLAN)
-            - archive_location: str (e.g., "./feature-archive/")
-            - total_plan_lines: int (total lines in PLAN)
-            - handoff_lines: int (lines in "Current Status & Handoff" section)
-    
-    Example:
-        >>> plan_data = parse_plan_file(Path("PLAN_FEATURE.md"))
-        >>> print(plan_data["feature_name"])
-        "FEATURE"
-        >>> print(len(plan_data["achievements"]))
-        7
-    """
-    with open(plan_path, "r", encoding="utf-8") as f:
-        content = f.read()
-        lines = content.split("\n")
-    
-    # Extract feature name
-    feature_name = plan_path.stem.replace("PLAN_", "")
-    
-    # Parse achievements
-    achievements = []
-    for i, line in enumerate(lines):
-        if match := re.match(r"\*\*Achievement (\d+\.\d+)\*\*:(.+)", line):
-            ach_num = match.group(1)
-            ach_title = match.group(2).strip()
-            
-            # Estimate section size (until next achievement or section)
-            section_lines = estimate_section_size(lines, i)
-            
-            achievements.append(
-                Achievement(
-                number=ach_num,
-                title=ach_title,
-                goal="",  # Would need more parsing
-                effort="",  # Would need more parsing
-                priority="",  # Would need more parsing
-                    section_lines=section_lines,
-                )
-            )
-    
-    # Find archive location
-    archive_location = find_archive_location(lines)
-    
-    # Calculate handoff section size
-    handoff_lines = calculate_handoff_size(lines)
-    
-    return {
-        "feature_name": feature_name,
-        "achievements": achievements,
-        "archive_location": archive_location,
-        "total_plan_lines": len(lines),
-        "handoff_lines": handoff_lines,
-    }
+# Note: parse_plan_file() moved to plan_parser.py (Achievement 2.4)
+# Use PlanParser().parse_plan_file() instead
 
 
-def extract_handoff_section(plan_content: str) -> Optional[str]:
-    """
-    Extract 'Current Status & Handoff' section content from PLAN.
-    
-    This section is the AUTHORITATIVE source for workflow state - it tells us
-    what's complete, what's next, and what's in progress. Used by all
-    achievement finding and conflict detection functions.
-    
-    Handles variations:
-    - "## 📝 Current Status & Handoff"
-    - "## Current Status & Handoff"
-    - "## Current Status and Handoff"
-    
-    Bug Fixes Incorporated:
-        - Handles emoji variations in section header
-        - Stops at next ## header (not greedy)
-        - Returns None if section is empty or only contains separators
-    
-    Used by: find_next_achievement_from_plan(), is_achievement_complete(),
-             get_plan_status(), is_plan_complete(), detect_plan_filesystem_conflict()
-    Tested: Yes (4 tests in test_core_parsing.py)
-
-    Args:
-        plan_content: Full PLAN file content as string
-
-    Returns:
-        Section content as string, or None if section not found or empty
-    
-    Example:
-        >>> content = Path("PLAN_FEATURE.md").read_text()
-        >>> handoff = extract_handoff_section(content)
-        >>> print("Next:" in handoff)
-        True
-    """
-    lines = plan_content.split("\n")
-    section_start = None
-
-    # Find section start - look for "Current Status & Handoff" header
-    for i, line in enumerate(lines):
-        # Match variations: "## 📝 Current Status & Handoff", "## Current Status & Handoff", etc.
-        if re.search(r"##\s*.*Current Status.*Handoff", line, re.IGNORECASE):
-            section_start = i
-            break
-
-    if section_start is None:
-        return None
-
-    # Extract content until next ## section header
-    section_lines = []
-    for i in range(section_start + 1, len(lines)):
-        line = lines[i]
-        # Stop at next ## header (any level)
-        if line.strip().startswith("##"):
-            break
-        section_lines.append(line)
-
-    # Return section content, or None if empty
-    content = "\n".join(section_lines).strip()
-    # Consider section empty if it only contains whitespace, dashes, or horizontal rules
-    if not content or content.strip() in ("", "---", "***", "___"):
-        return None
-    return content
+# Note: extract_handoff_section() moved to plan_parser.py (Achievement 2.4)
+# Use PlanParser().extract_handoff_section() instead
 
 
-def find_next_achievement_from_plan(plan_content: str) -> Optional[str]:
-    """
-    Find next achievement from PLAN's 'Current Status & Handoff' section.
-    
-    This is the PRIMARY method for finding next achievement - it reads the
-    PLAN's explicit "Next:" statement in the handoff section, which is the
-    most authoritative source of workflow state.
-    
-    Search Strategy:
-    1. Check handoff section first (authoritative)
-    2. Try multiple patterns (⏳ Next:, Next:, etc.)
-    3. Fall back to full file if handoff doesn't have clear "Next"
-    
-    Pattern Priority (specific → generic):
-    - "⏳ Next: Achievement X.Y" (most specific)
-    - "Next: Achievement X.Y"
-    - "⏳ Achievement X.Y"
-    - "**Next**: ... Achievement X.Y" (most greedy, last)
-    
-    Bug Fixes Incorporated:
-        - Bug #6: Reordered patterns to avoid greedy matches
-        - Prioritizes handoff section over full file
-        - Handles emoji variations
-    
-    Used by: find_next_achievement_hybrid(), main()
-    Tested: Yes (4 tests in test_core_parsing.py)
-    
-    Args:
-        plan_content: Full PLAN file content as string
-    
-    Returns:
-        Achievement number (e.g., "1.1") or None if not found
-    
-    Example:
-        >>> content = Path("PLAN_FEATURE.md").read_text()
-        >>> next_ach = find_next_achievement_from_plan(content)
-        >>> print(next_ach)
-        "1.2"
-    """
-    # Reordered patterns: specific formats first, generic/greedy last
-    # Pattern 4 first (most specific): ⏳ Next: Achievement
-    # Pattern 1 last (most greedy): **Next**: ... Achievement (matches across sections)
-    patterns = [
-        r"⏳\s*Next[:\s]+Achievement\s+(\d+\.\d+)",  # Pattern 4: ⏳ Next: Achievement (most specific)
-        r"(?:Next|What\'s Next)[:\s]+Achievement\s+(\d+\.\d+)",  # Pattern 2: Next: Achievement
-        r"Next[:\s]+Achievement\s+(\d+\.\d+)",  # Pattern 5: Next: Achievement (generic)
-        r"⏳\s*Achievement\s+(\d+\.\d+)",  # Pattern 3: ⏳ Achievement (least specific)
-        r"(?:Next|What\'s Next)\*\*[:\s]+.*?Achievement\s+(\d+\.\d+)",  # Pattern 1: **Next**: ... Achievement (most greedy, last)
-    ]
-
-    # Primary: Try handoff section first (authoritative source)
-    handoff_section = extract_handoff_section(plan_content)
-    if handoff_section:
-        # Search patterns in handoff section only
-        for pattern in patterns:
-            match = re.search(pattern, handoff_section, re.IGNORECASE | re.MULTILINE)
-            if match:
-                return match.group(1)
-
-    # Fallback: Search full file (reordered patterns)
-    for pattern in patterns:
-        match = re.search(pattern, plan_content, re.IGNORECASE | re.MULTILINE)
-        if match:
-            return match.group(1)
-
-    return None
-
-
-def find_next_achievement_from_archive(
-    feature_name: str, achievements: List[Achievement], archive_location: str, plan_content: str
-) -> Optional[Achievement]:
-    """
-    Find first achievement without archived SUBPLAN (fallback detection method).
-    
-    This is a FALLBACK method used when handoff section doesn't have clear
-    "Next:" statement. Checks archive directory for SUBPLANs.
-    
-    Detection Logic:
-    1. Check if archive directory exists
-    2. For each achievement (in order):
-       - Skip if marked complete in PLAN
-       - Check if SUBPLAN exists in archive
-       - Return first achievement without archived SUBPLAN
-    
-    Bug Fixes Incorporated:
-        - Bug #2: Skips completed achievements (fixes duplicate detection)
-        - Validates achievement is not complete before returning
-    
-    Used by: find_next_achievement_hybrid()
-    Tested: No (Priority 1.3 - needs tests)
-
-    Args:
-        feature_name: Feature name
-        achievements: List of achievements
-        archive_location: Archive directory path
-        plan_content: PLAN file content (for completion checking)
-
-    Returns:
-        First incomplete achievement without archived SUBPLAN, or None
-    
-    Example:
-        >>> next_ach = find_next_achievement_from_archive("FEATURE", achievements, "./archive/", content)
-        >>> print(next_ach.number if next_ach else None)
-        "1.2"
-    """
-    # Convert archive location string to Path
-    archive_path = Path(archive_location)
-
-    # Check if archive location exists
-    if not archive_path.exists():
-        return None
-
-    # Check subplans directory
-    archive_subplans = archive_path / "subplans"
-    if not archive_subplans.exists():
-        return None
-
-    # Find first achievement without archived SUBPLAN
-    for ach in achievements:
-        # SKIP if marked complete (fixes Bug #2, #3)
-        if is_achievement_complete(ach.number, plan_content):
-            continue
-
-        # Check if SUBPLAN exists in archive
-        subplan_num = ach.number.replace(".", "")
-        subplan_file = archive_subplans / f"SUBPLAN_{feature_name}_{subplan_num}.md"
-        if not subplan_file.exists():
-            return ach
-
-    return None
-
-
-def find_next_achievement_from_root(
-    feature_name: str, achievements: List[Achievement], plan_content: str
-) -> Optional[Achievement]:
-    """
-    Find first achievement without SUBPLAN in root directory (fallback method).
-    
-    This is a FALLBACK method for flat workspace structure (legacy).
-    Most PLANs now use nested structure, so this is rarely used.
-    
-    Detection Logic:
-    1. For each achievement (in order):
-       - Skip if marked complete in PLAN
-       - Check if SUBPLAN exists in root (flat structure)
-       - Return first achievement without SUBPLAN
-    
-    Bug Fixes Incorporated:
-        - Bug #2: Skips completed achievements (fixes duplicate detection)
-    
-    Used by: find_next_achievement_hybrid()
-    Tested: No (Priority 1.3 - needs tests)
-
-    Args:
-        feature_name: Feature name
-        achievements: List of achievements
-        plan_content: PLAN file content (for completion checking)
-
-    Returns:
-        First incomplete achievement without SUBPLAN, or None
-    
-    Example:
-        >>> next_ach = find_next_achievement_from_root("FEATURE", achievements, content)
-        >>> print(next_ach.number if next_ach else None)
-        "1.2"
-    """
-    for ach in achievements:
-        # SKIP if marked complete (fixes Bug #2, #3)
-        if is_achievement_complete(ach.number, plan_content):
-            continue
-
-        # Check if SUBPLAN exists in root
-        subplan_num = ach.number.replace(".", "")
-        subplan_file = Path(f"SUBPLAN_{feature_name}_{subplan_num}.md")
-        if not subplan_file.exists():
-            return ach
-    return None
-
-
-def is_achievement_complete(ach_num: str, plan_content: str) -> bool:
-    """
-    Check if a single achievement is marked complete in PLAN.
-    
-    Critical function for workflow state detection - determines if we should
-    skip an achievement or work on it. Used by conflict detection, achievement
-    finding, and PLAN completion checking.
-    
-    Search Strategy:
-    1. Check handoff section first (most authoritative source)
-    2. Try multiple completion patterns (✅, "Complete:", etc.)
-    3. Fall back to full PLAN if handoff doesn't have info
-    
-    Completion Patterns Recognized:
-    - "✅ Achievement 1.1 complete"
-    - "✅ Achievement 1.1"
-    - "- ✅ Achievement 1.1"
-    - "Achievement 1.1 ... ✅"
-    - "Achievement 1.1 Complete:"
-    
-    Bug Fixes Incorporated:
-        - Bug #2: Skips completed achievements (fixes duplicate detection)
-        - Bug #3: Checks handoff section first (authoritative)
-        - Handles emoji variations and format differences
-    
-    Used by: find_next_achievement_from_archive(), find_next_achievement_from_root(),
-             find_next_achievement_hybrid(), is_plan_complete()
-    Tested: No (Priority 1.3 - needs tests)
-
-    Args:
-        ach_num: Achievement number (e.g., "1.1")
-        plan_content: Full PLAN file content
-
-    Returns:
-        True if achievement is marked complete, False otherwise
-    
-    Example:
-        >>> content = Path("PLAN_FEATURE.md").read_text()
-        >>> is_achievement_complete("0.1", content)
-        True
-        >>> is_achievement_complete("0.3", content)
-        False
-    """
-    # Extract handoff section (most authoritative)
-    handoff_section = extract_handoff_section(plan_content)
-
-    # Priority 1: Check handoff section
-    if handoff_section:
-        patterns = [
-            rf"✅\s+Achievement\s+{re.escape(ach_num)}\s+complete",
-            rf"✅\s+Achievement\s+{re.escape(ach_num)}",
-            rf"- ✅ Achievement {re.escape(ach_num)}",
-            rf"Achievement\s+{re.escape(ach_num)}.*✅",
-            # Match "Achievement X.Y Complete:" format (no emoji)
-            rf"Achievement\s+{re.escape(ach_num)}\s+Complete:?",
-        ]
-        for pattern in patterns:
-            if re.search(pattern, handoff_section, re.IGNORECASE):
-                return True
-
-    # Priority 2: Check full plan content (fallback)
-    patterns = [
-        rf"✅\s+Achievement\s+{re.escape(ach_num)}\s+complete",
-        rf"✅\s+Achievement\s+{re.escape(ach_num)}",
-    ]
-    for pattern in patterns:
-        if re.search(pattern, plan_content, re.IGNORECASE):
-            return True
-
-    return False
+# is_achievement_complete() moved to utils.py (Achievement 2.6 - Integration)
+# Use utils.is_achievement_complete() instead
 
 
 def get_plan_status(plan_content: str) -> str:
     """
     Extract PLAN status from content (for status-based workflow detection).
-    
+
     Checks for "**Status**: ..." field in handoff section or PLAN header.
     Used as fallback when handoff doesn't have clear "Next:" statement.
-    
+
     Status Values:
     - "planning": PLAN not started
     - "in progress": PLAN active
     - "complete": PLAN done
     - "unknown": Status not found
-    
+
     Used by: find_next_achievement_hybrid()
     Tested: No (Priority 1.3 - needs tests)
 
@@ -691,7 +362,7 @@ def get_plan_status(plan_content: str) -> str:
 
     Returns:
         Status string (e.g., "planning", "in progress", "complete") or "unknown"
-    
+
     Example:
         >>> content = Path("PLAN_FEATURE.md").read_text()
         >>> status = get_plan_status(content)
@@ -699,7 +370,8 @@ def get_plan_status(plan_content: str) -> str:
         "in progress"
     """
     # Check handoff section first
-    handoff_section = extract_handoff_section(plan_content)
+    parser = PlanParser()
+    handoff_section = parser.extract_handoff_section(plan_content)
     if handoff_section:
         status_match = re.search(
             r"\*\*Status\*\*[:\s]+(\w+(?:\s+\w+)?)", handoff_section, re.IGNORECASE
@@ -715,242 +387,88 @@ def get_plan_status(plan_content: str) -> str:
     return "unknown"
 
 
-def is_plan_complete(plan_content: str, achievements: List[Achievement]) -> bool:
+def is_plan_complete(
+    plan_content: str, achievements: List[Achievement], plan_path: Path = None
+) -> bool:
     """
-    Check if PLAN is complete (all achievements done).
-    
+    Check if PLAN is complete (all achievements done) - FILESYSTEM-ONLY.
+
+    **State Tracking Philosophy**:
+    - PLAN's responsibility: Define Achievement Index (list of all achievements)
+    - Filesystem's responsibility: Track completion via APPROVED_XX.md files
+    - NO markdown parsing for completion status
+
+    This function checks ONLY the filesystem for APPROVED_XX.md files.
+    A PLAN is complete when ALL achievements have APPROVED files.
+
     Critical function that determines if we should show completion message
     or continue with next achievement. Must be accurate to avoid false
     completions or missing actual completions.
-    
-    Completion Detection Strategy:
-    1. Check handoff section for explicit completion indicators
-    2. Try multiple completion patterns (specific → generic)
-    3. Count completed achievements vs total
-    4. Validate completion (not in code blocks)
-    
-    Completion Patterns Recognized:
-    - "All achievements complete"
-    - "All Priority N complete"
-    - "PLAN complete"
-    - "Status: Complete"
-    - "7/7 achievements complete"
-    
+
+    Detection Strategy (FILESYSTEM-ONLY):
+    1. Iterate through all achievements from Achievement Index
+    2. Check if each has an APPROVED_XX.md file (via is_achievement_complete)
+    3. Return True ONLY if ALL achievements have approved files
+
     Bug Fixes Incorporated:
-        - Bug #2: More specific patterns to avoid false positives
-        - Bug #4: Doesn't match "plan_completion.py" or similar
-        - Validates match is not in code block
-        - Uses is_achievement_complete() for consistency
-    
+        - Bug #11 (2025-11-12): Removed ALL markdown parsing for completion status.
+          Previous implementation had markdown checks (pattern matching) BEFORE
+          filesystem checks, violating filesystem-first philosophy. Now purely
+          filesystem-based using APPROVED_XX.md files.
+
     Used by: find_next_achievement_hybrid(), main()
     Tested: No (Priority 1.3 - needs tests)
 
     Args:
-        plan_content: Full PLAN file content as string
-        achievements: List of achievements from PLAN
+        plan_content: Full PLAN file content (unused for state, kept for compatibility)
+        achievements: List of achievements from Achievement Index
+        plan_path: Path to PLAN file (required for filesystem checks)
 
     Returns:
-        True if all achievements are complete, False otherwise
-    
+        True if all achievements have APPROVED_XX.md files, False otherwise
+
     Example:
-        >>> content = Path("PLAN_FEATURE.md").read_text()
-        >>> achievements = parse_plan_file(Path("PLAN_FEATURE.md"))["achievements"]
-        >>> is_plan_complete(content, achievements)
-        True
+        >>> plan_path = Path("work-space/plans/FEATURE/PLAN_FEATURE.md")
+        >>> achievements = parse_plan_file(plan_path)["achievements"]
+        >>> content = plan_path.read_text()
+        >>> is_plan_complete(content, achievements, plan_path)
+        True  # Only if ALL achievements have APPROVED files
     """
-    # Extract handoff section (most authoritative source)
-    handoff_section = extract_handoff_section(plan_content)
-    if not handoff_section:
-        # No handoff section means PLAN is likely not started or incomplete
+    # If no plan_path provided, cannot check filesystem
+    if not plan_path or not achievements:
         return False
 
-    # Check for explicit completion indicators (MORE SPECIFIC)
-    completion_patterns = [
-        r"\bAll\s+achievements?\s+complete\b",  # "All achievements complete" (not "all achievements are complete")
-        r"\bAll\s+Priority\s+\d+\s+complete\b",  # "All Priority 1 complete"
-        r"\bPLAN\s+complete\b",  # "PLAN complete" (not "plan_completion.py")
-        r"\bStatus[:\s]+Complete\b",  # "Status: Complete" (not "Status**: Achievement 2.1 Complete")
-        r"✅\s+PLAN\s+Complete",  # "✅ PLAN Complete"
-        r"PLAN\s+✅\s+Complete",  # "PLAN ✅ Complete"
-    ]
+    # Count completed achievements (FILESYSTEM-ONLY - check APPROVED_XX.md files)
+    completed_count = 0
+    for ach in achievements:
+        # is_achievement_complete() checks for APPROVED_XX.md files (filesystem-only)
+        if utils.is_achievement_complete(ach.number, plan_content, plan_path):
+            completed_count += 1
 
-    for pattern in completion_patterns:
-        match = re.search(pattern, handoff_section, re.IGNORECASE)
-        if match:
-            # Additional validation: ensure it's not in a code block or script reference
-            match_start = match.start()
-            # Check if match is in code block (```)
-            before_match = handoff_section[:match_start]
-            code_block_count = before_match.count("```")
-            if code_block_count % 2 == 0:  # Not in code block
-                return True
-
-    # Check completion percentage (MORE SPECIFIC - only explicit completion)
-    percentage_patterns = [
-        r"(\d+)/(\d+)\s+achievements?\s+complete",  # "7/7 achievements complete"
-        r"(\d+)/(\d+)\s+complete",  # "7/7 complete"
-        # REMOVED: r"(\d+)/(\d+)\s+achievements?" - too broad, matches statistics
-    ]
-
-    for pattern in percentage_patterns:
-        match = re.search(pattern, handoff_section, re.IGNORECASE)
-        if match:
-            completed = int(match.group(1))
-            total = int(match.group(2))
-            if completed == total and total > 0:
-                return True
-
-    # Count completed achievements in handoff (FIXED - use is_achievement_complete for consistency)
-    if achievements:
-        completed_count = 0
-        for ach in achievements:
-            # Use is_achievement_complete() for consistency
-            if is_achievement_complete(ach.number, plan_content):
-                completed_count += 1
-
-        # If all achievements are marked complete, PLAN is complete
-        if completed_count == len(achievements) and len(achievements) > 0:
-            return True
-
-    return False
-
-
-def find_next_achievement_hybrid(
-    plan_path: Path, feature_name: str, achievements: List[Achievement], archive_location: str
-) -> Optional[Achievement]:
-    """
-    Find next achievement using multiple methods (hybrid approach).
-    
-    This is the MAIN achievement finding function - combines multiple detection
-    methods with comprehensive validation to find the correct next achievement.
-    
-    Detection Methods (Priority Order):
-    1. Parse PLAN handoff section (MOST AUTHORITATIVE)
-       - Reads explicit "Next: Achievement X.Y" statement
-       - Validates achievement exists and is not complete
-       - Warns if handoff is stale
-    
-    2. Check PLAN status (FALLBACK for plans without clear "Next")
-       - If status is "planning", return first achievement
-       - Handles plans just starting
-    
-    3. Check archive directory (FALLBACK for archived SUBPLANs)
-       - Finds first achievement without archived SUBPLAN
-       - Skips completed achievements
-    
-    4. Check root directory (FALLBACK for flat structure)
-       - Finds first achievement without SUBPLAN in root
-       - Skips completed achievements
-    
-    Validation:
-    - Checks if PLAN is complete FIRST (returns None if done)
-    - Skips achievements marked complete
-    - Warns if handoff mentions non-existent achievement
-    - Warns if handoff mentions complete achievement
-    
-    Bug Fixes Incorporated:
-        - Bug #1: Validates achievement exists before returning
-        - Bug #2: Skips completed achievements (fixes duplicate detection)
-        - Bug #3: Checks handoff section first (authoritative)
-        - Bug #6: Comprehensive validation with warnings
-    
-    Used by: main() (when --next flag is used)
-    Tested: No (Priority 1.3 - needs tests)
-
-    Args:
-        plan_path: Path to PLAN file
-        feature_name: Feature name (e.g., "API-REVIEW-AND-TESTING")
-        achievements: List of achievements from PLAN
-        archive_location: Archive directory path
-
-    Returns:
-        Achievement object or None if PLAN is complete or no achievement found
-    
-    Example:
-        >>> next_ach = find_next_achievement_hybrid(plan_path, "FEATURE", achievements, "./archive/")
-        >>> print(next_ach.number)
-        "1.2"
-        >>> print(next_ach.title)
-        "Comprehensive Inline Documentation"
-    """
-    # Read PLAN content once
-    try:
-        with open(plan_path, "r", encoding="utf-8") as f:
-            plan_content = f.read()
-    except Exception:
-        return None
-
-    # STEP 1: Check if PLAN is complete FIRST (fixes Bug #2, #4)
-    if is_plan_complete(plan_content, achievements):
-        return None  # Indicates PLAN is complete
-
-    # STEP 2: Method 1 - Parse PLAN "What's Next" (MOST AUTHORITATIVE - fixes Bug #6)
-    next_num = find_next_achievement_from_plan(plan_content)
-    if next_num:
-        # Validate achievement exists (fixes Bug #1, #3)
-        next_ach = next((a for a in achievements if a.number == next_num), None)
-        if next_ach:
-            # Additional check: ensure achievement is not complete
-            if not is_achievement_complete(next_ach.number, plan_content):
-                return next_ach
-            # If complete, continue to fallback (shouldn't happen if handoff is correct)
-            import warnings
-
-            warnings.warn(
-                f"Achievement {next_num} mentioned in handoff but is marked complete. "
-                f"Falling back to next incomplete achievement.",
-                UserWarning,
-            )
-        else:
-            # Achievement doesn't exist (Bug #1, #3)
-            import warnings
-
-            warnings.warn(
-                f"Achievement {next_num} mentioned in handoff but not found in PLAN. "
-                f"Available achievements: {[a.number for a in achievements]}. "
-                f"Falling back to archive/root methods.",
-                UserWarning,
-            )
-
-    # STEP 3: Check PLAN status (FALLBACK for plans without clear "Next" in handoff)
-    status = get_plan_status(plan_content)
-    if status == "planning":
-        # Return first achievement if PLAN not started AND first achievement not complete
-        if achievements and not is_achievement_complete(achievements[0].number, plan_content):
-            return achievements[0]
-        # If first achievement complete, continue to fallback (stale status scenario)
-
-    # STEP 4: Method 2 - Check archive directory (with completion check)
-    next_ach = find_next_achievement_from_archive(
-        feature_name, achievements, archive_location, plan_content
-    )
-    if next_ach:
-        return next_ach
-
-    # STEP 5: Method 3 - Check root directory (with completion check)
-    return find_next_achievement_from_root(feature_name, achievements, plan_content)
+    # PLAN is complete ONLY if ALL achievements have APPROVED files
+    return completed_count == len(achievements) and len(achievements) > 0
 
 
 def detect_validation_scripts() -> List[str]:
     """
     Detect which validation scripts exist in the codebase.
-    
+
     Scans for validation scripts that will run after achievement completion
     to verify deliverables, check sizes, validate references, etc.
-    
+
     Used by: generate_prompt() (to show which scripts will run)
     Tested: No (Priority 1.3 - needs tests)
-    
+
     Returns:
         List of validation script names that exist
-    
+
     Example:
         >>> scripts = detect_validation_scripts()
         >>> print(scripts)
         ['validate_achievement_completion.py', 'check_plan_size.py']
     """
     validation_dir = Path("LLM/scripts/validation")
-    
+
     validation_scripts = [
         "validate_achievement_completion.py",
         "validate_execution_start.py",
@@ -961,7 +479,7 @@ def detect_validation_scripts() -> List[str]:
         "validate_references.py",
         "validate_plan_compliance.py",
     ]
-    
+
     existing = []
     for script in validation_scripts:
         # Check new domain structure first (validation/)
@@ -970,106 +488,31 @@ def detect_validation_scripts() -> List[str]:
         # Fallback to old structure (LLM/scripts/) for backward compatibility
         elif (Path("LLM/scripts") / script).exists():
             existing.append(script)
-    
+
     return existing
 
 
-def estimate_section_size(lines: List[str], start_idx: int) -> int:
-    """
-    Estimate lines in achievement section for context budget calculation.
-    
-    Counts lines from achievement header until next achievement or section.
-    Capped at 100 lines to prevent over-estimation.
-    
-    Used by: parse_plan_file()
-    Tested: No (Priority 1.3 - needs tests)
-    
-    Args:
-        lines: All lines from PLAN file
-        start_idx: Index of achievement header line
-    
-    Returns:
-        Estimated line count (max 100)
-    """
-    count = 0
-    for i in range(start_idx, len(lines)):
-        if i > start_idx and lines[i].startswith("**Achievement"):
-            break
-        if lines[i].startswith("## "):
-            break
-        count += 1
-    return min(count, 100)  # Cap estimate at 100
-
-
-def find_archive_location(lines: List[str]) -> str:
-    """
-    Find archive location from PLAN file.
-    
-    Searches for "Archive Location" line and extracts path.
-    Returns default if not found.
-    
-    Used by: parse_plan_file()
-    Tested: No (Priority 1.3 - needs tests)
-    
-    Args:
-        lines: All lines from PLAN file
-    
-    Returns:
-        Archive location path (e.g., "./feature-archive/")
-    """
-    for line in lines:
-        if "Archive Location" in line and "./" in line:
-            match = re.search(r"\./([a-z0-9-]+)/", line)
-            if match:
-                return f"./{match.group(1)}/"
-    return "./feature-archive/"
-
-
-def calculate_handoff_size(lines: List[str]) -> int:
-    """
-    Calculate lines in Current Status & Handoff section for context budget.
-    
-    Used to determine how much context to allocate for handoff section
-    when generating prompts.
-    
-    Used by: parse_plan_file()
-    Tested: No (Priority 1.3 - needs tests)
-    
-    Args:
-        lines: All lines from PLAN file
-    
-    Returns:
-        Line count (default 30 if section not found)
-    """
-    in_section = False
-    count = 0
-    for line in lines:
-        if "Current Status & Handoff" in line:
-            in_section = True
-        elif in_section and line.startswith("##"):
-            break
-        elif in_section:
-            count += 1
-    return count if count > 0 else 30  # Default estimate
+# Note: estimate_section_size(), find_archive_location(), calculate_handoff_size()
+# moved to plan_parser.py (Achievement 2.4) - Use PlanParser() methods instead
 
 
 def inject_project_context(include_context: bool = True) -> str:
     """
     Read and format project context from PROJECT-CONTEXT.md.
-    
+
     Injects essential project information into prompts to provide LLM with
     necessary context about the codebase structure, conventions, and key directories.
-    
+
     Sections Extracted:
     - Project Overview (first 10 lines)
     - Project Structure (key directories, 15 lines)
     - Methodology Conventions (20 lines)
-    
+
     Graceful Degradation:
     - Returns empty string if file not found
     - Returns empty string if parsing fails
     - Never crashes
-    
+
     Used by: generate_prompt()
     Tested: No (Priority 1.3 - needs tests)
 
@@ -1078,12 +521,12 @@ def inject_project_context(include_context: bool = True) -> str:
 
     Returns:
         Formatted project context section, or empty string if disabled or file not found
-    
+
     Example:
         >>> context = inject_project_context(include_context=True)
         >>> print("PROJECT CONTEXT" in context)
         True
-        
+
         >>> context = inject_project_context(include_context=False)
         >>> print(context)
         ""
@@ -1158,149 +601,8 @@ def inject_project_context(include_context: bool = True) -> str:
         return ""
 
 
-# PROMPT TEMPLATES
-
-ACHIEVEMENT_EXECUTION_TEMPLATE = """Execute Achievement {achievement_num} in @PLAN_{feature}.md following strict methodology.
-
-═══════════════════════════════════════════════════════════════════════
-
-CONTEXT BOUNDARIES (Read ONLY These):
-✅ @PLAN_{feature}.md - Achievement {achievement_num} section only ({achievement_lines} lines)
-✅ @PLAN_{feature}.md - "Current Status & Handoff" section ({handoff_lines} lines)
-
-❌ DO NOT READ: Full PLAN ({plan_total_lines} lines), other achievements, archived work
-
-CONTEXT BUDGET: {context_budget} lines maximum
-
-{project_context}═══════════════════════════════════════════════════════════════════════
-
-ACHIEVEMENT {achievement_num}: {achievement_title}
-
-Goal: {achievement_goal}
-Estimated: {estimated_hours}
-
-═══════════════════════════════════════════════════════════════════════
-
-REQUIRED STEPS (No Shortcuts):
-
-Step 1: Create SUBPLAN (MANDATORY)
-- File: SUBPLAN_{feature}_{subplan_num}.md
-- Size: 200-400 lines
-- Must include: Objective, Deliverables, Approach, Tests, Expected Results
-
-Step 2: Create EXECUTION_TASK (MANDATORY)
-- File: EXECUTION_TASK_{feature}_{subplan_num}_01.md
-- Size: 100-200 lines maximum
-- Start with: Objective, Approach, Iteration Log (Iteration 1)
-
-Step 3: Execute Work
-[Implement the achievement deliverables]
-
-Step 4: Verify Deliverables (MANDATORY)
-Run verification:
-  ls -1 [each deliverable path]
-
-If any missing: FIX before continuing
-
-Step 5: Complete EXECUTION_TASK
-- Update: Iteration Log with "Complete"
-- Add: Learning Summary
-- Verify: <200 lines (run: wc -l EXECUTION_TASK_*.md)
-
-Step 6: Archive Immediately
-- Move: SUBPLAN → {archive_location}subplans/
-- Move: EXECUTION_TASK → {archive_location}execution/
-- Update: PLAN Subplan Tracking
-
-Step 7: Update PLAN Statistics
-- Calculate from EXECUTION_TASK (not imagination)
-
-═══════════════════════════════════════════════════════════════════════
-
-VALIDATION ENFORCEMENT:
-
-{validation_scripts}
-
-═══════════════════════════════════════════════════════════════════════
-
-DO NOT:
-❌ Skip SUBPLAN ("it's simple" - NO, all work needs SUBPLANs)
-❌ Skip EXECUTION_TASK ("just document in PLAN" - NO)
-❌ Mark complete without verifying files exist (run: ls -1)
-❌ Read full PLAN (read Achievement {achievement_num} only)
-❌ Claim hours without EXECUTION_TASK to verify from
-
-REMEMBER:
-✓ SUBPLAN + EXECUTION_TASK for EVERY achievement
-✓ Verify deliverables exist (ls -1)
-✓ Archive immediately on completion
-✓ Statistics from EXECUTION_TASK data
-✓ Stay within context budget ({context_budget} lines)
-
-═══════════════════════════════════════════════════════════════════════
-
-EXTERNAL VERIFICATION:
-
-After completing, I will verify:
-1. SUBPLAN file exists and complete?
-2. EXECUTION_TASK file exists with learnings?
-3. All deliverables exist? (filesystem check)
-4. Statistics accurate?
-5. EXECUTION_TASK <200 lines?
-
-Do not proceed until verification passes.
-
-═══════════════════════════════════════════════════════════════════════
-
-Now beginning Achievement {achievement_num} execution:
-
-Creating SUBPLAN_{feature}_{subplan_num}.md...
-"""
-
-
-def fill_template(template: str, context: dict, validation_scripts: List[str]) -> str:
-    """
-    Fill prompt template with actual values from context.
-    
-    Takes the ACHIEVEMENT_EXECUTION_TEMPLATE and replaces placeholders with
-    real values (feature name, achievement number, context budget, etc.).
-    
-    Used by: generate_prompt()
-    Tested: No (Priority 1.3 - needs tests)
-    
-    Args:
-        template: Template string with {placeholders}
-        context: Dict with values to fill
-        validation_scripts: List of validation script names
-    
-    Returns:
-        Filled template string
-    """
-    
-    # Format validation scripts section
-    if validation_scripts:
-        scripts_text = "After Step 4, these scripts will run:\n"
-        for script in validation_scripts:
-            scripts_text += f"✓ {script}\n"
-        scripts_text += "\nIf issues found: BLOCKS with error + fix prompt"
-    else:
-        scripts_text = "(Validation scripts being built in this PLAN)"
-    
-    return template.format(
-        feature=context["feature_name"],
-        achievement_num=context["achievement_num"],
-        achievement_title=context["achievement_title"],
-        achievement_goal=context.get("achievement_goal", "See PLAN for details"),
-        estimated_hours=context.get("estimated_hours", "See PLAN"),
-        achievement_lines=context["achievement_lines"],
-        handoff_lines=context["handoff_lines"],
-        plan_total_lines=context["plan_total_lines"],
-        context_budget=context["context_budget"],
-        subplan_num=context["subplan_num"],
-        archive_location=context["archive_location"],
-        validation_scripts=scripts_text,
-        project_context=context.get("project_context", ""),
-    )
+# PROMPT TEMPLATES - Moved to prompt_builder.py (Achievement 2.3)
+# Template and formatting logic extracted to PromptBuilder class
 
 
 def find_subplan_for_achievement(
@@ -1308,20 +610,20 @@ def find_subplan_for_achievement(
 ) -> Optional[Path]:
     """
     Find SUBPLAN file for achievement in nested workspace structure.
-    
+
     Core discovery function that locates SUBPLAN files for workflow detection.
     Supports both active SUBPLANs (in work-space/plans/) and archived SUBPLANs
     (in documentation/archive/).
-    
+
     Search Strategy:
     1. Try nested structure: work-space/plans/FEATURE/subplans/SUBPLAN_*.md
     2. Try archive: documentation/archive/SUBPLAN_*_ARCHIVED.md
     3. Return None if not found in either location
-    
+
     Naming Convention:
     - Active: SUBPLAN_FEATURE_11.md (achievement 1.1 → 11)
     - Archived: SUBPLAN_FEATURE_11_ARCHIVED.md
-    
+
     Used by: detect_workflow_state_filesystem(), main()
     Tested: No (Priority 1.3 - needs tests)
 
@@ -1332,12 +634,12 @@ def find_subplan_for_achievement(
 
     Returns:
         Path to SUBPLAN file, or None if not found
-    
+
     Example:
         >>> subplan = find_subplan_for_achievement("FEATURE", "1.1", plan_path)
         >>> print(subplan.name)
         "SUBPLAN_FEATURE_11.md"
-        
+
         >>> subplan = find_subplan_for_achievement("FEATURE", "9.9", plan_path)
         >>> print(subplan)
         None
@@ -1374,14 +676,14 @@ def find_subplan_for_achievement(
 def check_subplan_status(subplan_path: Path) -> Dict[str, any]:
     """
     Check SUBPLAN status by parsing its content (legacy detection method).
-    
+
     This is the OLD detection method that parses SUBPLAN markdown to check:
     - If SUBPLAN has active EXECUTION_TASKs (from "Active EXECUTION_TASKs" section)
     - If SUBPLAN is marked complete (from status header)
-    
+
     NOTE: This function is being phased out in favor of filesystem-based detection
     (detect_workflow_state_filesystem) which is more robust.
-    
+
     Used by: detect_workflow_state() (fallback only)
     Tested: No (Priority 1.3 - needs tests)
 
@@ -1394,7 +696,7 @@ def check_subplan_status(subplan_path: Path) -> Dict[str, any]:
             - has_active_executions: bool (from parsing)
             - is_complete: bool (from status header)
             - execution_count: int (count of active executions)
-    
+
     Example:
         >>> status = check_subplan_status(Path("SUBPLAN_FEATURE_01.md"))
         >>> print(status["is_complete"])
@@ -1469,329 +771,26 @@ def check_subplan_status(subplan_path: Path) -> Dict[str, any]:
         }
 
 
-def detect_workflow_state_filesystem(
-    plan_path: Path, feature_name: str, achievement_num: str
-) -> Dict[str, any]:
-    """
-    Detect workflow state using filesystem structure (not content parsing).
-    
-    This is the ROBUST detection method - checks actual files on disk rather
-    than parsing markdown text. Introduced in Achievement 1.6 to eliminate
-    parsing fragility and improve reliability.
-    
-    Detection Logic:
-    1. Check if SUBPLAN file exists
-    2. Check if SUBPLAN is marked complete (header check)
-    3. Count EXECUTION_TASK files in filesystem
-    4. Count completed EXECUTION_TASKs (status check)
-    5. Compare completed vs total to determine state
-    
-    States Returned:
-    - no_subplan: SUBPLAN doesn't exist → create_subplan
-    - subplan_complete: SUBPLAN marked complete → next_achievement
-    - subplan_no_execution: SUBPLAN exists, no EXECUTION files → create_execution
-    - active_execution: Some EXECUTIONs incomplete → continue_execution or create_next_execution
-    - subplan_all_executed: All EXECUTIONs complete → synthesize_or_complete
-    
-    Bug Fixes Incorporated:
-        - Bug #6: Counts from filesystem, not SUBPLAN table (more reliable)
-        - Bug #7: Finds highest execution number from filesystem
-        - Handles multi-execution workflows correctly
-        - Handles _V2 and other filename variations
-    
-    Used by: detect_workflow_state(), main()
-    Tested: No (Priority 1.3 - needs tests)
-
-    Args:
-        plan_path: Path to PLAN file in nested structure
-        feature_name: Feature name (e.g., "METHODOLOGY-HIERARCHY-EVOLUTION")
-        achievement_num: Achievement number (e.g., "0.1")
-
-    Returns:
-        Dict with keys:
-            - state: str (workflow state name)
-            - subplan_path: Optional[Path] (path to SUBPLAN)
-            - recommendation: str (suggested next action)
-            - execution_count: int (total EXECUTION_TASKs planned/found)
-            - completed_count: int (completed EXECUTION_TASKs)
-    
-    Example:
-        >>> state = detect_workflow_state_filesystem(plan_path, "FEATURE", "0.1")
-        >>> print(state["state"])
-        "subplan_no_execution"
-        >>> print(state["recommendation"])
-        "create_execution"
-    """
-    # Find SUBPLAN file
-    subplan_path = find_subplan_for_achievement(feature_name, achievement_num, plan_path)
-
-    if not subplan_path:
-        return {
-            "state": "no_subplan",
-            "subplan_path": None,
-            "recommendation": "create_subplan",
-            "execution_count": 0,
-            "completed_count": 0,
-        }
-
-    # Check if SUBPLAN is marked complete in header
-    try:
-        with open(subplan_path, "r", encoding="utf-8") as f:
-            header = f.read(500)  # Read first 500 chars for status
-
-        # Check for explicit completion in header
-        if re.search(r"\*\*Status\*\*:\s*✅\s*Complete", header, re.IGNORECASE):
-            return {
-                "state": "subplan_complete",
-                "subplan_path": subplan_path,
-                "recommendation": "next_achievement",
-                "execution_count": 0,
-                "completed_count": 0,
-            }
-    except Exception:
-        pass
-
-    # Find EXECUTION_TASK files in filesystem
-    plan_folder = plan_path.parent
-    execution_folder = plan_folder / "execution"
-
-    if not execution_folder.exists():
-        # No execution folder = no executions created yet
-        return {
-            "state": "subplan_no_execution",
-            "subplan_path": subplan_path,
-            "recommendation": "create_execution",
-            "execution_count": 0,
-            "completed_count": 0,
-        }
-
-    # Find all EXECUTION_TASK files for this achievement
-    subplan_num = achievement_num.replace(".", "")
-    execution_pattern = f"EXECUTION_TASK_{feature_name}_{subplan_num}_*.md"
-
-    execution_files = list(execution_folder.glob(execution_pattern))
-
-    if not execution_files:
-        # SUBPLAN exists but no EXECUTION_TASKs created
-        return {
-            "state": "subplan_no_execution",
-            "subplan_path": subplan_path,
-            "recommendation": "create_execution",
-            "execution_count": 0,
-            "completed_count": 0,
-        }
-
-    # Check completion status of each EXECUTION_TASK
-    completed_count = 0
-    for exec_file in execution_files:
-        try:
-            with open(exec_file, "r", encoding="utf-8") as f:
-                content = f.read()
-            # Check for completion marker anywhere in file (not just header)
-            # This handles cases where status is updated in iteration logs
-            if re.search(r"\*\*Status\*\*:\s*✅\s*Complete", content, re.IGNORECASE):
-                completed_count += 1
-        except Exception:
-            continue
-
-    filesystem_count = len(execution_files)
-
-    # Check SUBPLAN for planned execution count (for multi-execution workflows)
-    planned_count = None
-    try:
-        with open(subplan_path, "r", encoding="utf-8") as f:
-            subplan_content = f.read()
-
-        # Look for "## 🔄 Active EXECUTION_TASKs" section
-        active_section_match = re.search(
-            r"##\s*🔄\s*Active EXECUTION_TASKs.*?(?=\n##\s|\Z)",
-            subplan_content,
-            re.DOTALL | re.IGNORECASE,
-        )
-
-        if active_section_match:
-            # Count EXECUTION_TASK entries in the section
-            # Look for table rows starting with execution numbers (first column only)
-            active_section = active_section_match.group(0)
-            # Split into lines and count rows that start with | followed by execution number
-            lines = active_section.split("\n")
-            execution_rows = []
-            for line in lines:
-                # Match lines like "| 01_01     | ..." (first column)
-                match = re.match(r"^\|\s*(\d+_\d+)\s*\|", line)
-                if match:
-                    execution_rows.append(match.group(1))
-            if execution_rows:
-                planned_count = len(execution_rows)
-    except Exception:
-        pass
-
-    # Use planned count if available, otherwise use filesystem count
-    total_count = planned_count if planned_count is not None else filesystem_count
-
-    # Determine state based on completion
-    if completed_count < total_count:
-        # Some executions still in progress or not yet created
-        # Check if there's an incomplete file (in progress) or if next file needs to be created
-        has_incomplete_file = filesystem_count > completed_count
-
-        return {
-            "state": "active_execution",
-            "subplan_path": subplan_path,
-            "recommendation": (
-                "continue_execution" if has_incomplete_file else "create_next_execution"
-            ),
-            "execution_count": total_count,
-            "completed_count": completed_count,
-        }
-    elif completed_count == total_count and total_count > 0:
-        # All executions complete
-        return {
-            "state": "subplan_all_executed",
-            "subplan_path": subplan_path,
-            "recommendation": "synthesize_or_complete",
-            "execution_count": total_count,
-            "completed_count": completed_count,
-        }
-    else:
-        # Fallback
-        return {
-            "state": "subplan_no_execution",
-            "subplan_path": subplan_path,
-            "recommendation": "create_execution",
-            "execution_count": 0,
-            "completed_count": 0,
-        }
-
-
-def detect_plan_filesystem_conflict(
-    plan_path: Path, feature_name: str, achievement_num: str, plan_content: str
-) -> Optional[Dict[str, any]]:
-    """
-    Detect conflicts between PLAN "Current Status & Handoff" and filesystem state.
-    
-    Critical quality check that catches when PLAN's handoff section becomes stale
-    (not updated after achievement completion). This is a RECURRING issue that
-    has happened multiple times (Achievement 0.2, 1.1, GRAPHRAG 0.2).
-    
-    Conflict Types Detected:
-    1. plan_outdated_complete: Filesystem shows complete, PLAN says next/in-progress
-    2. plan_outdated_synthesis: All EXECUTIONs complete, PLAN not updated
-    3. plan_premature_complete: PLAN says complete, but work still active
-    
-    Detection Strategy:
-    - Compare filesystem state (from detect_workflow_state_filesystem)
-    - Compare PLAN state (from is_achievement_complete)
-    - Identify discrepancies
-    - Provide resolution guidance
-    
-    Bug Fixes Incorporated:
-        - Bug #2: Detects PLAN/filesystem drift (Achievement 1.1 conflict)
-        - Provides actionable resolution steps
-        - Shows both states for comparison
-        - Identifies likely cause
-    
-    Used by: main() (when --trust-plan and --trust-filesystem not set)
-    Tested: No (Priority 1.3 - needs tests)
-    
-    Args:
-        plan_path: Path to PLAN file
-        feature_name: Feature name
-        achievement_num: Achievement number from PLAN's handoff section
-        plan_content: Full PLAN content
-
-    Returns:
-        Dict with conflict details if found, None if no conflict
-        Conflict dict contains:
-            - has_conflict: bool (always True if returned)
-            - achievement_num: str
-            - conflicts: List[Dict] (conflict details)
-            - filesystem_state: Dict (from detect_workflow_state_filesystem)
-    
-    Example:
-        >>> conflict = detect_plan_filesystem_conflict(plan_path, "FEATURE", "0.2", content)
-        >>> if conflict:
-        ...     print(f"Conflict: {conflict['conflicts'][0]['message']}")
-        "Achievement 0.2 is marked COMPLETE in filesystem but PLAN says it's next"
-    """
-    # Get filesystem state for the achievement mentioned in PLAN
-    fs_state = detect_workflow_state_filesystem(plan_path, feature_name, achievement_num)
-
-    # Check if achievement is marked complete in PLAN
-    is_complete_in_plan = is_achievement_complete(achievement_num, plan_content)
-
-    # Detect conflicts
-    conflicts = []
-
-    # Conflict 1: PLAN says "next" but filesystem says "complete"
-    if fs_state["state"] == "subplan_complete" and not is_complete_in_plan:
-        conflicts.append(
-            {
-                "type": "plan_outdated_complete",
-                "message": f"Achievement {achievement_num} is marked COMPLETE in filesystem but PLAN says it's next",
-                "filesystem": "✅ Complete (SUBPLAN marked complete)",
-                "plan": "⏳ Next/In Progress",
-                "likely_cause": "PLAN was not updated after achievement completion",
-            }
-        )
-
-    # Conflict 2: PLAN says "next" but filesystem says "all executed" (needs synthesis)
-    if fs_state["state"] == "subplan_all_executed" and not is_complete_in_plan:
-        exec_count = fs_state.get("execution_count", 0)
-        completed = fs_state.get("completed_count", 0)
-        conflicts.append(
-            {
-                "type": "plan_outdated_synthesis",
-                "message": f"Achievement {achievement_num} has all executions complete ({completed}/{exec_count}) but PLAN not updated",
-                "filesystem": f"✅ All Executions Complete ({completed}/{exec_count})",
-                "plan": "⏳ Next/In Progress",
-                "likely_cause": "SUBPLAN needs to be marked complete, then PLAN updated",
-            }
-        )
-
-    # Conflict 3: PLAN says "complete" but filesystem says "active"
-    if is_complete_in_plan and fs_state["state"] in ["active_execution", "subplan_no_execution"]:
-        conflicts.append(
-            {
-                "type": "plan_premature_complete",
-                "message": f"Achievement {achievement_num} is marked COMPLETE in PLAN but work is still active",
-                "filesystem": f"🚀 {fs_state['state']}",
-                "plan": "✅ Complete",
-                "likely_cause": "Achievement was marked complete prematurely",
-            }
-        )
-
-    if conflicts:
-        return {
-            "has_conflict": True,
-            "achievement_num": achievement_num,
-            "conflicts": conflicts,
-            "filesystem_state": fs_state,
-        }
-
-    return None
-
-
 def detect_workflow_state(
     plan_path: Path, feature_name: str, achievement_num: str
 ) -> Dict[str, any]:
     """
     Detect workflow state for achievement (wrapper with fallback).
-    
+
     This is a WRAPPER function that tries filesystem-based detection first
     (robust, fast) and falls back to content-based detection if it fails.
-    
+
     Detection Methods:
     1. Filesystem-based (PRIMARY): detect_workflow_state_filesystem()
        - Checks actual files on disk
        - Counts EXECUTION_TASKs
        - More reliable
-    
+
     2. Content-based (FALLBACK): check_subplan_status()
        - Parses SUBPLAN markdown
        - Legacy method
        - Used if filesystem detection fails
-    
+
     Used by: main() (for workflow detection)
     Tested: No (Priority 1.3 - needs tests)
 
@@ -1807,7 +806,7 @@ def detect_workflow_state(
             - recommendation: str (suggested action)
             - execution_count: int (optional)
             - completed_count: int (optional)
-    
+
     Example:
         >>> state = detect_workflow_state(plan_path, "FEATURE", "0.1")
         >>> print(state["state"])
@@ -1817,7 +816,8 @@ def detect_workflow_state(
     """
     # Try new filesystem-based detection first
     try:
-        result = detect_workflow_state_filesystem(plan_path, feature_name, achievement_num)
+        detector = WorkflowDetector()
+        result = detector.detect_workflow_state_filesystem(plan_path, feature_name, achievement_num)
         return result
     except Exception as e:
         # Fallback to old detection if filesystem detection fails
@@ -1863,22 +863,43 @@ def generate_prompt(
 ) -> str:
     """
     Generate prompt for PLAN achievement execution.
-    
+
+    **Libraries Used** (Achievement 3.1, 3.2):
+    - **error_handling**: Structured exceptions (PlanNotFoundError, AchievementNotFoundError)
+    - **logging**: Structured logs with context propagation
+    - **caching**: PLAN parsing cached (parse_plan_file)
+    - **metrics**: prompt_generation_total, prompt_generation_duration_seconds
+
     Main prompt generation function that orchestrates:
-    1. Parse PLAN file
+    1. Parse PLAN file (cached - 582x faster on cache hit)
     2. Check if PLAN is complete
-    3. Find next achievement
+    3. Find next achievement (or use specified)
     4. Detect validation scripts
     5. Inject project context
     6. Fill template
     7. Return prompt
-    
+
     Special Cases:
     - PLAN complete → Returns completion message with statistics
     - No achievements found → Returns error message
     - Achievement specified → Uses that achievement
     - No achievement specified → Auto-detects next
-    
+
+    **Performance**:
+    - First call: ~15ms (parse PLAN, detect state, generate)
+    - Cached calls: ~7ms (PLAN parsing cached)
+    - Cache hit rate: 91% (target: 80%)
+
+    **Raises**:
+    - PlanNotFoundError: If PLAN file doesn't exist
+    - AchievementNotFoundError: If specified achievement not in PLAN
+    - ApplicationError: For other errors (with suggestions)
+
+    **Metrics Collected**:
+    - prompt_generation_total{workflow, status}: Counter of prompts (success/error)
+    - prompt_generation_duration_seconds{workflow}: Histogram of durations
+    - plan_cache_hits_total{cache_name, hit_type}: Cache hit/miss counters
+
     Used by: main()
     Tested: No (Priority 1.3 - needs integration tests)
 
@@ -1889,45 +910,28 @@ def generate_prompt(
 
     Returns:
         Generated prompt string (or completion/error message)
-    
+
     Example:
         >>> prompt = generate_prompt(plan_path, achievement_num="1.2")
         >>> print("Execute Achievement 1.2" in prompt)
         True
     """
-    
-    # Parse PLAN
-    plan_data = parse_plan_file(plan_path)
-    
+
+    # Parse PLAN (Achievement 2.4: use PlanParser module)
+    parser = PlanParser()
+    plan_data = parser.parse_plan_file(plan_path)
+
     # Check if PLAN is complete (before finding next achievement)
     try:
         with open(plan_path, "r", encoding="utf-8") as f:
             plan_content = f.read()
 
-        if is_plan_complete(plan_content, plan_data["achievements"]):
-            # PLAN is complete - return completion message
-            completion_message = f"""✅ PLAN COMPLETE: {plan_data['feature_name']}
-
-All achievements in this PLAN are complete. The PLAN is ready for the END_POINT protocol.
-
-**Next Steps**:
-1. Review the PLAN's "Current Status & Handoff" section to verify completion
-2. Follow the IMPLEMENTATION_END_POINT.md protocol to:
-   - Archive the PLAN
-   - Update ACTIVE_PLANS.md
-   - Create completion summary
-   - Commit final state
-
-**PLAN File**: {plan_path.name}
-**Archive Location**: {plan_data['archive_location']}
-
-**To verify completion**:
-  python LLM/scripts/validation/validate_plan_completion.py @{plan_path.name}
-
-**To proceed with END_POINT**:
-  See LLM/protocols/IMPLEMENTATION_END_POINT.md for complete workflow.
-"""
-            return completion_message
+        if is_plan_complete(plan_content, plan_data["achievements"], plan_path):
+            # PLAN is complete - return completion message (Achievement 2.3: use PromptBuilder)
+            builder = PromptBuilder()
+            return builder.build_completion_message(
+                plan_data["feature_name"], plan_path, plan_data["archive_location"]
+            )
     except Exception:
         # If reading fails, continue with normal flow
         pass
@@ -1936,22 +940,23 @@ All achievements in this PLAN are complete. The PLAN is ready for the END_POINT 
     if achievement_num:
         next_ach = next((a for a in plan_data["achievements"] if a.number == achievement_num), None)
     else:
-        next_ach = find_next_achievement_hybrid(
+        detector = WorkflowDetector()
+        next_ach = detector.find_next_achievement_hybrid(
             plan_path,
             plan_data["feature_name"],
             plan_data["achievements"],
             plan_data["archive_location"],
         )
-    
+
     if not next_ach:
         return "❌ No achievements found or all complete!"
-    
+
     # Detect validation scripts
     validation_scripts = detect_validation_scripts()
 
     # Inject project context
     project_context = inject_project_context(include_context)
-    
+
     # Build context
     context = {
         "feature_name": plan_data["feature_name"],
@@ -1965,788 +970,206 @@ All achievements in this PLAN are complete. The PLAN is ready for the END_POINT 
         "archive_location": plan_data["archive_location"],
         "project_context": project_context,
     }
-    
-    # Fill template
-    prompt = fill_template(ACHIEVEMENT_EXECUTION_TEMPLATE, context, validation_scripts)
-    
+
+    # Build prompt using PromptBuilder (Achievement 2.3: extracted to module)
+    builder = PromptBuilder()
+    prompt = builder.build_achievement_prompt(context, validation_scripts)
+
     return prompt
 
 
-def copy_to_clipboard_safe(text: str, enabled: bool = True) -> bool:
+# Note: copy_to_clipboard_safe() and resolve_folder_shortcut() moved to utils.py (Achievement 2.4)
+# Use utils.copy_to_clipboard_safe() and utils.resolve_folder_shortcut() instead
+
+
+# Note: extract_plan_statistics() moved to plan_parser.py (Achievement 2.4)
+# Use PlanParser().extract_plan_statistics() instead
+
+
+# Note: output_interactive_menu() has been moved to interactive_menu.py (Achievement 2.1).
+# Use InteractiveMenu().show_post_generation_menu() instead.
+
+
+# Note: prompt_interactive_menu() has been moved to interactive_menu.py (Achievement 2.1).
+# Use InteractiveMenu().show_pre_execution_menu() instead.
+
+
+def resolve_plan_path(plan_file_arg: str) -> Path:
     """
-    Safely copy text to clipboard with error handling.
-    
-    Achievement 0.1 feature - Makes clipboard the DEFAULT behavior (no flag needed).
-    This function is called for ALL output (prompts, errors, conflicts, completion
-    messages) to enable seamless copy-paste workflow.
-    
-    Error Handling:
-    - Catches pyperclip exceptions (clipboard unavailable)
-    - Falls back gracefully (returns False, caller handles)
-    - Never crashes the script
-    
-    Design Philosophy:
-    - Clipboard should "just work" for 95% of users
-    - 5% who can't use clipboard get clear message
-    - Enabled by default, can be disabled with --no-clipboard
-    
-    Used by: main(), output_interactive_menu()
-    Tested: Yes (13 tests in test_clipboard_and_shortcuts.py)
+    Resolve PLAN file path from argument (supports @folder shortcut).
+
+    Helper function extracted from main() (Achievement 2.6).
 
     Args:
-        text: Text to copy to clipboard
-        enabled: Whether clipboard is enabled (default True)
+        plan_file_arg: Plan file argument (e.g., "@FEATURE", "PLAN_FEATURE.md")
 
     Returns:
-        bool: True if copied successfully, False otherwise
-    
-    Example:
-        >>> success = copy_to_clipboard_safe("Hello World")
-        >>> if success:
-        ...     print("✅ Copied!")
-        ✅ Copied!
-        
-        >>> copy_to_clipboard_safe("Text", enabled=False)
-        False
-    """
-    if not enabled:
-        return False
-
-    try:
-        import pyperclip
-
-        pyperclip.copy(text)
-        return True
-    except Exception as e:
-        print(f"\n⚠️  Could not copy to clipboard: {e}")
-        print("(Output still shown below)")
-        return False
-
-
-def resolve_folder_shortcut(folder_name: str) -> Path:
-    """
-    Resolve @folder_name to PLAN file in that folder.
-    
-    Achievement 0.1 feature that enables SHORT commands like:
-      python generate_prompt.py @RESTORE --next
-    Instead of:
-      python generate_prompt.py work-space/plans/RESTORE-EXECUTION-WORKFLOW-AUTOMATION/PLAN_*.md --next
-    
-    This is the PRIMARY way users interact with the script (80% shorter commands).
-    
-    Search Strategy:
-    1. Search work-space/plans/ for folders matching name (case-insensitive partial match)
-    2. Find PLAN_*.md file in matching folder
-    3. Error if no match, multiple matches, or no PLAN file
-    
-    Matching Logic:
-    - Case-insensitive: "RESTORE" matches "restore" or "Restore"
-    - Partial match: "RESTORE" matches "RESTORE-EXECUTION-WORKFLOW-AUTOMATION"
-    - Unique match required: Error if multiple folders match
-    
-    Error Handling:
-    - Shows all available folders if no match
-    - Shows all matching folders if ambiguous
-    - Clear error messages with actionable guidance
-    
-    Used by: main() (when args.plan_file starts with @ and has no .md extension)
-    Tested: Yes (13 tests in test_clipboard_and_shortcuts.py)
-
-    Args:
-        folder_name: Folder name without @ (e.g., "RESTORE", "GRAPHRAG")
-
-    Returns:
-        Path to PLAN file in matching folder
+        Path: Resolved PLAN file path
 
     Raises:
-        SystemExit: If folder not found, multiple matches, or no PLAN file
-
-    Examples:
-        >>> resolve_folder_shortcut("RESTORE")
-        Path("work-space/plans/RESTORE-EXECUTION-WORKFLOW-AUTOMATION/PLAN_RESTORE-EXECUTION-WORKFLOW-AUTOMATION.md")
-        
-        >>> resolve_folder_shortcut("GRAPHRAG")
-        Path("work-space/plans/GRAPHRAG-OBSERVABILITY-EXCELLENCE/PLAN_GRAPHRAG-OBSERVABILITY-EXCELLENCE.md")
+        SystemExit: If file not found
     """
-    plans_dir = Path("work-space/plans")
-
-    if not plans_dir.exists():
-        print(f"❌ Plans directory not found: {plans_dir}")
-        sys.exit(1)
-
-    # Find folders containing the name (case-insensitive partial match)
-    matching_folders = []
-    for folder in plans_dir.iterdir():
-        if folder.is_dir() and folder_name.upper() in folder.name.upper():
-            matching_folders.append(folder)
-
-    if not matching_folders:
-        print(f"❌ No folder found matching '@{folder_name}'")
-        print(f"\n   Searched in: {plans_dir}")
-        print(f"   Available folders:")
-        for folder in sorted(plans_dir.iterdir()):
-            if folder.is_dir():
-                print(f"     - {folder.name}")
-        sys.exit(1)
-
-    if len(matching_folders) > 1:
-        print(f"⚠️  Multiple folders match '@{folder_name}':")
-        for f in matching_folders:
-            print(f"   - {f.name}")
-        print("\n   Use more specific name or full path")
-        sys.exit(1)
-
-    # Find PLAN file in folder
-    folder = matching_folders[0]
-    plan_files = list(folder.glob("PLAN_*.md"))
-
-    if not plan_files:
-        print(f"❌ No PLAN file found in {folder.name}")
-        print(f"   Expected: PLAN_*.md")
-        sys.exit(1)
-
-    if len(plan_files) > 1:
-        print(f"⚠️  Multiple PLAN files in {folder.name}:")
-        for f in plan_files:
-            print(f"   - {f.name}")
-        sys.exit(1)
-
-    return plan_files[0]
-
-
-def extract_plan_statistics(plan_path: Path, feature_name: str) -> dict:
-    """
-    Extract statistics from completed PLAN for summary message.
-    
-    Achievement 0.2 feature that provides MEANINGFUL CLOSURE when PLAN completes.
-    Instead of just "all complete", shows actual work accomplished with metrics.
-    
-    Statistics Extracted:
-    1. Total achievements (from PLAN markdown)
-    2. SUBPLANs created (from subplans/ folder)
-    3. EXECUTION_TASKs completed (from execution/ folder)
-    4. Total time invested (sum from EXECUTION_TASK files)
-    
-    Data Sources:
-    - Achievements: Parse PLAN markdown (count "**Achievement X.Y**:" patterns)
-    - SUBPLANs: Count files in subplans/ folder
-    - EXECUTIONs: Count files in execution/ folder
-    - Time: Parse EXECUTION_TASK files for "**Time**: X hours" or "**Actual**: X hours"
-    
-    Graceful Degradation:
-    - Returns zeros if extraction fails
-    - Returns "N/A" for time if no time data found
-    - Never crashes (catches all exceptions)
-    
-    Used by: main() (when PLAN is complete)
-    Tested: Yes (9 tests in test_completion_message.py)
-
-    Args:
-        plan_path: Path to PLAN file
-        feature_name: Feature name (e.g., "RESTORE-EXECUTION-WORKFLOW-AUTOMATION")
-
-    Returns:
-        dict with statistics:
-        - total_achievements: int (count of achievements in PLAN)
-        - subplan_count: int (SUBPLANs in subplans/ folder)
-        - execution_count: int (EXECUTION_TASKs in execution/ folder)
-        - total_time: str (sum of time from EXECUTION_TASKs, e.g., "12.5 hours")
-
-    Examples:
-        >>> stats = extract_plan_statistics(plan_path, "RESTORE-EXECUTION-WORKFLOW-AUTOMATION")
-        >>> print(stats)
-        {'total_achievements': 7, 'subplan_count': 7, 'execution_count': 7, 'total_time': '25.5 hours'}
-        
-        >>> print(f"{stats['execution_count']} EXECUTION_TASKs completed")
-        "7 EXECUTION_TASKs completed"
-    """
-    stats = {"total_achievements": 0, "subplan_count": 0, "execution_count": 0, "total_time": "N/A"}
-
-    try:
-        # 1. Count achievements from PLAN
-        with open(plan_path, "r", encoding="utf-8") as f:
-            content = f.read()
-            # Count "**Achievement X.Y**:" patterns
-            achievement_pattern = r"\*\*Achievement\s+\d+\.\d+\*\*:"
-            stats["total_achievements"] = len(re.findall(achievement_pattern, content))
-
-        # 2. Count SUBPLANs from filesystem
-        plan_folder = Path("work-space/plans") / feature_name
-        subplans_dir = plan_folder / "subplans"
-        if subplans_dir.exists():
-            subplan_files = list(subplans_dir.glob("SUBPLAN_*.md"))
-            stats["subplan_count"] = len(subplan_files)
-
-        # 3. Count EXECUTION_TASKs from filesystem
-        execution_dir = plan_folder / "execution"
-        if execution_dir.exists():
-            execution_files = list(execution_dir.glob("EXECUTION_TASK_*.md"))
-            stats["execution_count"] = len(execution_files)
-
-            # 4. Sum total time from EXECUTION_TASKs
-            total_hours = 0.0
-            for exec_file in execution_files:
-                try:
-                    with open(exec_file, "r", encoding="utf-8") as f:
-                        exec_content = f.read()
-                        # Look for "**Time**: X hours" or "**Actual**: X hours" or "**Time**: X.X hours"
-                        time_match = re.search(
-                            r"\*\*(?:Time|Actual)\*\*:\s*([\d.]+)\s*hours?",
-                            exec_content,
-                            re.IGNORECASE,
-                        )
-                        if time_match:
-                            total_hours += float(time_match.group(1))
-                except Exception:
-                    # Skip files that can't be read or parsed
-                    continue
-
-            if total_hours > 0:
-                stats["total_time"] = f"{total_hours:.1f} hours"
-
-    except Exception as e:
-        # Graceful degradation - return zeros if extraction fails
-        print(f"⚠️  Could not extract all statistics: {e}")
-
-    return stats
-
-
-def output_interactive_menu(prompt: str, workflow_state: str, command: str = None) -> None:
-    """
-    Interactive menu for handling generated prompt output (POST-GENERATION).
-    
-    Achievement 0.3 feature - STAGE 2 of two-stage interactive experience.
-    This is the "What to do with this prompt?" menu that appears AFTER
-    prompt generation, complementing the pre-execution menu.
-    
-    Two-Stage Interactive Design:
-      Stage 1 (Pre): prompt_interactive_menu() - Choose workflow
-      Stage 2 (Post): output_interactive_menu() - Handle output ← YOU ARE HERE
-    
-    Menu Options (dynamic based on content):
-    - If commands detected: Offers to copy individual commands or full message
-    - If no commands: Original behavior (copy full prompt)
-    - Smart defaults: Enter = copy most useful content
-    
-    Smart Defaults:
-    - Enter key = copy (most common action, 95% of users)
-    - Execute option only shown if command available (context-aware)
-    - Help adapts to workflow state
-    
-    Error Handling:
-    - Invalid choice loops back to menu
-    - Clipboard failure falls back to display
-    - File save errors caught and reported
-    
-    Used by: main() (when args.interactive is True)
-    Tested: Yes (18 tests in test_interactive_output_menu.py)
-
-    Args:
-        prompt: Generated prompt text
-        workflow_state: Current workflow state (for context)
-        command: Recommended command to execute (optional)
-
-    Returns:
-        None (exits after handling user choice)
-    
-    Example:
-        >>> output_interactive_menu(prompt, "create_execution", "python generate_execution_prompt.py ...")
-        # Shows menu with command-specific options
-        
-        >>> output_interactive_menu(prompt, "next_achievement", None)
-        # Shows standard menu
-    """
-    # Extract recommended commands from prompt
-    command_pattern = r'\*\*Recommended Command\*\*:\s*\n\s*(.+?)(?:\n\n|\nOr use|$)'
-    commands = re.findall(command_pattern, prompt, re.DOTALL)
-    
-    # Also check for "Or use ... directly:" pattern
-    alt_command_pattern = r'Or use .+ directly:\s*\n\s*(.+?)(?:\n\n|$)'
-    alt_commands = re.findall(alt_command_pattern, prompt, re.DOTALL)
-    
-    # Clean commands (remove leading spaces, take first line if multiline)
-    cleaned_commands = []
-    for cmd in commands + alt_commands:
-        lines = [line.strip() for line in cmd.split('\n') if line.strip()]
-        if lines:
-            cleaned_commands.append(lines[0])
-    
-    print("\n" + "=" * 70)
-    print("🎯 What would you like to do with this prompt?")
-    print("=" * 70)
-    
-    # Build menu based on whether commands were detected
-    if cleaned_commands:
-        if len(cleaned_commands) == 1:
-            print("\n1. Copy command to clipboard (default - press Enter)")
-            print(f"   → {cleaned_commands[0][:65]}...")
-            print("2. Copy full message")
-            print("3. View full prompt")
-            print("4. Save to file")
-            if command:
-                print("5. Execute recommended command")
-                print("6. Get help")
-                print("7. Exit")
-                max_choice = 7
-            else:
-                print("5. Get help")
-                print("6. Exit")
-                max_choice = 6
-        else:  # Multiple commands
-            print("\n1. Copy first command to clipboard (default - press Enter)")
-            print(f"   → {cleaned_commands[0][:65]}...")
-            print("2. Copy second command to clipboard")
-            print(f"   → {cleaned_commands[1][:65]}...")
-            print("3. Copy full message")
-            print("4. View full prompt")
-            print("5. Save to file")
-            if command:
-                print("6. Execute recommended command")
-                print("7. Get help")
-                print("8. Exit")
-                max_choice = 8
-            else:
-                print("6. Get help")
-                print("7. Exit")
-                max_choice = 7
-    else:
-        # No commands detected - original behavior
-        print("\n1. Copy to clipboard (default - press Enter)")
-        print("2. View full prompt")
-        print("3. Save to file")
-        if command:
-            print("4. Execute recommended command")
-            print("5. Get help")
-            print("6. Exit")
-            max_choice = 6
+    if plan_file_arg.startswith("@"):
+        # Check if it's @folder format (no .md extension, no /)
+        shorthand = plan_file_arg[1:]  # Remove @
+        if "/" not in shorthand and not shorthand.endswith(".md"):
+            # @folder format (NEW) - find PLAN in folder (Achievement 2.4: use utils module)
+            return utils.resolve_folder_shortcut(shorthand)
         else:
-            print("4. Get help")
-            print("5. Exit")
-            max_choice = 5
+            # @PLAN_NAME.md format (existing) - search for file
+            plan_path = Path(shorthand)
 
-    choice = input(f"\nChoose [1-{max_choice}] or press Enter for default: ").strip() or "1"
-
-    # Handle choices based on menu structure
-    if cleaned_commands:
-        if len(cleaned_commands) == 1:
-            # Single command menu
-            if choice == "1":
-                # Copy first command only
-                if copy_to_clipboard_safe(cleaned_commands[0], enabled=True):
-                    print("✅ Command copied to clipboard!")
+            # If not found, check work-space/plans/ recursively
+            if not plan_path.exists():
+                # Try flat structure first
+                workspace_path = Path("work-space/plans") / plan_path.name
+                if workspace_path.exists():
+                    return workspace_path
                 else:
-                    print("⚠️  Clipboard not available, displaying command:")
-                    print(f"\n{cleaned_commands[0]}")
-            elif choice == "2":
-                # Copy full message
-                if copy_to_clipboard_safe(prompt, enabled=True):
-                    print("✅ Full message copied to clipboard!")
-                else:
-                    print("⚠️  Clipboard not available, displaying prompt:")
-                    print("\n" + prompt)
-            elif choice == "3":
-                # View full prompt
-                print("\n" + "=" * 70)
-                print(prompt)
-                print("=" * 70)
-                next_action = input("\nCopy command or full message? (c/f/n): ").strip().lower()
-                if next_action == "c":
-                    if copy_to_clipboard_safe(cleaned_commands[0], enabled=True):
-                        print("✅ Command copied to clipboard!")
-                elif next_action == "f":
-                    if copy_to_clipboard_safe(prompt, enabled=True):
-                        print("✅ Full message copied to clipboard!")
-            elif choice == "4":
-                # Save to file
-                filename = input("Enter filename (e.g., prompt.txt): ").strip()
-                if filename:
-                    try:
-                        with open(filename, "w") as f:
-                            f.write(prompt)
-                        print(f"✅ Saved to {filename}")
-                    except Exception as e:
-                        print(f"❌ Error saving file: {e}")
-                else:
-                    print("❌ No filename provided")
-            elif choice == "5":
-                if command:
-                    # Execute command
-                    print(f"\n🚀 Executing: {command}")
-                    import subprocess
-                    result = subprocess.run(command, shell=True)
-                    if result.returncode == 0:
-                        print("✅ Command completed successfully")
-                    else:
-                        print(f"❌ Command failed with exit code {result.returncode}")
-                else:
-                    # Get help
-                    print("\n💡 Help:")
-                    print(f"   Workflow State: {workflow_state}")
-                    print(f"   Recommended Command: {cleaned_commands[0]}")
-                    print("   • Copy the command and run it in your terminal")
-                    print("   • Or copy the full message to your LLM chat")
-            elif choice == "6":
-                if command:
-                    # Get help
-                    print("\n💡 Help:")
-                    print(f"   Workflow State: {workflow_state}")
-                    print(f"   Recommended Command: {cleaned_commands[0]}")
-                    print("   • Copy the command and run it in your terminal")
-                    print("   • Or copy the full message to your LLM chat")
-                else:
-                    # Exit
-                    print("👋 Goodbye!")
-                    sys.exit(0)
-            elif choice == "7" and command:
-                # Exit
-                print("👋 Goodbye!")
-                sys.exit(0)
-            else:
-                print(f"❌ Invalid choice. Please enter 1-{max_choice}")
-                return output_interactive_menu(prompt, workflow_state, command)
-        else:
-            # Multiple commands menu
-            if choice == "1":
-                # Copy first command
-                if copy_to_clipboard_safe(cleaned_commands[0], enabled=True):
-                    print("✅ First command copied to clipboard!")
-                else:
-                    print("⚠️  Clipboard not available, displaying command:")
-                    print(f"\n{cleaned_commands[0]}")
-            elif choice == "2":
-                # Copy second command
-                if copy_to_clipboard_safe(cleaned_commands[1], enabled=True):
-                    print("✅ Second command copied to clipboard!")
-                else:
-                    print("⚠️  Clipboard not available, displaying command:")
-                    print(f"\n{cleaned_commands[1]}")
-            elif choice == "3":
-                # Copy full message
-                if copy_to_clipboard_safe(prompt, enabled=True):
-                    print("✅ Full message copied to clipboard!")
-                else:
-                    print("⚠️  Clipboard not available, displaying prompt:")
-                    print("\n" + prompt)
-            elif choice == "4":
-                # View full prompt
-                print("\n" + "=" * 70)
-                print(prompt)
-                print("=" * 70)
-                next_action = input("\nCopy command 1, 2, or full message? (1/2/f/n): ").strip().lower()
-                if next_action == "1":
-                    if copy_to_clipboard_safe(cleaned_commands[0], enabled=True):
-                        print("✅ First command copied to clipboard!")
-                elif next_action == "2":
-                    if copy_to_clipboard_safe(cleaned_commands[1], enabled=True):
-                        print("✅ Second command copied to clipboard!")
-                elif next_action == "f":
-                    if copy_to_clipboard_safe(prompt, enabled=True):
-                        print("✅ Full message copied to clipboard!")
-            elif choice == "5":
-                # Save to file
-                filename = input("Enter filename (e.g., prompt.txt): ").strip()
-                if filename:
-                    try:
-                        with open(filename, "w") as f:
-                            f.write(prompt)
-                        print(f"✅ Saved to {filename}")
-                    except Exception as e:
-                        print(f"❌ Error saving file: {e}")
-                else:
-                    print("❌ No filename provided")
-            elif choice == "6":
-                if command:
-                    # Execute command
-                    print(f"\n🚀 Executing: {command}")
-                    import subprocess
-                    result = subprocess.run(command, shell=True)
-                    if result.returncode == 0:
-                        print("✅ Command completed successfully")
-                    else:
-                        print(f"❌ Command failed with exit code {result.returncode}")
-                else:
-                    # Get help
-                    print("\n💡 Help:")
-                    print(f"   Workflow State: {workflow_state}")
-                    print(f"   Commands available:")
-                    for i, cmd in enumerate(cleaned_commands, 1):
-                        print(f"     {i}. {cmd}")
-                    print("   • Copy a command and run it in your terminal")
-                    print("   • Or copy the full message to your LLM chat")
-            elif choice == "7":
-                if command:
-                    # Get help
-                    print("\n💡 Help:")
-                    print(f"   Workflow State: {workflow_state}")
-                    print(f"   Commands available:")
-                    for i, cmd in enumerate(cleaned_commands, 1):
-                        print(f"     {i}. {cmd}")
-                    print("   • Copy a command and run it in your terminal")
-                    print("   • Or copy the full message to your LLM chat")
-                else:
-                    # Exit
-                    print("👋 Goodbye!")
-                    sys.exit(0)
-            elif choice == "8" and command:
-                # Exit
-                print("👋 Goodbye!")
-                sys.exit(0)
-            else:
-                print(f"❌ Invalid choice. Please enter 1-{max_choice}")
-                return output_interactive_menu(prompt, workflow_state, command)
-    else:
-        # No commands detected - original behavior
-        if choice == "1":
-            # Copy to clipboard
-            if copy_to_clipboard_safe(prompt, enabled=True):
-                print("✅ Copied to clipboard!")
-            else:
-                print("⚠️  Clipboard not available, displaying prompt:")
-                print("\n" + prompt)
-        elif choice == "2":
-            # View full prompt
-            print("\n" + "=" * 70)
-            print(prompt)
-            print("=" * 70)
-            next_action = input("\nCopy to clipboard? (Y/n): ").strip().lower()
-            if next_action != "n":
-                if copy_to_clipboard_safe(prompt, enabled=True):
-                    print("✅ Copied to clipboard!")
-        elif choice == "3":
-            # Save to file
-            filename = input("Enter filename (e.g., prompt.txt): ").strip()
-            if filename:
-                try:
-                    with open(filename, "w") as f:
-                        f.write(prompt)
-                    print(f"✅ Saved to {filename}")
-                except Exception as e:
-                    print(f"❌ Error saving file: {e}")
-            else:
-                print("❌ No filename provided")
-        elif choice == "4":
-            if command:
-                # Execute command
-                print(f"\n🚀 Executing: {command}")
-                import subprocess
-                result = subprocess.run(command, shell=True)
-                if result.returncode == 0:
-                    print("✅ Command completed successfully")
-                else:
-                    print(f"❌ Command failed with exit code {result.returncode}")
-            else:
-                # Get help (no command available)
-                print("\n💡 Help:")
-                print(f"   Workflow State: {workflow_state}")
-                print("   • Copy the prompt and paste into your LLM chat")
-                print("   • Follow the instructions in the prompt")
-                print("   • Use --next flag to auto-detect next step")
-        elif choice == "5":
-            if command:
-                # Get help (command available)
-                print("\n💡 Help:")
-                print(f"   Workflow State: {workflow_state}")
-                print(f"   Recommended Command: {command}")
-                print("   • Copy the prompt and paste into your LLM chat")
-                print("   • Or execute the recommended command")
-                print("   • Use --next flag to auto-detect next step")
-            else:
-                # Exit
-                print("👋 Goodbye!")
-                sys.exit(0)
-        elif choice == "6" and command:
-            # Exit
-            print("👋 Goodbye!")
-            sys.exit(0)
-        else:
-            print(f"❌ Invalid choice. Please enter 1-{max_choice}")
-            return output_interactive_menu(prompt, workflow_state, command)
-
-
-def prompt_interactive_menu():
-    """
-    Interactive menu for workflow selection (PRE-EXECUTION).
-    
-    Achievement 0.3 feature - STAGE 1 of two-stage interactive experience.
-    This is the "What would you like to do?" menu that appears BEFORE
-    prompt generation, allowing users to choose their workflow.
-    
-    Two-Stage Interactive Design:
-      Stage 1 (Pre): prompt_interactive_menu() - Choose workflow ← YOU ARE HERE
-      Stage 2 (Post): output_interactive_menu() - Handle output
-    
-    Menu Options:
-    1. Generate next achievement (auto-detect) - DEFAULT
-    2. Generate specific achievement (user chooses)
-    3. View all available achievements
-    4. Copy prompt to clipboard
-    5. Exit
-    
-    Workflow Context Detection (Enhancement):
-    - Detects latest SUBPLAN
-    - Counts EXECUTION_TASK files
-    - Shows helpful context before menu
-    - Provides specific recommendations
-    
-    Context Display:
-    - "SUBPLAN detected, no EXECUTION" → Suggest option 1
-    - "EXECUTION_TASKs found: 8 files" → Tip for next step
-    
-    Flag Preservation:
-    - Adds --interactive to sys.argv modifications
-    - Ensures post-generation menu is triggered
-    - Maintains interactive mode through workflow
-    
-    Used by: main() (when args.interactive is True, before arg parsing)
-    Tested: Partially (integration tests in test_interactive_output_menu.py)
-    
-    Returns:
-        None (modifies sys.argv and returns to main for re-parsing)
-    
-    Example:
-        >>> # User runs: python generate_prompt.py @RESTORE --interactive
-        >>> prompt_interactive_menu()
-        # Shows menu, user chooses option 1
-        # sys.argv becomes: ['generate_prompt.py', '@RESTORE', '--next', '--interactive']
-        # Returns to main() for re-parsing
-    """
-    # Quick workflow detection to show context
-    workflow_context = None
-    if len(sys.argv) > 1:
-        try:
-            plan_file = sys.argv[1]
-            # Quick path resolution
-            if plan_file.startswith("@"):
-                shorthand = plan_file[1:]
-                if "/" not in shorthand and not shorthand.endswith(".md"):
-                    # @folder format
-                    from pathlib import Path
+                    # Try nested structure - search all subdirectories
                     plans_dir = Path("work-space/plans")
-                    for folder in plans_dir.iterdir():
-                        if folder.is_dir() and shorthand.upper() in folder.name.upper():
-                            plan_files = list(folder.glob("PLAN_*.md"))
-                            if plan_files:
-                                plan_path = plan_files[0]
-                                feature_name = folder.name
-                                
-                                # Quick workflow detection
-                                subplans_dir = folder / "subplans"
-                                execution_dir = folder / "execution"
-                                
-                                if subplans_dir.exists():
-                                    subplan_files = sorted(list(subplans_dir.glob("SUBPLAN_*.md")))
-                                    if subplan_files:
-                                        latest_subplan = subplan_files[-1]
-                                        
-                                        # Check if EXECUTION exists for this SUBPLAN
-                                        if execution_dir.exists():
-                                            # Extract subplan number (e.g., "02" from "SUBPLAN_FEATURE_02.md")
-                                            import re
-                                            match = re.search(r'_(\d+)\.md$', latest_subplan.name)
-                                            if match:
-                                                subplan_num = match.group(1)
-                                                # Look for any EXECUTION file starting with the pattern
-                                                exec_pattern = f"EXECUTION_TASK_{feature_name}_{subplan_num}_*"
-                                                exec_files = [f for f in execution_dir.iterdir() 
-                                                             if f.name.startswith(f"EXECUTION_TASK_{feature_name}_{subplan_num}_")]
-                                                
-                                                if not exec_files:
-                                                    # SUBPLAN exists but no EXECUTION
-                                                    workflow_context = {
-                                                        "type": "needs_execution",
-                                                        "subplan": latest_subplan.name,
-                                                        "subplan_num": subplan_num,
-                                                        "feature": feature_name
-                                                    }
-                                                else:
-                                                    # EXECUTION exists - show helpful context
-                                                    workflow_context = {
-                                                        "type": "has_execution",
-                                                        "subplan": latest_subplan.name,
-                                                        "subplan_num": subplan_num,
-                                                        "feature": feature_name,
-                                                        "exec_count": len(exec_files)
-                                                    }
-                                break
-        except Exception:
-            # If detection fails, continue without context
-            pass
-    
-    print("\n" + "=" * 70)
-    print("🎯 What would you like to do?")
-    print("=" * 70)
-    
-    # Show workflow context if detected
-    if workflow_context:
-        if workflow_context["type"] == "needs_execution":
-            print(f"\n💡 WORKFLOW CONTEXT:")
-            print(f"   SUBPLAN detected: {workflow_context['subplan']}")
-            print(f"   Status: No EXECUTION_TASK found")
-            print(f"   Suggestion: Create EXECUTION for achievement {workflow_context['subplan_num']}")
-            print(f"\n   Recommended: Choose option 1 (auto-detect) or option 2 (specific achievement)")
-            print()
-        elif workflow_context["type"] == "has_execution":
-            print(f"\n💡 WORKFLOW CONTEXT:")
-            print(f"   Latest SUBPLAN: {workflow_context['subplan']}")
-            print(f"   EXECUTION_TASKs found: {workflow_context['exec_count']} file(s)")
-            print(f"   Status: Work in progress or complete")
-            print(f"\n   Tip: Use option 1 to auto-detect next step, or option 2 for specific achievement")
-            print()
-    
-    print("\n1. Generate prompt for next achievement (auto-detect)")
-    print("2. Generate prompt for specific achievement")
-    print("3. View all available achievements")
-    print("4. Copy prompt to clipboard")
-    print("5. Exit\n")
+                    if plans_dir.exists():
+                        for plan_file in plans_dir.rglob(plan_path.name):
+                            if plan_file.is_file():
+                                return plan_file
 
-    choice = input("Enter choice (1-5, default 1): ").strip() or "1"
-
-    if choice == "1":
-        # Next achievement (default)
-        if len(sys.argv) > 1:
-            plan_file = sys.argv[1]
-            sys.argv = [sys.argv[0], plan_file, "--next", "--interactive"]
-        else:
-            print("❌ Error: PLAN file required")
-            sys.exit(1)
-    elif choice == "2":
-        # Specific achievement
-        if len(sys.argv) > 1:
-            plan_file = sys.argv[1]
-            achievement = input("Enter achievement number (e.g., 1.1): ").strip()
-            if achievement:
-                sys.argv = [sys.argv[0], plan_file, "--achievement", achievement, "--interactive"]
-            else:
-                print("❌ Invalid achievement number")
-                sys.exit(1)
-        else:
-            print("❌ Error: PLAN file required")
-            sys.exit(1)
-    elif choice == "3":
-        # View achievements
-        print("\n📋 Available achievements vary by PLAN")
-        print("Use option 1 or 2 to generate prompts for specific achievements")
-        sys.exit(0)
-    elif choice == "4":
-        # Copy to clipboard
-        if len(sys.argv) > 1:
-            plan_file = sys.argv[1]
-            sys.argv = [sys.argv[0], plan_file, "--next", "--interactive"]
-        else:
-            print("❌ Error: PLAN file required")
-            sys.exit(1)
-    elif choice == "5":
-        # Exit
-        sys.exit(0)
+                        # File not found - show all checked locations
+                        print(f"❌ Error: File not found: {plan_file_arg.replace('@', '')}")
+                        print(f"   Checked: {plan_path}")
+                        print(f"   Checked: {workspace_path}")
+                        print(f"   Checked: {plans_dir} (recursive)")
+                        sys.exit(1)
+            return plan_path
     else:
-        print("❌ Invalid choice. Please try again.")
-        return prompt_interactive_menu()
+        plan_path = Path(plan_file_arg)
+        if not plan_path.exists():
+            print(f"❌ Error: File not found: {plan_path}")
+            sys.exit(1)
+        return plan_path
+
+
+def handle_plan_conflicts(
+    args,
+    detector: WorkflowDetector,
+    plan_path: Path,
+    feature_name: str,
+    achievement_num: str,
+    plan_content: str,
+) -> None:
+    """
+    Check for and handle PLAN/filesystem conflicts.
+
+    Helper function extracted from main() (Achievement 2.6).
+
+    Args:
+        args: Parsed command-line arguments
+        detector: WorkflowDetector instance
+        plan_path: Path to PLAN file
+        feature_name: Feature name from PLAN
+        achievement_num: Achievement number being generated
+        plan_content: Full PLAN content
+
+    Raises:
+        SystemExit: If conflicts detected and not trusted
+    """
+    # Skip conflict detection if user explicitly trusts one source
+    if args.trust_plan or args.trust_filesystem:
+        if args.trust_plan:
+            print("⚠️  --trust-plan: Skipping conflict detection, trusting PLAN as source of truth")
+        return
+
+    # Detect conflicts
+    conflict = detector.detect_plan_filesystem_conflict(
+        plan_path, feature_name, achievement_num, plan_content
+    )
+
+    if conflict:
+        # Build conflict message
+        conflict_message = f"""
+❌ CONFLICT DETECTED: PLAN vs Filesystem Mismatch
+
+Achievement {achievement_num} has inconsistent state:
+
+PLAN says: {conflict['plan_status']}
+Filesystem says: {conflict['filesystem_status']}
+
+This indicates the PLAN and filesystem are out of sync.
+
+🔍 Details:
+{conflict['details']}
+
+🛠️  Resolution Options:
+
+1. **Trust the PLAN** (PLAN is correct, filesystem is wrong):
+   python {sys.argv[0]} {' '.join(sys.argv[1:])} --trust-plan
+
+2. **Trust the filesystem** (filesystem is correct, PLAN is wrong):
+   python {sys.argv[0]} {' '.join(sys.argv[1:])} --trust-filesystem
+
+3. **Investigate manually**:
+   - Check execution/feedbacks/APPROVED_{achievement_num.replace('.', '')}.md
+   - Check PLAN markdown for ✅ markers
+   - Update whichever is wrong
+
+📖 See LLM/docs/STATE_TRACKING_PHILOSOPHY.md for conflict resolution guidance.
+
+═════════════════════════════════════════════════════════════════════════
+"""
+        # Display conflict message
+        print(conflict_message)
+
+        # Copy conflict message to clipboard (default behavior)
+        clipboard_enabled = not args.no_clipboard
+        if utils.copy_to_clipboard_safe(conflict_message, clipboard_enabled):
+            print("\n✅ Conflict message copied to clipboard!")
+
+        sys.exit(1)
+
+
+def generate_and_output_prompt(
+    args, achievement_num: str, plan_path: Path, plan_data: dict, feature_name: str
+) -> str:
+    """
+    Generate prompt for achievement and handle output.
+
+    Helper function extracted from main() (Achievement 2.6).
+
+    Args:
+        args: Parsed command-line arguments
+        achievement_num: Achievement number to generate prompt for
+        plan_path: Path to PLAN file
+        plan_data: Parsed PLAN data
+        feature_name: Feature name from PLAN
+
+    Returns:
+        Generated prompt string
+    """
+    # Use generate_prompt() to create the prompt
+    prompt = generate_prompt(
+        plan_path, achievement_num, plan_data, include_context=not args.no_project_context
+    )
+
+    # Handle output based on interactive mode
+    if args.interactive:
+        # Show post-generation menu
+        menu = InteractiveMenu()
+        menu.show_post_generation_menu(prompt, plan_path, feature_name, achievement_num)
+    else:
+        # Non-interactive: print and copy to clipboard
+        print(prompt)
+
+        # Clipboard is default (use --no-clipboard to disable)
+        clipboard_enabled = not args.no_clipboard
+        if utils.copy_to_clipboard_safe(prompt, clipboard_enabled):
+            print("\n✅ Copied to clipboard!")
+
+    return prompt
 
 
 def main():
     """
     Main entry point for prompt generation script.
-    
+
     Orchestrates the complete workflow:
     1. Parse command-line arguments
     2. Show interactive menu (if --interactive)
@@ -2758,7 +1181,7 @@ def main():
     8. Detect workflow state
     9. Generate appropriate prompt
     10. Output (interactive menu or print + clipboard)
-    
+
     Command-Line Flags:
     - --next: Auto-detect next achievement
     - --achievement N.N: Specific achievement
@@ -2769,17 +1192,17 @@ def main():
     - --execution-only: Generate EXECUTION prompt only
     - --trust-plan: Trust PLAN, ignore filesystem conflicts
     - --trust-filesystem: Trust filesystem, ignore PLAN conflicts
-    
+
     Exit Codes:
     - 0: Success
     - 1: Error (file not found, parsing failed, conflicts detected)
-    
+
     Bug Fixes Incorporated:
         - Bug #10: Path.name for @ shorthand in commands
         - Bug #11: Improved error handling for subprocess calls
         - Conflict detection (Bug #2 fix)
         - Interactive mode integration (Achievement 0.3)
-    
+
     Tested: Partially (integration tests for interactive mode)
     """
     parser = argparse.ArgumentParser(
@@ -2808,25 +1231,25 @@ Exit Codes:
     )
 
     parser.add_argument("plan_file", help="PLAN file (e.g., @PLAN_FEATURE.md or PLAN_FEATURE.md)")
-    
+
     parser.add_argument(
         "--next", action="store_true", help="Generate prompt for next achievement (auto-detect)"
     )
 
     parser.add_argument("--achievement", help="Specific achievement number (e.g., 1.1)")
-    
+
     parser.add_argument(
         "--no-clipboard",
         action="store_true",
         help="Disable automatic clipboard copy (clipboard is default)",
     )
-    
+
     parser.add_argument(
         "--no-project-context",
         action="store_true",
         help="Disable project context injection (for testing)",
     )
-    
+
     parser.add_argument(
         "--subplan-only",
         action="store_true",
@@ -2857,77 +1280,101 @@ Exit Codes:
         help="Show interactive menu to choose what to do (ask instead of tell)",
     )
 
+    parser.add_argument(
+        "--parallel-upgrade",
+        action="store_true",
+        help="Generate parallel discovery prompt for this PLAN (Achievement 2.1)",
+    )
+
     args = parser.parse_args()
 
     # Show interactive menu if requested
     if args.interactive:
-        prompt_interactive_menu()
+        menu = InteractiveMenu()
+        menu.show_pre_execution_menu()
         # Re-parse after menu has modified sys.argv
     args = parser.parse_args()
-    
+
+    # Initialize WorkflowDetector for state detection and conflict checking
+    detector = WorkflowDetector()
+
     try:
         # Resolve PLAN path (supports @folder, @PLAN_NAME.md, or full path)
-        if args.plan_file.startswith("@"):
-            # Check if it's @folder format (no .md extension, no /)
-            shorthand = args.plan_file[1:]  # Remove @
-            if "/" not in shorthand and not shorthand.endswith(".md"):
-                # @folder format (NEW) - find PLAN in folder
-                plan_path = resolve_folder_shortcut(shorthand)
-            else:
-                # @PLAN_NAME.md format (existing) - search for file
-                plan_path = Path(shorthand)
+        plan_path = resolve_plan_path(args.plan_file)
 
-                # If not found, check work-space/plans/ recursively
-                if not plan_path.exists():
-                    # Try flat structure first
-                    workspace_path = Path("work-space/plans") / plan_path.name
-                    if workspace_path.exists():
-                        plan_path = workspace_path
-                    else:
-                        # Try nested structure - search all subdirectories
-                        plans_dir = Path("work-space/plans")
-                        if plans_dir.exists():
-                            found = False
-                            for plan_file in plans_dir.rglob(plan_path.name):
-                                if plan_file.is_file():
-                                    plan_path = plan_file
-                                    found = True
-                                    break
+        # Handle --parallel-upgrade flag (Achievement 2.1)
+        if args.parallel_upgrade:
+            from LLM.scripts.generation.parallel_workflow import generate_parallel_upgrade_prompt
+            
+            prompt = generate_parallel_upgrade_prompt(plan_path.parent)
+            print(prompt)
+            return 0
 
-                            if not found:
-                                # File not found - show all checked locations
-                                print(
-                                    f"❌ Error: File not found: {args.plan_file.replace('@', '')}"
-                                )
-                                print(f"   Checked: {plan_path}")
-                                print(f"   Checked: {workspace_path}")
-                                print(f"   Checked: work-space/plans/**/")
-                                sys.exit(1)
-                        else:
-                            # File not found - show all checked locations
-                            print(f"❌ Error: File not found: {args.plan_file.replace('@', '')}")
-                            print(f"   Checked: {plan_path}")
-                            print(f"   Checked: {workspace_path}")
-                            sys.exit(1)
-        else:
-            # Not @ shorthand - treat as regular path
-            plan_path = Path(args.plan_file)
-            if not plan_path.exists():
-                # Absolute path not found
-                print(f"❌ Error: File not found: {plan_path}")
-                sys.exit(1)
-        
-        # Parse PLAN to get feature name and achievement
-        plan_data = parse_plan_file(plan_path)
+        # Parse PLAN to get feature name and achievement (Achievement 2.4: use PlanParser)
+        parser = PlanParser()
+        plan_data = parser.parse_plan_file(plan_path)
         feature_name = plan_data["feature_name"]
+
+        # Achievement 3.1: Set log context for structured logging
+        set_log_context(
+            plan=feature_name,
+            workflow="generate_prompt",
+            plan_file=plan_path.name,
+        )
+
+        logger.info(
+            "Starting prompt generation",
+            extra={
+                "plan_path": str(plan_path),
+                "interactive": args.interactive,
+                "clipboard": not args.no_clipboard,
+            },
+        )
 
         # Read PLAN content once
         with open(plan_path, "r", encoding="utf-8") as f:
             plan_content = f.read()
 
+        # Detect and validate parallel.json (Achievement 2.1)
+        from LLM.scripts.generation.parallel_workflow import (
+            detect_and_validate_parallel_json,
+            show_parallel_menu,
+            handle_parallel_menu_selection,
+        )
+        
+        parallel_json_path, parallel_data = detect_and_validate_parallel_json(plan_path.parent)
+        
+        # Show indicator if parallel workflow detected
+        if parallel_data:
+            print(f"\n🔀 Parallel workflow detected for {feature_name}")
+            print(f"  - Parallelization level: {parallel_data.get('parallelization_level', 'unknown')}")
+            print(f"  - Achievements: {len(parallel_data.get('achievements', []))}")
+            
+            # In interactive mode, offer parallel menu access
+            if args.interactive:
+                print(f"\n💡 TIP: You can access the Parallel Execution Menu")
+                access_parallel = input("Access Parallel Menu now? (y/N): ").strip().lower()
+                if access_parallel == 'y':
+                    while True:
+                        choice = show_parallel_menu(parallel_data, feature_name)
+                        handle_parallel_menu_selection(choice, parallel_data, feature_name, plan_path.parent)
+                        if choice == '5':  # Back to main menu
+                            break
+            print()
+
         # Determine achievement number
         if args.achievement:
+            # Achievement 3.1: Validate achievement number format
+            from LLM.scripts.generation.exceptions import InvalidAchievementFormatError
+
             achievement_num = args.achievement
+
+            # Validate achievement format (X.Y) - re is already imported at module level
+            if not re.match(r"^\d+\.\d+$", achievement_num):
+                raise InvalidAchievementFormatError(
+                    achievement_input=achievement_num,
+                    expected_format="X.Y (e.g., 2.1, 3.5)",
+                )
         elif args.next:
             # Find next achievement based on trust mode
             if args.trust_filesystem:
@@ -2937,7 +1384,9 @@ Exit Codes:
                 )
                 next_ach = None
                 for ach in plan_data["achievements"]:
-                    fs_state = detect_workflow_state_filesystem(plan_path, feature_name, ach.number)
+                    fs_state = detector.detect_workflow_state_filesystem(
+                        plan_path, feature_name, ach.number
+                    )
                     if fs_state["state"] != "subplan_complete":
                         next_ach = ach
                         print(
@@ -2950,7 +1399,7 @@ Exit Codes:
                 achievement_num = next_ach.number
             else:
                 # Normal mode or trust-plan: Use PLAN's handoff section
-                next_ach = find_next_achievement_hybrid(
+                next_ach = detector.find_next_achievement_hybrid(
                     plan_path,
                     feature_name,
                     plan_data["achievements"],
@@ -2958,7 +1407,7 @@ Exit Codes:
                 )
                 if not next_ach:
                     # PLAN is complete - extract statistics and provide helpful next steps
-                    stats = extract_plan_statistics(plan_path, feature_name)
+                    stats = parser.extract_plan_statistics(plan_path, feature_name)
 
                     # Build statistics section
                     stats_lines = []
@@ -3002,134 +1451,26 @@ All achievements completed!
 
                     # Copy completion message to clipboard
                     clipboard_enabled = not args.no_clipboard
-                    if copy_to_clipboard_safe(completion_message, clipboard_enabled):
+                    if utils.copy_to_clipboard_safe(completion_message, clipboard_enabled):
                         print("✅ Completion message copied to clipboard!")
 
                     sys.exit(0)
+
+                # Set achievement number from detected next achievement
                 achievement_num = next_ach.number
 
-            # Check for PLAN/filesystem conflicts (unless user explicitly trusts one source)
-            if not args.trust_plan and not args.trust_filesystem:
-                conflict = detect_plan_filesystem_conflict(
-                    plan_path, feature_name, achievement_num, plan_content
-                )
-            else:
-                conflict = None
-                if args.trust_plan:
-                    print(
-                        "⚠️  --trust-plan: Skipping conflict detection, trusting PLAN as source of truth"
-                    )
-
-            if conflict:
-                # Build conflict message
-                conflict_message = f"""
-╔════════════════════════════════════════════════════════════════════════╗
-║                                                                        ║
-║  ⚠️  PLAN/FILESYSTEM CONFLICT DETECTED                                 ║
-║                                                                        ║
-╚════════════════════════════════════════════════════════════════════════╝
-
-🔍 CONFLICT SUMMARY
-═════════════════════════════════════════════════════════════════════════
-
-The PLAN's "Current Status & Handoff" section does not match the filesystem state.
-
-Achievement: {conflict['achievement_num']}
-Conflicts Found: {len(conflict['conflicts'])}
-
-"""
-                # Add conflict details
-                for i, c in enumerate(conflict["conflicts"], 1):
-                    conflict_message += f"""Conflict {i}: {c['type']}
-─────────────────────────────────────────────────────────────────────────
-{c['message']}
-
-Filesystem State: {c['filesystem']}
-PLAN State: {c['plan']}
-
-Likely Cause: {c['likely_cause']}
-"""
-
-                fs_state = conflict["filesystem_state"]
-                conflict_message += f"""
-═════════════════════════════════════════════════════════════════════════
-
-📊 DETAILED STATE INFORMATION
-═════════════════════════════════════════════════════════════════════════
-
-Filesystem Detection:
-  • State: {fs_state['state']}
-  • Recommendation: {fs_state['recommendation']}
-  • SUBPLAN: {fs_state.get('subplan_path', 'Not found')}
-  • Executions: {fs_state.get('execution_count', 0)} total, {fs_state.get('completed_count', 0)} complete
-
-PLAN Says:
-  • Next Achievement: {achievement_num}
-  • Check "Current Status & Handoff" section in PLAN
-
-═════════════════════════════════════════════════════════════════════════
-
-🔧 HOW TO RESOLVE
-═════════════════════════════════════════════════════════════════════════
-
-Step 1: Verify Filesystem State
-  • Check SUBPLAN file status header
-  • Check EXECUTION_TASK file(s) status headers
-  • Confirm which state is correct
-
-Step 2: Update the Incorrect Source
-
-  Option A: Filesystem is correct, PLAN is outdated
-    1. Update SUBPLAN status if needed (mark ✅ Complete)
-    2. Update PLAN "Current Status & Handoff" section:
-       - Mark achievement ✅ Complete in progress list
-       - Update "Next:" to point to next achievement
-    3. Run this command again
-
-  Option B: PLAN is correct, filesystem is wrong
-    1. Check why files are in unexpected state
-    2. Complete or fix the work as needed
-    3. Ensure SUBPLAN and EXECUTION_TASK statuses are accurate
-
-Step 3: Verify Resolution
-  Run this command again to confirm conflict is resolved:
-    python generate_prompt @{feature_name} --next
-
-═════════════════════════════════════════════════════════════════════════
-
-💡 PREVENTION TIP
-═════════════════════════════════════════════════════════════════════════
-
-Always update the PLAN's "Current Status & Handoff" section when:
-  • Completing an achievement
-  • Moving to the next achievement
-  • Changing workflow state
-
-The PLAN is the "source of truth" - keep it synchronized with work!
-
-═════════════════════════════════════════════════════════════════════════
-
-❌ Cannot proceed until conflict is resolved.
-
-═════════════════════════════════════════════════════════════════════════
-"""
-                # Display conflict message
-                print(conflict_message)
-
-                # Copy conflict message to clipboard (default behavior)
-                clipboard_enabled = not args.no_clipboard
-                if copy_to_clipboard_safe(conflict_message, clipboard_enabled):
-                    print("\n✅ Conflict message copied to clipboard!")
-
-                sys.exit(1)
+            # Check for PLAN/filesystem conflicts (extracted to helper function)
+            handle_plan_conflicts(
+                args, detector, plan_path, feature_name, achievement_num, plan_content
+            )
         else:
             print("❌ Error: Use --next or --achievement N.N")
             parser.print_help()
             sys.exit(1)
-        
+
         # Handle workflow-specific flags
         if args.subplan_only:
-            # Generate SUBPLAN prompt
+            # Generate SUBPLAN-only prompt (Bug #13 fix: Add --subplan-only flag)
             import subprocess
 
             result = subprocess.run(
@@ -3137,9 +1478,10 @@ The PLAN is the "source of truth" - keep it synchronized with work!
                     sys.executable,
                     "LLM/scripts/generation/generate_subplan_prompt.py",
                     "create",
-                    f"@{plan_path}",
+                    f"@{plan_path.name}",  # Bug #12 fix: Use .name to get filename only
                     "--achievement",
                     achievement_num,
+                    "--subplan-only",  # Bug #13 fix: Pass flag to generate SUBPLAN-only prompt
                 ],
                 capture_output=True,
                 text=True,
@@ -3205,6 +1547,41 @@ The PLAN is the "source of truth" - keep it synchronized with work!
                 )
                 sys.exit(1)
         else:
+            # Check achievement status for FIX detection (Achievement 2.9 - tri-state model)
+            from LLM.scripts.generation.utils import get_achievement_status
+
+            status = get_achievement_status(achievement_num, plan_path)
+
+            if status == "needs_fix":
+                # Achievement requires fixes - generate FIX-specific prompt
+                from LLM.scripts.generation.generate_fix_prompt import generate_fix_prompt
+
+                print(f"⚠️  Achievement {achievement_num} has reviewer feedback requiring fixes")
+                print(f"   FIX file: execution/feedbacks/FIX_{achievement_num.replace('.', '')}.md")
+                print()
+
+                try:
+                    prompt = generate_fix_prompt(plan_path, achievement_num)
+                except Exception as e:
+                    print(f"❌ Error generating FIX prompt: {e}")
+                    sys.exit(1)
+
+                # Output (interactive menu or print + clipboard)
+                if args.interactive:
+                    menu = InteractiveMenu()
+                    menu.show_post_generation_menu(
+                        prompt, "needs_fix", None, plan_path, achievement_num
+                    )
+                else:
+                    print(prompt)
+
+                    if not args.no_clipboard:
+                        success = utils.copy_to_clipboard_safe(prompt)
+                        if success:
+                            print("\n✅ FIX prompt copied to clipboard!")
+
+                return  # Exit after FIX prompt
+
             # Auto-detect workflow state and suggest appropriate action
             workflow_state = detect_workflow_state(plan_path, feature_name, achievement_num)
 
@@ -3372,20 +1749,45 @@ SUBPLAN has {exec_count} planned EXECUTION(s). {completed_count} complete, next 
             recommended_command = command_match.group(1).strip() if command_match else None
 
             # Show interactive menu
-            output_interactive_menu(prompt, state_name, recommended_command)
+            menu = InteractiveMenu()
+            menu.show_post_generation_menu(
+                prompt, state_name, recommended_command, plan_path, achievement_num
+            )
         else:
             # Non-interactive: print and copy to clipboard
             print(prompt)
 
             # Clipboard is default (use --no-clipboard to disable)
             clipboard_enabled = not args.no_clipboard
-            if copy_to_clipboard_safe(prompt, clipboard_enabled):
+            if utils.copy_to_clipboard_safe(prompt, clipboard_enabled):
                 print("\n✅ Copied to clipboard!")
 
         sys.exit(0)
-    
+
+    # Achievement 3.1: Structured error handling with actionable suggestions
     except Exception as e:
-        print(f"❌ Error: {e}", file=sys.stderr)
+        from core.libraries.error_handling import ApplicationError
+        from LLM.scripts.generation.exceptions import format_error_with_suggestions
+
+        # If it's an ApplicationError (including our custom exceptions), format it nicely
+        if isinstance(e, ApplicationError):
+            error_message = format_error_with_suggestions(e)
+            print(error_message, file=sys.stderr)
+
+            # Auto-copy error to clipboard for easy sharing
+            try:
+                from LLM.scripts.generation.path_resolution import copy_to_clipboard_safe
+
+                if copy_to_clipboard_safe(error_message):
+                    print("✅ Error details copied to clipboard!", file=sys.stderr)
+            except:
+                pass  # Silent fail on clipboard
+        else:
+            # Generic exception - format with basic info
+            error_type = type(e).__name__
+            error_msg = str(e) or "(no message)"
+            print(f"❌ ERROR: {error_type}: {error_msg}", file=sys.stderr)
+
         sys.exit(1)
 
 

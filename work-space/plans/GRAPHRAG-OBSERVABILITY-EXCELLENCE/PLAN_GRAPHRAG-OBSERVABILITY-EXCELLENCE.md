@@ -2,10 +2,12 @@
 
 **Status**: 🚀 Ready to Execute  
 **Created**: 2025-11-08 06:30 UTC  
+**Updated**: 2025-11-12 11:30 UTC (Added automated workflow protocol compliance)  
 **Goal**: Transform GraphRAG pipeline into a learning machine with full visibility into every transformation, enabling deep understanding, data-driven improvement, and systematic experimentation  
 **Priority**: CRITICAL - Foundation for all GraphRAG improvements  
 **Parent**: GRAMMAPLAN_GRAPHRAG-PIPELINE-EXCELLENCE.md  
-**Estimated Effort**: 25-35 hours
+**Estimated Effort**: 25-35 hours (core) / 85-113 hours (comprehensive)  
+**Archive Location** (when complete): `documentation/archive/graphrag-observability-excellence-YYYY-MM/`
 
 ---
 
@@ -60,6 +62,56 @@
 - Unrelated code files
 
 **Context Budget**: ~200 lines per achievement + code files being modified
+
+---
+
+## 📋 Achievement Index
+
+**All Achievements in This Plan** (for sequence reference):
+
+**Priority 0: CORE OBSERVABILITY (Foundation)**
+
+- Achievement 0.1: Transformation Logging Infrastructure Created
+- Achievement 0.2: Intermediate Data Collections Created
+- Achievement 0.3: Stage Boundary Query Scripts Created
+- Achievement 0.4: Per-Stage Quality Metrics Implemented
+
+**Priority 1: TRANSFORMATION UNDERSTANDING (Learning Tools)**
+
+- Achievement 1.1: Transformation Explanation Tools Created
+- Achievement 1.2: Visual Diff and Comparison Tools Created
+
+**Priority 2: INTEGRATION (Connect to Existing Systems)**
+
+- Achievement 2.1: GraphRAG APIs Enhanced for Observability
+- Achievement 2.2: Real-Time Transformation Monitoring Dashboard
+- Achievement 2.3: Learning-Focused UI Enhancements
+
+**Priority 3: ANALYSIS TOOLS (Deep Exploration)**
+
+- Achievement 3.1: Jupyter Notebook Analysis Suite Created
+- Achievement 3.2: Data Export and External Analysis Tools
+- Achievement 3.3: Transformation Log Query Interface
+
+**Priority 4: AUTOMATION (Experimentation)**
+
+- Achievement 4.1: Existing Scripts Enhanced with Observability
+- Achievement 4.2: Experiment Framework Integration
+- Achievement 4.3: Quality Regression Detection Automated
+
+**Priority 5: KNOWLEDGE CAPTURE (Documentation)**
+
+- Achievement 5.1: Observability Documentation Comprehensive
+- Achievement 5.2: GraphRAG Knowledge Base Initialized
+
+**Purpose**:
+
+- Quick reference for achievement sequence
+- Enables scripts to detect all achievements without parsing full PLAN
+- Shows progress at a glance (✅ = completed via APPROVED feedback)
+- Helps detect completion via feedback files (APPROVED_XX.md in execution/feedbacks/)
+
+**Completion Tracking**: Use filesystem-first pattern - achievements marked complete when `execution/feedbacks/APPROVED_XX.md` exists (where XX = achievement number like 01, 02, etc.)
 
 ---
 
@@ -1466,29 +1518,109 @@ All 4 achievements in Priority 0 (CRITICAL - Transformation Visibility Foundatio
 
 ---
 
+## 📋 Current Status & Handoff
+
+**Last Updated**: 2025-11-12 11:30 UTC  
+**Status**: 🚀 Ready to Execute - Awaiting First Achievement
+
+**Context**:
+
+- PLAN created 2025-11-08, ready for execution
+- Multiple SUBPLANs and EXECUTION_TASKs created but no APPROVED completions yet
+- Existing observability work done but not formally tracked in this plan
+- This plan updated to comply with automated workflow protocol (filesystem-first state tracking)
+
+**What's Done**:
+
+- ✅ PLAN created with comprehensive achievement breakdown
+- ✅ Multiple SUBPLANs created (01, 02, 03, 04, 11)
+- ✅ Multiple EXECUTION_TASKs created (various attempts and recoveries)
+- ✅ Achievement Index added (this update)
+- ✅ Filesystem-first tracking structure established
+
+**Current**:
+
+- **Priority 0**: ⏳ Not started - Core observability foundation
+- **Achievement 0.1**: ⏳ Ready to execute - Transformation Logging Infrastructure
+- **SUBPLANs exist**: SUBPLAN_01, SUBPLAN_02, SUBPLAN_03, SUBPLAN_04, SUBPLAN_11
+- **EXECUTION_TASKs exist**: Multiple attempts and recoveries documented
+- **No APPROVED files yet**: Awaiting first achievement approval
+
+**What's Next**:
+
+⏳ **Achievement 0.1: Transformation Logging Infrastructure Created** ← **START HERE**
+
+- Build structured logging for entity resolution, graph construction, community detection
+- Log every transformation with reasons (why entities merge, why relationships filtered, etc.)
+- Create trace ID system to link transformations across stages
+- Structured JSON logs for machine parsing + human-readable format
+- **Estimated**: 6-8 hours
+- **SUBPLAN**: `SUBPLAN_GRAPHRAG-OBSERVABILITY-EXCELLENCE_01.md` (already exists)
+
+**Total Effort**:
+
+- **Core (Priorities 0-2)**: 25-35 hours
+- **Comprehensive (All Priorities)**: 85-113 hours
+- **Completed**: 0 hours
+- **Remaining**: Full scope
+
+**Archive Location** (when complete): `documentation/archive/graphrag-observability-excellence-YYYY-MM/`
+
+**Workflow Notes**:
+
+- Use filesystem-first completion tracking: `execution/feedbacks/APPROVED_XX.md`
+- Achievement 0.1 = APPROVED_01.md, Achievement 0.2 = APPROVED_02.md, etc.
+- Each achievement follows: Design (SUBPLAN) → Execute (EXECUTION_TASK) → Approve (APPROVED)
+- SUBPLANs and EXECUTION_TASKs created BEFORE execution, not during
+
+---
+
 ## 🚀 Quick Start (For Next Session)
 
-**To start execution**:
+**To start execution using automated workflow**:
 
-1. **Create SUBPLAN for Achievement 0.1** (Transformation Logging):
+1. **Generate prompt for next achievement**:
 
    ```bash
-   # Will use updated generator once created, for now manual
-   # Create: work-space/subplans/SUBPLAN_GRAPHRAG-OBSERVABILITY-EXCELLENCE_01.md
+   python LLM/scripts/generation/generate_prompt.py @GRAPHRAG-OBSERVABILITY-EXCELLENCE
    ```
 
-2. **SUBPLAN Design Phase** (practice new workflow!):
+   This will:
 
-   - Design logging infrastructure approach
-   - Plan logging formats for each stage
-   - Identify code changes needed
-   - **Don't execute yet** - complete design first
-   - May plan multiple EXECUTIONs if needed (e.g., one per stage)
+   - Auto-detect next achievement (0.1 if starting fresh)
+   - Check for existing SUBPLAN (SUBPLAN_01.md already exists)
+   - Generate appropriate prompt (create SUBPLAN if missing, or execute if SUBPLAN exists)
+   - Use filesystem-first tracking (checks execution/feedbacks/APPROVED\_\*.md)
 
-3. **Then Create EXECUTION_TASK(s)**:
-   - Based on SUBPLAN design
-   - May be single EXECUTION or multiple
-   - Execute according to SUBPLAN plan
+2. **Follow the generated prompt** - it will guide you through:
+
+   - **If SUBPLAN missing**: Design phase (create SUBPLAN + EXECUTION_TASK)
+   - **If SUBPLAN exists**: Execution phase (implement achievement)
+   - **After execution**: Request APPROVED_XX.md creation
+
+3. **Completion tracking**:
+
+   - Achievement complete when `execution/feedbacks/APPROVED_XX.md` created
+   - Generator auto-detects completion and moves to next achievement
+   - No manual PLAN updates needed for completion tracking
+
+**Workflow Pattern**:
+
+```
+Achievement X.Y →
+  Check: Does SUBPLAN exist? →
+    NO: Design phase (create SUBPLAN + EXECUTION_TASK) →
+    YES: Execute phase (implement work) →
+  Request APPROVED_XY.md →
+  Move to Achievement X.Y+1
+```
+
+**Key Files**:
+
+- **PLAN**: This file (defines achievements)
+- **SUBPLANs**: `subplans/SUBPLAN_*_XX.md` (design documents)
+- **EXECUTION_TASKs**: `execution/EXECUTION_TASK_*_XX_NN.md` (execution logs)
+- **APPROVED**: `execution/feedbacks/APPROVED_XX.md` (completion markers)
 
 **Remember**: This PLAN implements observability that enables all future GraphRAG learning!
 

@@ -176,22 +176,58 @@ python scripts/repositories/graphrag/explain/explain_entity_merge.py --help
 
 ---
 
+## 📊 Real-World Examples from Validation Run
+
+**Trace ID**: `6088e6bd-e305-42d8-9210-e2d3f1dda035`
+
+### Example: Entity Merge Explanation from Validation
+
+```
+═══════════════════════════════════════════════════════════
+   ENTITY MERGE EXPLANATION
+═══════════════════════════════════════════════════════════
+
+Trace ID: 6088e6bd-e305-42d8-9210-e2d3f1dda035
+
+Entity 1:
+  Raw ID: raw_entity_0
+  Name: GraphRAG
+  Type: TECHNOLOGY
+  Confidence: 0.95
+
+Entity 2:
+  Raw ID: raw_entity_5  
+  Name: Graph RAG
+  Type: TECHNOLOGY
+  Confidence: 0.92
+
+Merge Decision: ✅ MERGED
+  Method: Fuzzy Matching
+  Similarity: 0.89
+  Final Confidence: 0.96
+
+Canonical Result: resolved_entity_0 (GraphRAG System)
+```
+
+---
+
 ## Usage Examples
 
 ### Example 1: Investigate Entity Merge
 
 **Scenario**: Two entities seem similar but weren't merged. Why?
 
+**Using real trace_id from validation**:
+
 ```bash
-# Check if they merged
 python scripts/repositories/graphrag/explain/explain_entity_merge.py \
-  --entity-a "Barack Obama" \
-  --entity-b "President Obama" \
-  --trace-id abc-123
+  --entity-a "GraphRAG" \
+  --entity-b "Graph RAG" \
+  --trace-id 6088e6bd-e305-42d8-9210-e2d3f1dda035
 
 # Output shows:
 # - Merge Decision: ✅ MERGED
-# - Similarity Score: 0.87
+# - Similarity Score: 0.89
 # - Method: fuzzy_match
 # - Reason: High name similarity, same type
 ```
@@ -456,6 +492,137 @@ python scripts/repositories/graphrag/explain/explain_entity_merge.py --entity-a 
 4. **Save evolution data**: Use `--output` with `visualize_graph_evolution.py` to save data for later analysis
 
 5. **Combine tools**: Use multiple tools together to build complete understanding of pipeline behavior
+
+---
+
+## 🎨 Using Color Formatting (Achievement 7.1)
+
+The explanation tools can now leverage enhanced color formatting from `query_utils` for improved readability.
+
+### Available Utilities
+
+All tools can import and use these utilities:
+
+```python
+from query_utils import Colors, format_color_value
+```
+
+### Color Formatting in Explanation Tools
+
+**Example: Highlight merge decisions**:
+```python
+# In explain_entity_merge.py
+if merge_decision == "merged":
+    status = format_color_value("✅ MERGED", "success")
+else:
+    status = format_color_value("❌ NOT MERGED", "error")
+
+print(f"Merge Decision: {status}")
+```
+
+**Example: Color-code confidence scores**:
+```python
+# High confidence → green, low confidence → yellow/red
+confidence_type = "success" if confidence > 0.8 else ("warning" if confidence > 0.6 else "error")
+print(f"Confidence: {format_color_value(f'{confidence:.2f}', confidence_type)}")
+```
+
+**Example: Highlight similarity scores**:
+```python
+# Show similarity with appropriate color
+similarity_type = "success" if similarity > 0.7 else "warning"
+print(f"Similarity: {format_color_value(f'{similarity:.2f}', similarity_type)}")
+```
+
+### Color Types Reference
+
+| Type | Color | Use Case in Explanation Tools |
+|------|-------|-------------------------------|
+| `success` | Green | Successful merges, high confidence, good metrics |
+| `warning` | Yellow | Borderline confidence, medium similarity, caution |
+| `error` | Red | Failed merges, low confidence, errors |
+| `info` | Blue | Neutral information, IDs, timestamps |
+| `text` | None | Default text |
+
+### Complete Example: Enhanced Entity Merge Explanation
+
+```python
+#!/usr/bin/env python3
+from query_utils import Colors, format_color_value
+
+def explain_merge(entity_a, entity_b, merge_data):
+    """Explain entity merge with color formatting."""
+    
+    print(f"\n{Colors.BOLD}{'='*60}{Colors.RESET}")
+    print(f"{Colors.BOLD}   ENTITY MERGE EXPLANATION{Colors.RESET}")
+    print(f"{Colors.BOLD}{'='*60}{Colors.RESET}\n")
+    
+    # Entity details
+    print(f"Entity A:")
+    print(f"  Name: {format_color_value(entity_a['name'], 'info')}")
+    print(f"  Type: {entity_a['type']}")
+    conf_type = "success" if entity_a['confidence'] > 0.8 else "warning"
+    print(f"  Confidence: {format_color_value(f\"{entity_a['confidence']:.2f}\", conf_type)}")
+    
+    print(f"\nEntity B:")
+    print(f"  Name: {format_color_value(entity_b['name'], 'info')}")
+    print(f"  Type: {entity_b['type']}")
+    conf_type = "success" if entity_b['confidence'] > 0.8 else "warning"
+    print(f"  Confidence: {format_color_value(f\"{entity_b['confidence']:.2f}\", conf_type)}")
+    
+    # Merge decision
+    print(f"\n{Colors.BOLD}Merge Decision:{Colors.RESET}")
+    if merge_data['merged']:
+        status = format_color_value("✅ MERGED", "success")
+        print(f"  Status: {status}")
+        print(f"  Method: {format_color_value(merge_data['method'], 'info')}")
+        
+        sim_type = "success" if merge_data['similarity'] > 0.7 else "warning"
+        print(f"  Similarity: {format_color_value(f\"{merge_data['similarity']:.2f}\", sim_type)}")
+    else:
+        status = format_color_value("❌ NOT MERGED", "error")
+        print(f"  Status: {status}")
+        print(f"  Reason: {format_color_value(merge_data['reason'], 'warning')}")
+```
+
+### Benefits of Color Formatting
+
+✅ **Improved Readability**: Visual cues help identify important information quickly  
+✅ **Better UX**: Users can scan outputs faster with color-coded values  
+✅ **Emphasis**: Highlights warnings, errors, and successes appropriately  
+✅ **Professional Output**: Modern CLI tools use colors for better user experience  
+✅ **Piping Safe**: Colors automatically disabled when output is piped to files
+
+### Migration to Color Formatting
+
+To add colors to existing explanation tools:
+
+1. **Import utilities**:
+```python
+from query_utils import Colors, format_color_value
+```
+
+2. **Replace plain text with colored text**:
+```python
+# Before
+print(f"Confidence: {confidence:.2f}")
+
+# After
+conf_type = "success" if confidence > 0.8 else "warning"
+print(f"Confidence: {format_color_value(f'{confidence:.2f}', conf_type)}")
+```
+
+3. **Add section headers with bold**:
+```python
+print(f"{Colors.BOLD}{'='*60}{Colors.RESET}")
+print(f"{Colors.BOLD}   SECTION TITLE{Colors.RESET}")
+print(f"{Colors.BOLD}{'='*60}{Colors.RESET}")
+```
+
+### See Also
+
+- **Tool Enhancement Report**: `documentation/Tool-Enhancement-Report.md`
+- **Query Utils Documentation**: `scripts/repositories/graphrag/queries/README.md#new-utility-functions`
 
 ---
 

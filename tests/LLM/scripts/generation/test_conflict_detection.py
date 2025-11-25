@@ -11,7 +11,11 @@ import pytest
 from pathlib import Path
 import tempfile
 import shutil
-from LLM.scripts.generation.generate_prompt import detect_plan_filesystem_conflict
+from LLM.scripts.generation.workflow_detector import WorkflowDetector
+
+# Create detector instance for tests
+detector = WorkflowDetector()
+detect_plan_filesystem_conflict = detector.detect_plan_filesystem_conflict
 
 
 class TestDetectPlanFilesystemConflict:
@@ -26,7 +30,11 @@ class TestDetectPlanFilesystemConflict:
         self.subplan_dir.mkdir()
         self.execution_dir = self.plan_dir / "execution"
         self.execution_dir.mkdir()
-        
+
+        # Create feedbacks directory for filesystem-first tracking
+        self.feedbacks_dir = self.execution_dir / "feedbacks"
+        self.feedbacks_dir.mkdir()
+
         # Create PLAN file
         self.plan_path = self.plan_dir / "PLAN_TEST-FEATURE.md"
 
@@ -34,291 +42,277 @@ class TestDetectPlanFilesystemConflict:
         """Clean up temporary directory."""
         shutil.rmtree(self.temp_dir)
 
-    def test_conflict_type_1_plan_outdated_complete(self):
-        """Test Conflict Type 1: SUBPLAN complete but PLAN says next."""
-        # Create completed SUBPLAN
-        subplan_path = self.subplan_dir / "SUBPLAN_TEST-FEATURE_01.md"
-        subplan_path.write_text(
-            "# SUBPLAN: TEST-FEATURE 0.1\n**Status**: ✅ Complete\n"
+    def test_conflict_achievement_not_in_index(self):
+        """Test conflict: APPROVED file exists for achievement not in PLAN."""
+        # Create APPROVED file for achievement NOT in PLAN
+        approved_file = self.feedbacks_dir / "APPROVED_99.md"
+        approved_file.write_text(
+            """# Achievement 9.9 Approval
+
+**Status**: ✅ Approved
+**Date**: 2025-11-12
+**Reviewer**: Test Suite
+"""
         )
-        
-        # PLAN says achievement is next (not complete)
+
+        # PLAN that doesn't include achievement 9.9
         plan_content = """# PLAN: TEST-FEATURE
+
+## 📋 Desirable Achievements
+
+**Achievement 0.1**: Setup
+**Achievement 0.2**: Implementation
+**Achievement 0.3**: Testing
 
 ## Current Status & Handoff
 
 Next: Achievement 0.1 (Setup)
-
-## Achievements
-
-### Achievement 0.1: Setup ⏳
-Status: In Progress
 """
         self.plan_path.write_text(plan_content)
-        
+
         result = detect_plan_filesystem_conflict(
             self.plan_path, "TEST-FEATURE", "0.1", plan_content
         )
-        
+
         assert result is not None
         assert result["has_conflict"] is True
-        assert result["achievement_num"] == "0.1"
         assert len(result["conflicts"]) == 1
-        assert result["conflicts"][0]["type"] == "plan_outdated_complete"
-        assert "marked COMPLETE in filesystem" in result["conflicts"][0]["message"]
+        assert result["conflicts"][0]["type"] == "achievement_not_in_index"
+        assert "9.9" in result["conflicts"][0]["message"]
+        assert "not in Achievement Index" in result["conflicts"][0]["message"]
 
-    def test_conflict_type_2_plan_outdated_synthesis(self):
-        """Test Conflict Type 2: All EXECUTIONs complete but PLAN not updated."""
-        # Create SUBPLAN (not marked complete)
-        subplan_path = self.subplan_dir / "SUBPLAN_TEST-FEATURE_01.md"
-        subplan_path.write_text(
-            "# SUBPLAN: TEST-FEATURE 0.1\n**Status**: ⏳ In Progress\n"
-        )
-        
-        # Create completed EXECUTION
-        exec_path = self.execution_dir / "EXECUTION_TASK_TEST-FEATURE_01_01.md"
-        exec_path.write_text(
-            "# EXECUTION_TASK\n**Status**: ✅ Complete\n"
-        )
-        
-        # PLAN says achievement is next (not complete)
+    def test_conflict_orphaned_subplan(self):
+        """Test conflict: SUBPLAN exists for achievement not in PLAN."""
+        # Create SUBPLAN for achievement NOT in PLAN
+        subplan_path = self.subplan_dir / "SUBPLAN_TEST-FEATURE_99.md"
+        subplan_path.write_text("# SUBPLAN: TEST-FEATURE 9.9\n**Status**: ⏳ In Progress\n")
+
+        # PLAN that doesn't include 9.9
         plan_content = """# PLAN: TEST-FEATURE
+
+## 📋 Desirable Achievements
+
+**Achievement 0.1**: Setup
+**Achievement 0.2**: Implementation
+**Achievement 0.3**: Testing
 
 ## Current Status & Handoff
 
 Next: Achievement 0.1 (Setup)
-
-## Achievements
-
-### Achievement 0.1: Setup ⏳
-Status: In Progress
 """
         self.plan_path.write_text(plan_content)
-        
+
         result = detect_plan_filesystem_conflict(
             self.plan_path, "TEST-FEATURE", "0.1", plan_content
         )
-        
+
         assert result is not None
         assert result["has_conflict"] is True
         assert len(result["conflicts"]) == 1
-        assert result["conflicts"][0]["type"] == "plan_outdated_synthesis"
-        assert "all executions complete" in result["conflicts"][0]["message"]
+        assert result["conflicts"][0]["type"] == "orphaned_work"
+        assert "9.9" in result["conflicts"][0]["message"]
+        assert "not in Achievement Index" in result["conflicts"][0]["message"]
 
-    def test_conflict_type_3_plan_premature_complete(self):
-        """Test Conflict Type 3: PLAN says complete but work still active."""
-        # Create SUBPLAN (in progress)
-        subplan_path = self.subplan_dir / "SUBPLAN_TEST-FEATURE_01.md"
-        subplan_path.write_text(
-            "# SUBPLAN: TEST-FEATURE 0.1\n**Status**: ⏳ In Progress\n"
-        )
-        
-        # Create in-progress EXECUTION
+    def test_no_conflict_when_execution_in_plan(self):
+        """Test no conflict when EXECUTION exists for achievement in PLAN (orphan detection only checks SUBPLANs)."""
+        # Create EXECUTION for achievement IN PLAN (0.1)
         exec_path = self.execution_dir / "EXECUTION_TASK_TEST-FEATURE_01_01.md"
-        exec_path.write_text(
-            "# EXECUTION_TASK\n**Status**: ⏳ In Progress\n"
-        )
-        
-        # PLAN says achievement is complete
+        exec_path.write_text("# EXECUTION_TASK\n**Status**: ⏳ In Progress\n")
+
+        # PLAN that includes 0.1
         plan_content = """# PLAN: TEST-FEATURE
 
-## Current Status & Handoff
+## 📋 Desirable Achievements
 
-✅ Achievement 0.1 complete
-
-## Achievements
-
-### Achievement 0.1: Setup ✅
-Status: Complete
-"""
-        self.plan_path.write_text(plan_content)
-        
-        result = detect_plan_filesystem_conflict(
-            self.plan_path, "TEST-FEATURE", "0.1", plan_content
-        )
-        
-        assert result is not None
-        assert result["has_conflict"] is True
-        assert len(result["conflicts"]) == 1
-        assert result["conflicts"][0]["type"] == "plan_premature_complete"
-        assert "marked COMPLETE in PLAN but work is still active" in result["conflicts"][0]["message"]
-
-    def test_no_conflict_when_synchronized(self):
-        """Test no conflict when PLAN and filesystem are synchronized."""
-        # Create in-progress SUBPLAN
-        subplan_path = self.subplan_dir / "SUBPLAN_TEST-FEATURE_01.md"
-        subplan_path.write_text(
-            "# SUBPLAN: TEST-FEATURE 0.1\n**Status**: ⏳ In Progress\n"
-        )
-        
-        # Create in-progress EXECUTION
-        exec_path = self.execution_dir / "EXECUTION_TASK_TEST-FEATURE_01_01.md"
-        exec_path.write_text(
-            "# EXECUTION_TASK\n**Status**: ⏳ In Progress\n"
-        )
-        
-        # PLAN says achievement is next (matches filesystem)
-        plan_content = """# PLAN: TEST-FEATURE
+**Achievement 0.1**: Setup
+**Achievement 0.2**: Implementation
+**Achievement 0.3**: Testing
 
 ## Current Status & Handoff
 
 Next: Achievement 0.1 (Setup)
-
-## Achievements
-
-### Achievement 0.1: Setup ⏳
-Status: In Progress
 """
         self.plan_path.write_text(plan_content)
-        
+
         result = detect_plan_filesystem_conflict(
             self.plan_path, "TEST-FEATURE", "0.1", plan_content
         )
-        
+
+        # Should return None - EXECUTION orphan detection not implemented (only SUBPLANs checked)
+        assert result is None
+
+    def test_no_conflict_when_in_index_and_filesystem(self):
+        """Test no conflict when Achievement Index and filesystem agree."""
+        # Create APPROVED file for achievement IN index
+        approved_file = self.feedbacks_dir / "APPROVED_01.md"
+        approved_file.write_text("# Approved\n")
+
+        # Create SUBPLAN for achievement IN index
+        subplan_path = self.subplan_dir / "SUBPLAN_TEST-FEATURE_01.md"
+        subplan_path.write_text("# SUBPLAN\n")
+
+        # PLAN that includes 0.1
+        plan_content = """# PLAN: TEST-FEATURE
+
+## 📋 Desirable Achievements
+
+**Achievement 0.1**: Setup
+**Achievement 0.2**: Implementation
+**Achievement 0.3**: Testing
+
+## Current Status & Handoff
+
+Next: Achievement 0.2 (Implementation)
+"""
+        self.plan_path.write_text(plan_content)
+
+        result = detect_plan_filesystem_conflict(
+            self.plan_path, "TEST-FEATURE", "0.1", plan_content
+        )
+
         # Should return None when no conflict
         assert result is None
 
-    def test_no_conflict_when_both_complete(self):
-        """Test no conflict when both PLAN and filesystem show complete."""
-        # Create completed SUBPLAN
+    def test_no_conflict_when_no_approved_files(self):
+        """Test no conflict when no APPROVED files exist yet."""
+        # Create SUBPLAN but no APPROVED file
         subplan_path = self.subplan_dir / "SUBPLAN_TEST-FEATURE_01.md"
-        subplan_path.write_text(
-            "# SUBPLAN: TEST-FEATURE 0.1\n**Status**: ✅ Complete\n"
-        )
-        
-        # PLAN says achievement is complete
+        subplan_path.write_text("# SUBPLAN: TEST-FEATURE 0.1\n")
+
+        # PLAN with Achievement Index
         plan_content = """# PLAN: TEST-FEATURE
+
+## 📋 Desirable Achievements
+
+**Achievement 0.1**: Setup
+**Achievement 0.2**: Implementation
 
 ## Current Status & Handoff
 
-✅ Achievement 0.1 complete
-
-## Achievements
-
-### Achievement 0.1: Setup ✅
-Status: Complete
+Next: Achievement 0.1 (Setup)
 """
         self.plan_path.write_text(plan_content)
-        
+
         result = detect_plan_filesystem_conflict(
             self.plan_path, "TEST-FEATURE", "0.1", plan_content
         )
-        
-        # Should return None when both agree
+
+        # Should return None when no conflicts
         assert result is None
 
-    def test_conflict_includes_filesystem_state(self):
-        """Test that conflict result includes filesystem state details."""
-        # Create completed SUBPLAN
-        subplan_path = self.subplan_dir / "SUBPLAN_TEST-FEATURE_01.md"
-        subplan_path.write_text(
-            "# SUBPLAN: TEST-FEATURE 0.1\n**Status**: ✅ Complete\n"
-        )
-        
-        # PLAN says achievement is next
+    def test_conflict_includes_details(self):
+        """Test that conflict result includes all necessary details."""
+        # Create APPROVED file for achievement NOT in index
+        approved_file = self.feedbacks_dir / "APPROVED_99.md"
+        approved_file.write_text("# Approved\n")
+
+        # PLAN without 9.9 in Achievement Index
         plan_content = """# PLAN: TEST-FEATURE
+
+## 📋 Desirable Achievements
+
+**Achievement 0.1**: Setup
+**Achievement 0.2**: Implementation
 
 ## Current Status & Handoff
 
 Next: Achievement 0.1 (Setup)
 """
         self.plan_path.write_text(plan_content)
-        
+
         result = detect_plan_filesystem_conflict(
             self.plan_path, "TEST-FEATURE", "0.1", plan_content
         )
-        
+
         assert result is not None
-        assert "filesystem_state" in result
-        assert result["filesystem_state"]["state"] == "subplan_complete"
+        assert "has_conflict" in result
+        assert "conflicts" in result
+        assert result["has_conflict"] is True
+        assert len(result["conflicts"]) > 0
 
-    def test_conflict_with_multi_execution_workflow(self):
-        """Test conflict detection in multi-execution workflow."""
-        # Create SUBPLAN with multi-execution plan
-        subplan_path = self.subplan_dir / "SUBPLAN_TEST-FEATURE_01.md"
-        subplan_content = """# SUBPLAN: TEST-FEATURE 0.1
-**Status**: ⏳ In Progress
+    def test_multiple_conflicts(self):
+        """Test detection of multiple conflicts at once."""
+        # Create APPROVED and SUBPLAN for achievements NOT in index
+        approved_file = self.feedbacks_dir / "APPROVED_98.md"
+        approved_file.write_text("# Approved\n")
 
-## 🔄 Active EXECUTION_TASKs
+        subplan_path = self.subplan_dir / "SUBPLAN_TEST-FEATURE_99.md"
+        subplan_path.write_text("# SUBPLAN\n")
 
-| Execution | Status | Description |
-|-----------|--------|-------------|
-| 01_01     | ✅ Complete | First |
-| 01_02     | ✅ Complete | Second |
-"""
-        subplan_path.write_text(subplan_content)
-        
-        # Create 2 completed EXECUTIONs
-        exec1_path = self.execution_dir / "EXECUTION_TASK_TEST-FEATURE_01_01.md"
-        exec1_path.write_text("# EXECUTION_TASK\n**Status**: ✅ Complete\n")
-        
-        exec2_path = self.execution_dir / "EXECUTION_TASK_TEST-FEATURE_01_02.md"
-        exec2_path.write_text("# EXECUTION_TASK\n**Status**: ✅ Complete\n")
-        
-        # PLAN says achievement is next (not updated)
+        # PLAN without 9.8 or 9.9 in Achievement Index
         plan_content = """# PLAN: TEST-FEATURE
+
+## 📋 Desirable Achievements
+
+**Achievement 0.1**: Setup
+**Achievement 0.2**: Implementation
 
 ## Current Status & Handoff
 
 Next: Achievement 0.1 (Setup)
 """
         self.plan_path.write_text(plan_content)
-        
+
         result = detect_plan_filesystem_conflict(
             self.plan_path, "TEST-FEATURE", "0.1", plan_content
         )
-        
+
         assert result is not None
         assert result["has_conflict"] is True
-        assert result["conflicts"][0]["type"] == "plan_outdated_synthesis"
-        # Should show execution count
-        assert "2/2" in result["conflicts"][0]["message"]
+        # Should have 2 conflicts (one for APPROVED, one for SUBPLAN)
+        assert len(result["conflicts"]) == 2
 
-    def test_no_conflict_when_no_subplan(self):
-        """Test no conflict when SUBPLAN doesn't exist yet."""
-        # No SUBPLAN created
-        
-        # PLAN says achievement is next
+    def test_no_conflict_when_no_work_started(self):
+        """Test no conflict when no work has started (no filesystem artifacts)."""
+        # No SUBPLAN, no EXECUTION, no APPROVED files
+
+        # PLAN with Achievement Index
         plan_content = """# PLAN: TEST-FEATURE
+
+## 📋 Desirable Achievements
+
+**Achievement 0.1**: Setup
+**Achievement 0.2**: Implementation
 
 ## Current Status & Handoff
 
 Next: Achievement 0.1 (Setup)
 """
         self.plan_path.write_text(plan_content)
-        
+
         result = detect_plan_filesystem_conflict(
             self.plan_path, "TEST-FEATURE", "0.1", plan_content
         )
-        
-        # Should return None when no SUBPLAN (nothing to conflict with)
+
+        # Should return None when no filesystem artifacts
         assert result is None
 
     def test_conflict_provides_resolution_guidance(self):
         """Test that conflict includes likely cause and resolution guidance."""
-        # Create completed SUBPLAN
-        subplan_path = self.subplan_dir / "SUBPLAN_TEST-FEATURE_01.md"
-        subplan_path.write_text(
-            "# SUBPLAN: TEST-FEATURE 0.1\n**Status**: ✅ Complete\n"
-        )
-        
-        # PLAN says achievement is next
+        # Create APPROVED file for achievement NOT in index
+        approved_file = self.feedbacks_dir / "APPROVED_99.md"
+        approved_file.write_text("# Approved\n")
+
+        # PLAN without 9.9 in Achievement Index
         plan_content = """# PLAN: TEST-FEATURE
+
+## 📋 Desirable Achievements
+
+**Achievement 0.1**: Setup
+**Achievement 0.2**: Implementation
 
 ## Current Status & Handoff
 
 Next: Achievement 0.1 (Setup)
 """
         self.plan_path.write_text(plan_content)
-        
+
         result = detect_plan_filesystem_conflict(
             self.plan_path, "TEST-FEATURE", "0.1", plan_content
         )
-        
+
         assert result is not None
         conflict = result["conflicts"][0]
         assert "likely_cause" in conflict
-        assert "filesystem" in conflict
-        assert "plan" in conflict
-        assert "PLAN was not updated" in conflict["likely_cause"]
-
+        assert "resolution" in conflict
+        assert "Achievement Index" in conflict["resolution"]

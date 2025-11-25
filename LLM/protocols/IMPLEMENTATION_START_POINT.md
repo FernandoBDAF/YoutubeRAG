@@ -331,9 +331,9 @@ Facing complex decision or issue?
 
 **Reference**: See `LLM-METHODOLOGY.md` for complete EXECUTION_ANALYSIS workflow and categorization.
 
-### Create Archive Folder at Plan Start
+### Create Archive Folder & Feedback System at Plan Start
 
-**⚠️ CRITICAL**: Create archive folder immediately when creating PLAN.
+**⚠️ CRITICAL**: Create archive folder AND feedback system structure immediately when creating PLAN.
 
 **Steps**:
 
@@ -346,15 +346,43 @@ Facing complex decision or issue?
    ```bash
    mkdir -p ./feature-archive/subplans
    mkdir -p ./feature-archive/execution
+   mkdir -p ./feature-archive/documentation
    ```
 
-3. **Document in PLAN**:
+3. **Create Feedback System Structure** (**NEW - Filesystem-First Architecture**):
+   ```bash
+   mkdir -p work-space/plans/[FEATURE]/execution/feedbacks
+   ```
+   - This is where `APPROVED_XX.md` and `FIX_XX.md` files will be created
+   - Achievement completion tracked via files in this folder (not PLAN markdown)
+
+4. **Document in PLAN**:
    - Add "Archive Location" section to PLAN
    - Reference: `LLM/templates/PLAN-TEMPLATE.md` "Archive Location" section
 
-**Why**: Archive folder must exist before work starts so completed SUBPLANs and EXECUTION_TASKs can be immediately archived.
+**Why Archive Folder**: Archive folder must exist before work starts so completed SUBPLANs and EXECUTION_TASKs can be immediately archived.
 
-**Result**: Clean root directory, active work in workspace (`work-space/`), completed work archived to `documentation/archive/`.
+**Why Feedback System Folder**: Filesystem-first architecture requires `execution/feedbacks/` folder for APPROVED/FIX files that track achievement completion status (replaces markdown-based completion tracking).
+
+**Folder Structure** (Complete):
+```
+work-space/plans/[FEATURE]/
+├── PLAN_[FEATURE].md
+├── subplans/
+│   └── SUBPLAN_[FEATURE]_XX.md
+├── execution/
+│   ├── EXECUTION_TASK_[FEATURE]_XX_YY.md
+│   └── feedbacks/              ← NEW! Filesystem-first state tracking
+│       ├── APPROVED_01.md       (Achievement 0.1 complete)
+│       ├── APPROVED_02.md       (Achievement 0.2 complete)
+│       └── FIX_03.md           (Achievement 0.3 needs fixes)
+└── documentation/
+    └── (supporting docs)
+```
+
+**Result**: Clean root directory, active work in workspace (`work-space/`), completed work archived to `documentation/archive/`, achievement completion tracked via filesystem (`execution/feedbacks/`).
+
+**Reference**: See `LLM/docs/FEEDBACK_SYSTEM_GUIDE.md` for complete feedback system guidance.
 
 ---
 

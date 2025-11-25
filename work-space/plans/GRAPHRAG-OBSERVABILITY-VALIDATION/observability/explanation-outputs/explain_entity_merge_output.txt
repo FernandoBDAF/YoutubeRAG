@@ -1,0 +1,25 @@
+
+═══════════════════════════════════════════════════════════════
+   ENTITY MERGE EXPLANATION
+═══════════════════════════════════════════════════════════════
+
+Trace ID: 6088e6bd-e305-42d8-9210-e2d3f1dda035
+Merge Decision: ❌ NOT MERGED
+
+Entity A:
+  Name: unknown
+  Type: unknown
+  Confidence: 0.900
+  Chunks: []
+
+Entity B:
+  Name: unknown
+  Type: unknown
+  Confidence: 0.950
+  Chunks: []
+
+No merge occurred between these entities.
+Possible reasons:
+  - Similarity score below threshold
+  - Different entity types
+  - Insufficient evidence for merge

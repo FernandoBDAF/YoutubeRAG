@@ -201,18 +201,18 @@ A **5-tier hierarchical methodology** for managing LLM-assisted development work
 
 ### Document Size Table
 
-| Document Type  | Size Range | Purpose               | Location                |
-| -------------- | ---------- | --------------------- | ----------------------- |
-| NORTH_STAR     | 800-2,000  | Strategic vision      | work-space/north-stars/ |
-| GRAMMAPLAN     | 600-1,500  | Coordinate PLANs      | work-space/grammaplans/ |
-| PLAN           | 300-900    | Define achievements   | work-space/plans/       |
-| SUBPLAN        | 200-600    | Define approach       | work-space/subplans/    |
-| EXECUTION_TASK | <200       | Log execution journey | work-space/plans/<PLAN>/execution/ |
-| EXECUTION_ANALYSIS | 200-1,000 | Investigation & analysis | work-space/analyses/ |
-| EXECUTION_CASE-STUDY | 200-1,000 | Pattern documentation | work-space/case-studies/ |
-| EXECUTION_OBSERVATION | 100-500 | Real-time feedback | work-space/observations/ |
-| EXECUTION_DEBUG | 200-1,000 | Issue investigation | work-space/debug-logs/ |
-| EXECUTION_REVIEW | 200-1,000 | Implementation review | work-space/reviews/ |
+| Document Type         | Size Range | Purpose                  | Location                           |
+| --------------------- | ---------- | ------------------------ | ---------------------------------- |
+| NORTH_STAR            | 800-2,000  | Strategic vision         | work-space/north-stars/            |
+| GRAMMAPLAN            | 600-1,500  | Coordinate PLANs         | work-space/grammaplans/            |
+| PLAN                  | 300-900    | Define achievements      | work-space/plans/                  |
+| SUBPLAN               | 200-600    | Define approach          | work-space/subplans/               |
+| EXECUTION_TASK        | <200       | Log execution journey    | work-space/plans/<PLAN>/execution/ |
+| EXECUTION_ANALYSIS    | 200-1,000  | Investigation & analysis | work-space/analyses/               |
+| EXECUTION_CASE-STUDY  | 200-1,000  | Pattern documentation    | work-space/case-studies/           |
+| EXECUTION_OBSERVATION | 100-500    | Real-time feedback       | work-space/observations/           |
+| EXECUTION_DEBUG       | 200-1,000  | Issue investigation      | work-space/debug-logs/             |
+| EXECUTION_REVIEW      | 200-1,000  | Implementation review    | work-space/reviews/                |
 
 ### Naming Convention
 
@@ -220,12 +220,12 @@ A **5-tier hierarchical methodology** for managing LLM-assisted development work
 - GRAMMAPLAN: `GRAMMAPLAN_<FEATURE>.md`
 - PLAN: `PLAN_<FEATURE>.md` or `PLAN_<GRAMMAPLAN>-<DOMAIN>.md` (child)
 - SUBPLAN: `SUBPLAN_<FEATURE>_<NUMBER>.md` (nested: `work-space/plans/<PLAN>/subplans/`)
-- EXECUTION*TASK: `EXECUTION_TASK*<FEATURE>_<SUBPLAN>_<EXECUTION>.md` (nested: `work-space/plans/<PLAN>/execution/`)
-- EXECUTION*ANALYSIS: `EXECUTION_ANALYSIS*<TOPIC>.md` (flat: `work-space/analyses/`)
-- EXECUTION*CASE-STUDY: `EXECUTION_CASE-STUDY_<FEATURE>.md` (flat: `work-space/case-studies/`)
-- EXECUTION*OBSERVATION: `EXECUTION_OBSERVATION_<TOPIC>_<DATE>.md` (flat: `work-space/observations/`)
-- EXECUTION*DEBUG: `EXECUTION_DEBUG_<ISSUE>.md` (flat: `work-space/debug-logs/`)
-- EXECUTION*REVIEW: `EXECUTION_REVIEW_<FEATURE>.md` (flat: `work-space/reviews/`)
+- EXECUTION*TASK: `EXECUTION_TASK*<FEATURE>_<SUBPLAN>_<EXECUTION>.md`(nested:`work-space/plans/<PLAN>/execution/`)
+- EXECUTION*ANALYSIS: `EXECUTION_ANALYSIS*<TOPIC>.md`(flat:`work-space/analyses/`)
+- EXECUTION\*CASE-STUDY: `EXECUTION_CASE-STUDY_<FEATURE>.md` (flat: `work-space/case-studies/`)
+- EXECUTION\*OBSERVATION: `EXECUTION_OBSERVATION_<TOPIC>_<DATE>.md` (flat: `work-space/observations/`)
+- EXECUTION\*DEBUG: `EXECUTION_DEBUG_<ISSUE>.md` (flat: `work-space/debug-logs/`)
+- EXECUTION\*REVIEW: `EXECUTION_REVIEW_<FEATURE>.md` (flat: `work-space/reviews/`)
 
 ---
 
@@ -238,6 +238,7 @@ The methodology distinguishes two types of execution-level work:
 **Purpose**: Track the iterative implementation journey of a SUBPLAN achievement, from design to completion.
 
 **Characteristics**:
+
 - Connected to specific SUBPLAN
 - <200 lines (hard limit)
 - Iteration tracking with test-first workflow
@@ -259,12 +260,14 @@ The methodology distinguishes two types of execution-level work:
 5. **EXECUTION_REVIEW**: Post-completion assessment
 
 **Characteristics**:
+
 - Standalone, not SUBPLAN-connected
 - 200-1000+ lines (variable)
 - Archived by type/topic for future reference
 - Ad-hoc creation as knowledge work emerges
 
 **Locations** (Flat folders by type):
+
 - EXECUTION_ANALYSIS: `work-space/analyses/`
 - EXECUTION_CASE-STUDY: `work-space/case-studies/`
 - EXECUTION_OBSERVATION: `work-space/observations/`
@@ -282,6 +285,77 @@ The methodology distinguishes two types of execution-level work:
 **See**: `LLM/guides/EXECUTION-TAXONOMY.md` for detailed decision tree, 12+ scenario examples, and quick reference card.
 
 ---
+
+---
+
+## 📁 Feedback System (Achievement Completion Tracking)
+
+The **feedback system** is how we track achievement completion using a filesystem-first approach.
+
+### Core Concept
+
+Instead of marking achievements complete in PLAN markdown (which gets out of sync), we use dedicated `APPROVED_XX.md` files as the single source of truth:
+
+- **PLAN** defines what achievements exist (Achievement Index)
+- **Filesystem** tracks which achievements are complete (APPROVED files)
+- **No fallback** to PLAN markdown for completion status
+
+### Achievement Index
+
+Every PLAN must have an **Achievement Index** section near the top that lists all achievements:
+
+```markdown
+## 📋 Achievement Index
+
+**All Achievements in This Plan**:
+
+- ✅ Achievement 0.1: First Achievement
+- ✅ Achievement 0.2: Second Achievement
+- Achievement 1.1: Third Achievement (in progress)
+```
+
+**Purpose**: Quick reference, enables scripts to detect all achievements, shows progress.
+
+### APPROVED Files
+
+Completed achievements have an `APPROVED_XX.md` file in `execution/feedbacks/`:
+
+**Naming**: `APPROVED_XX.md` where XX is achievement number without dot
+
+- Achievement 0.1 → `APPROVED_01.md`
+- Achievement 1.1 → `APPROVED_11.md`
+- Achievement 2.4 → `APPROVED_24.md`
+
+**Location**: `work-space/plans/FEATURE/execution/feedbacks/APPROVED_XX.md`
+
+**Detection**:
+
+```python
+def is_achievement_complete(ach_num: str, plan_path: Path) -> bool:
+    feedbacks_dir = plan_path.parent / "execution" / "feedbacks"
+    approved_file = feedbacks_dir / f"APPROVED_{ach_num.replace('.', '')}.md"
+    return approved_file.exists()
+```
+
+### Tools
+
+**Validate feedback system**:
+
+```bash
+python3 LLM/scripts/validation/validate_feedback_system.py work-space/plans/FEATURE/
+```
+
+**Migrate legacy plan**:
+
+```bash
+python3 LLM/scripts/migration/migrate_legacy_completions.py work-space/plans/FEATURE/ --apply
+```
+
+### Documentation
+
+- **Full Guide**: `LLM/docs/FEEDBACK_SYSTEM_GUIDE.md`
+- **Troubleshooting**: `LLM/docs/FEEDBACK_SYSTEM_TROUBLESHOOTING.md`
+- **Philosophy**: `LLM/docs/STATE_TRACKING_PHILOSOPHY.md`
 
 ---
 

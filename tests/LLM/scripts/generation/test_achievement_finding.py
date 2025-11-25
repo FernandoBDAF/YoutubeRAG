@@ -12,12 +12,14 @@ import pytest
 from pathlib import Path
 import tempfile
 import shutil
-from LLM.scripts.generation.generate_prompt import (
-    find_next_achievement_from_plan,
-    find_next_achievement_hybrid,
-    is_achievement_complete,
-    find_subplan_for_achievement,
-)
+from LLM.scripts.generation.workflow_detector import WorkflowDetector
+from LLM.scripts.generation.utils import is_achievement_complete
+from LLM.scripts.generation.generate_prompt import find_subplan_for_achievement
+
+# Create detector instance for tests
+detector = WorkflowDetector()
+find_next_achievement_from_plan = detector.find_next_achievement_from_plan
+find_next_achievement_hybrid = detector.find_next_achievement_hybrid
 
 
 class TestFindNextAchievementFromPlan:
@@ -97,91 +99,101 @@ Status: Complete
 
 
 class TestIsAchievementComplete:
-    """Test achievement completion detection."""
+    """Test achievement completion detection (filesystem-first)."""
 
-    def test_detects_complete_with_checkmark_before(self):
-        """Test detecting complete achievement with ✅ before number."""
-        plan_content = """# PLAN
+    @pytest.fixture
+    def temp_plan_dir(self):
+        """Create temporary plan directory structure."""
+        temp_dir = tempfile.mkdtemp()
+        plan_dir = Path(temp_dir) / "TEST-FEATURE"
+        plan_dir.mkdir(parents=True)
 
-## Current Status & Handoff
+        # Create plan file
+        plan_file = plan_dir / "PLAN_TEST-FEATURE.md"
+        plan_file.write_text("# PLAN: TEST-FEATURE\n")
 
-✅ Achievement 0.1 complete
+        # Create execution/feedbacks structure
+        feedbacks_dir = plan_dir / "execution" / "feedbacks"
+        feedbacks_dir.mkdir(parents=True)
 
-## Achievements
+        yield plan_dir, plan_file, feedbacks_dir
 
-### Achievement 0.1: Setup
-Status: Complete
+        # Cleanup
+        shutil.rmtree(temp_dir)
+
+    def test_detects_complete_with_checkmark_before(self, temp_plan_dir):
+        """Test detecting complete achievement with APPROVED file."""
+        plan_dir, plan_file, feedbacks_dir = temp_plan_dir
+
+        # Create APPROVED file for achievement 0.1
+        approved_file = feedbacks_dir / "APPROVED_01.md"
+        approved_file.write_text(
+            """# Achievement 0.1 Approval
+
+**Status**: ✅ Approved
+**Date**: 2025-11-12
+**Reviewer**: Test Suite
 """
+        )
 
-        result = is_achievement_complete("0.1", plan_content)
+        result = is_achievement_complete("0.1", "", plan_file)
         assert result is True
 
-    def test_detects_incomplete_with_hourglass(self):
-        """Test detecting incomplete achievement with ⏳."""
-        plan_content = """# PLAN
+    def test_detects_incomplete_with_hourglass(self, temp_plan_dir):
+        """Test detecting incomplete achievement (no APPROVED file)."""
+        plan_dir, plan_file, feedbacks_dir = temp_plan_dir
 
-## Achievements
+        # Don't create APPROVED file - achievement is incomplete
 
-### Achievement 0.2: Processing ⏳
-Status: In Progress
-"""
-
-        result = is_achievement_complete("0.2", plan_content)
+        result = is_achievement_complete("0.2", "", plan_file)
         assert result is False
 
-    def test_detects_pending_with_box(self):
-        """Test detecting pending achievement with 🔲."""
-        plan_content = """# PLAN
+    def test_detects_pending_with_box(self, temp_plan_dir):
+        """Test detecting pending achievement (no APPROVED file)."""
+        plan_dir, plan_file, feedbacks_dir = temp_plan_dir
 
-## Achievements
+        # Don't create APPROVED file - achievement is pending
 
-### Achievement 0.3: Testing 🔲
-Status: Pending
-"""
-
-        result = is_achievement_complete("0.3", plan_content)
+        result = is_achievement_complete("0.3", "", plan_file)
         assert result is False
 
-    def test_handles_achievement_not_found(self):
+    def test_handles_achievement_not_found(self, temp_plan_dir):
         """Test when achievement number doesn't exist."""
-        plan_content = """# PLAN
+        plan_dir, plan_file, feedbacks_dir = temp_plan_dir
 
-## Achievements
+        # Don't create APPROVED file
 
-### Achievement 0.1: Setup
-Status: Complete
-"""
-
-        result = is_achievement_complete("0.5", plan_content)
+        result = is_achievement_complete("0.5", "", plan_file)
         assert result is False
 
-    def test_handles_dotted_achievement_numbers(self):
-        """Test achievement numbers with dots (e.g., 1.2)."""
-        plan_content = """# PLAN
+    def test_handles_dotted_achievement_numbers(self, temp_plan_dir):
+        """Test achievement numbers with dots (e.g., 1.2) - APPROVED_12.md."""
+        plan_dir, plan_file, feedbacks_dir = temp_plan_dir
 
-## Current Status & Handoff
+        # Create APPROVED file for achievement 1.2 (becomes APPROVED_12.md)
+        approved_file = feedbacks_dir / "APPROVED_12.md"
+        approved_file.write_text(
+            """# Achievement 1.2 Approval
 
-✅ Achievement 1.2 complete
-
-## Achievements
-
-### Achievement 1.2: Advanced Feature
-Status: Complete
+**Status**: ✅ Approved
+**Date**: 2025-11-12
+**Reviewer**: Test Suite
 """
+        )
 
-        result = is_achievement_complete("1.2", plan_content)
+        result = is_achievement_complete("1.2", "", plan_file)
         assert result is True
 
-    def test_case_insensitive_complete_status(self):
-        """Test that 'complete' status is case-insensitive."""
-        plan_content = """# PLAN
+    def test_case_insensitive_complete_status(self, temp_plan_dir):
+        """Test that filesystem detection is consistent."""
+        plan_dir, plan_file, feedbacks_dir = temp_plan_dir
 
-## Current Status & Handoff
+        # Create APPROVED file
+        approved_file = feedbacks_dir / "APPROVED_03.md"
+        approved_file.write_text("# Approved\n")
 
-✅ Achievement 0.1 COMPLETE
-"""
-
-        result = is_achievement_complete("0.1", plan_content)
+        # Filesystem detection is case-consistent (file exists or not)
+        result = is_achievement_complete("0.3", "", plan_file)
         assert result is True
 
 
@@ -269,17 +281,43 @@ class TestFindSubplanForAchievement:
 class TestAchievementFindingEdgeCases:
     """Test edge cases in achievement finding."""
 
-    def test_achievement_with_leading_zeros(self):
-        """Test achievement numbers with leading zeros (01 vs 0.1)."""
-        plan_content = """# PLAN
+    @pytest.fixture
+    def temp_plan_dir(self):
+        """Create temporary plan directory structure."""
+        temp_dir = tempfile.mkdtemp()
+        plan_dir = Path(temp_dir) / "TEST-FEATURE"
+        plan_dir.mkdir(parents=True)
 
-## Current Status & Handoff
+        # Create plan file
+        plan_file = plan_dir / "PLAN_TEST-FEATURE.md"
+        plan_file.write_text("# PLAN: TEST-FEATURE\n")
 
-✅ Achievement 01 complete
+        # Create execution/feedbacks structure
+        feedbacks_dir = plan_dir / "execution" / "feedbacks"
+        feedbacks_dir.mkdir(parents=True)
+
+        yield plan_dir, plan_file, feedbacks_dir
+
+        # Cleanup
+        shutil.rmtree(temp_dir)
+
+    def test_achievement_with_leading_zeros(self, temp_plan_dir):
+        """Test achievement numbers with leading zeros (01 -> APPROVED_01.md)."""
+        plan_dir, plan_file, feedbacks_dir = temp_plan_dir
+
+        # Create APPROVED file for achievement 01 (APPROVED_01.md)
+        approved_file = feedbacks_dir / "APPROVED_01.md"
+        approved_file.write_text(
+            """# Achievement 01 Approval
+
+**Status**: ✅ Approved
+**Date**: 2025-11-12
+**Reviewer**: Test Suite
 """
+        )
 
         # Should match "01" format
-        result1 = is_achievement_complete("01", plan_content)
+        result1 = is_achievement_complete("01", "", plan_file)
 
         assert result1 is True
 

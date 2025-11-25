@@ -69,11 +69,13 @@ class EntityResolutionStage(BaseStage):
         self.transformation_logger = TransformationLogger(self.db_write, enabled=logging_enabled)
 
         # Initialize IntermediateDataService for saving intermediate data (Achievement 0.2)
-        intermediate_data_enabled = os.getenv("GRAPHRAG_SAVE_INTERMEDIATE_DATA", "false").lower() == "true"
+        intermediate_data_enabled = (
+            os.getenv("GRAPHRAG_SAVE_INTERMEDIATE_DATA", "false").lower() == "true"
+        )
         self.intermediate_data = IntermediateDataService(
-            self.db_write, 
+            self.db_write,
             enabled=intermediate_data_enabled,
-            ttl_days=int(os.getenv("GRAPHRAG_INTERMEDIATE_DATA_TTL_DAYS", "7"))
+            ttl_days=int(os.getenv("GRAPHRAG_INTERMEDIATE_DATA_TTL_DAYS", "7")),
         )
 
         logger.info(
@@ -146,7 +148,7 @@ class EntityResolutionStage(BaseStage):
                     chunk_id=chunk_id,
                     video_id=video_id,
                     trace_id=trace_id,
-                    extraction_method="llm"
+                    extraction_method="llm",
                 )
 
             if not extraction_data or "entities" not in extraction_data:
@@ -183,20 +185,24 @@ class EntityResolutionStage(BaseStage):
             # Achievement 0.2: Save resolved entities (after resolution)
             resolved_entities_data = []
             for entity in resolved_entities:
-                resolved_entities_data.append({
-                    "entity_id": id_map.get(entity.original_id, entity.original_id),
-                    "canonical_name": entity.canonical_name,
-                    "type": entity.type.value if hasattr(entity.type, "value") else str(entity.type),
-                    "aliases": entity.aliases,
-                    "confidence": entity.confidence,
-                    "source_count": 1
-                })
+                resolved_entities_data.append(
+                    {
+                        "entity_id": id_map.get(entity.entity_id, entity.entity_id),
+                        "canonical_name": entity.canonical_name,
+                        "type": (
+                            entity.type.value if hasattr(entity.type, "value") else str(entity.type)
+                        ),
+                        "aliases": entity.aliases,
+                        "confidence": entity.confidence,
+                        "source_count": 1,
+                    }
+                )
             self.intermediate_data.save_entities_resolved(
                 entities=resolved_entities_data,
                 chunk_id=chunk_id,
                 video_id=video_id,
                 trace_id=trace_id,
-                resolution_method="fuzzy_match"
+                resolution_method="fuzzy_match",
             )
 
             # Store entity mentions using id_map to ensure correct entity_id
@@ -550,8 +556,8 @@ class EntityResolutionStage(BaseStage):
 
             except Exception as e:
                 logger.error(f"Failed to store entity {entity.entity_id}: {e}")
-                # On error, still map original_id to itself (no change)
-                id_map[original_id] = original_id
+                # On error, still map entity_id to itself (no change)
+                id_map[entity.entity_id] = entity.entity_id
                 continue
 
         return id_map
@@ -620,7 +626,7 @@ class EntityResolutionStage(BaseStage):
                 "created_at": now,
                 "first_seen": now,
                 "type": resolved_entity.type.value,
-                "source_count": 1,  # New entity starts with source_count = 1
+                # NOTE: source_count NOT here - $inc handles it correctly for both insert and update
             },
             # $set: Always update (mutable fields)
             "$set": {

@@ -274,9 +274,45 @@ _None yet - will be created when execution starts_
 - [ ] All expected results achieved
 - [ ] Code commented with learnings (if code work)
 - [ ] EXECUTION_TASK complete
+- [ ] **Achievement feedback received** (see Completion Workflow below)
 - [ ] Ready for archive
 
 [FILL: Specific criteria for this subplan's completion]
+
+---
+
+## ✅ Completion Workflow (Filesystem-First)
+
+**After All Work Complete**:
+
+1. **Request Review**: Ask reviewer to assess achievement completion
+2. **Reviewer Creates Feedback File**:
+   - **If Approved**: Create `execution/feedbacks/APPROVED_[XX].md` (XX = achievement number without dot)
+   - **If Fixes Needed**: Create `execution/feedbacks/FIX_[XX].md` with detailed issues
+3. **Filesystem = Source of Truth**: Achievement completion tracked by APPROVED file existence, not PLAN markdown
+
+**Achievement Index in PLAN**:
+- Defines structure (list of all achievements)
+- NOT updated with checkmarks or status manually
+- Filesystem (`APPROVED_XX.md` files) indicates completion status
+
+**Do NOT**:
+- ❌ Manually update PLAN markdown with "✅ Achievement complete"
+- ❌ Add checkmarks to Achievement Index
+- ❌ Update "Current Status & Handoff" to mark achievement done
+
+**DO**:
+- ✅ Request reviewer feedback after work complete
+- ✅ Wait for `APPROVED_XX.md` or `FIX_XX.md` file creation
+- ✅ If FIX required: Address issues, request re-review
+
+**Why Filesystem-First**:
+- Single source of truth (files, not markdown parsing)
+- Automated detection by scripts (`generate_prompt.py`)
+- Clear audit trail (feedback files are timestamped, contain rationale)
+- Prevents markdown parsing issues
+
+**Reference**: See `LLM/docs/FEEDBACK_SYSTEM_GUIDE.md` for complete guidance
 
 ---
 

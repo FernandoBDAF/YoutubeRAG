@@ -1,0 +1,14 @@
+
+═══════════════════════════════════════════════════════════════
+   RELATIONSHIP FILTER EXPLANATION
+═══════════════════════════════════════════════════════════════
+
+Trace ID: 6088e6bd-e305-42d8-9210-e2d3f1dda035
+Final Status: ❌ DROPPED
+
+Source Entity: unknown (unknown)
+Target Entity: unknown (unknown)
+
+Extraction Attempts: 0
+
+No relationship exists in final graph.

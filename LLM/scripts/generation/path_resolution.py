@@ -15,11 +15,21 @@ Supports:
 Created: 2025-11-09
 Purpose: Fix Bug #9 (feature parity gap) and prevent future inconsistencies
 Reference: EXECUTION_ANALYSIS_SUBPLAN-PROMPT-GENERATOR-MISSING-PATH-RESOLUTION-BUG-9.md
+
+Achievement 3.1: Upgraded to structured error handling with custom exceptions
 """
 
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
+
+# Achievement 3.1: Import structured error handling
+from core.libraries.error_handling import handle_errors
+from LLM.scripts.generation.exceptions import (
+    PlanNotFoundError,
+    InvalidPathError,
+    format_error_with_suggestions,
+)
 
 
 def resolve_folder_shortcut(folder_name: str) -> Path:
@@ -36,17 +46,30 @@ def resolve_folder_shortcut(folder_name: str) -> Path:
         Path to PLAN file in matching folder
 
     Raises:
-        SystemExit: If folder not found, multiple matches, or no PLAN file
+        PlanNotFoundError: If folder not found, multiple matches, or no PLAN file
+        InvalidPathError: If plans directory doesn't exist
 
     Examples:
         @RESTORE → work-space/plans/RESTORE-EXECUTION-WORKFLOW-AUTOMATION/PLAN_*.md
         @GRAPHRAG → work-space/plans/GRAPHRAG-OBSERVABILITY-EXCELLENCE/PLAN_*.md
     """
+    # Achievement 3.1: Validate folder_name is not empty
+    if not folder_name or not folder_name.strip():
+        raise PlanNotFoundError(
+            plan_name="(empty)",
+            searched_paths=[Path("work-space/plans")],
+            available_plans=[],
+        )
+
     plans_dir = Path("work-space/plans")
 
+    # Achievement 3.1: Use InvalidPathError instead of print + sys.exit
     if not plans_dir.exists():
-        print(f"❌ Plans directory not found: {plans_dir}")
-        sys.exit(1)
+        raise InvalidPathError(
+            path=plans_dir,
+            reason="directory does not exist",
+            path_type="plans directory",
+        )
 
     # Find folders containing the name (case-insensitive partial match)
     matching_folders = []
@@ -54,36 +77,60 @@ def resolve_folder_shortcut(folder_name: str) -> Path:
         if folder.is_dir() and folder_name.upper() in folder.name.upper():
             matching_folders.append(folder)
 
+    # Achievement 3.1: Use PlanNotFoundError with available plans
     if not matching_folders:
-        print(f"❌ No folder found matching '@{folder_name}'")
-        print(f"\n   Searched in: {plans_dir}")
-        print(f"   Available folders:")
-        for folder in sorted(plans_dir.iterdir()):
-            if folder.is_dir():
-                print(f"     - {folder.name}")
-        sys.exit(1)
+        available_plans = [f.name for f in sorted(plans_dir.iterdir()) if f.is_dir()]
+        raise PlanNotFoundError(
+            plan_name=folder_name,
+            searched_paths=[plans_dir],
+            available_plans=available_plans,
+        )
 
+    # Achievement 3.1: Ambiguous folder match - provide clear context
     if len(matching_folders) > 1:
-        print(f"⚠️  Multiple folders match '@{folder_name}':")
-        for f in matching_folders:
-            print(f"   - {f.name}")
-        print("\n   Use more specific name or full path")
-        sys.exit(1)
+        from core.libraries.error_handling import ApplicationError
+
+        raise ApplicationError(
+            f"Multiple folders match '@{folder_name}'",
+            context={
+                "folder_name": folder_name,
+                "matches": [f.name for f in matching_folders],
+                "suggestions": [
+                    "Use more specific name (more characters from folder name)",
+                    "Use full path instead of @folder shortcut",
+                    f"Example: work-space/plans/{matching_folders[0].name}/PLAN_*.md",
+                ],
+            },
+        )
 
     # Find PLAN file in folder
     folder = matching_folders[0]
     plan_files = list(folder.glob("PLAN_*.md"))
 
+    # Achievement 3.1: No PLAN file found
     if not plan_files:
-        print(f"❌ No PLAN file found in {folder.name}")
-        print(f"   Expected: PLAN_*.md")
-        sys.exit(1)
+        raise PlanNotFoundError(
+            plan_name=folder.name,
+            searched_paths=[folder],
+            available_plans=[],
+        )
 
+    # Achievement 3.1: Multiple PLAN files (ambiguous)
     if len(plan_files) > 1:
-        print(f"⚠️  Multiple PLAN files in {folder.name}:")
-        for f in plan_files:
-            print(f"   - {f.name}")
-        sys.exit(1)
+        from core.libraries.error_handling import ApplicationError
+
+        raise ApplicationError(
+            f"Multiple PLAN files found in {folder.name}",
+            context={
+                "folder": folder.name,
+                "files": [f.name for f in plan_files],
+                "suggestions": [
+                    "This folder should only have one PLAN_*.md file",
+                    "Remove duplicate PLAN files",
+                    "Or use full path to specify which one",
+                ],
+            },
+        )
 
     return plan_files[0]
 
@@ -106,7 +153,9 @@ def resolve_plan_path(path_str: str, file_type: str = "PLAN") -> Path:
         Resolved Path object
 
     Raises:
-        SystemExit: If path not found or ambiguous
+        InvalidPathError: If path not found
+        PlanNotFoundError: If @folder or @FILE.md not found
+        ApplicationError: If multiple matches found
 
     Examples:
         @RESTORE → work-space/plans/RESTORE-EXECUTION-WORKFLOW-AUTOMATION/PLAN_*.md
@@ -114,12 +163,16 @@ def resolve_plan_path(path_str: str, file_type: str = "PLAN") -> Path:
         @SUBPLAN_FEATURE_01.md → work-space/plans/FEATURE/subplans/SUBPLAN_FEATURE_01.md
         full/path/to/file.md → full/path/to/file.md
     """
+    # Achievement 3.1: Handle regular paths with InvalidPathError
     if not path_str.startswith("@"):
         # Regular path - just verify it exists
         path = Path(path_str)
         if not path.exists():
-            print(f"❌ Error: {file_type} file not found: {path}")
-            sys.exit(1)
+            raise InvalidPathError(
+                path=path,
+                reason="file does not exist",
+                path_type=file_type,
+            )
         return path
 
     # Remove @ prefix
@@ -149,18 +202,40 @@ def resolve_plan_path(path_str: str, file_type: str = "PLAN") -> Path:
         if search_dir.exists():
             matching_files.extend(list(search_dir.rglob(filename)))
 
+    # Achievement 3.1: File not found - use appropriate exception
     if not matching_files:
-        print(f"❌ {file_type} file not found: @{shorthand}")
-        print(f"\n   Searched in: {', '.join(str(d) for d in search_dirs)}")
-        print(f"   Use full path or check filename")
-        sys.exit(1)
+        from core.libraries.error_handling import ApplicationError
 
+        raise ApplicationError(
+            f"{file_type} file not found: @{shorthand}",
+            context={
+                "filename": shorthand,
+                "file_type": file_type,
+                "searched_paths": [str(d) for d in search_dirs],
+                "suggestions": [
+                    "Check filename spelling",
+                    f"Search manually: find work-space/plans -name '{filename}'",
+                    "Use full path instead of @ shortcut",
+                    "List available files: ls work-space/plans/*/",
+                ],
+            },
+        )
+
+    # Achievement 3.1: Multiple matches - provide clear guidance
     if len(matching_files) > 1:
-        print(f"⚠️  Multiple files match '@{shorthand}':")
-        for f in matching_files:
-            print(f"   - {f}")
-        print("\n   Use full path to disambiguate")
-        sys.exit(1)
+        from core.libraries.error_handling import ApplicationError
+
+        raise ApplicationError(
+            f"Multiple files match '@{shorthand}'",
+            context={
+                "filename": shorthand,
+                "matches": [str(f) for f in matching_files],
+                "suggestions": [
+                    "Use full path to specify which file:",
+                ]
+                + [f"  {f}" for f in matching_files],
+            },
+        )
 
     return matching_files[0]
 

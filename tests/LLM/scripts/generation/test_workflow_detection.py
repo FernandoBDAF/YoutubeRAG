@@ -9,10 +9,12 @@ import pytest
 from pathlib import Path
 import tempfile
 import shutil
-from LLM.scripts.generation.generate_prompt import (
-    detect_workflow_state_filesystem,
-    detect_workflow_state,
-)
+from LLM.scripts.generation.workflow_detector import WorkflowDetector
+from LLM.scripts.generation.generate_prompt import detect_workflow_state
+
+# Create detector instance for tests
+detector = WorkflowDetector()
+detect_workflow_state_filesystem = detector.detect_workflow_state_filesystem
 
 
 class TestDetectWorkflowStateFilesystem:

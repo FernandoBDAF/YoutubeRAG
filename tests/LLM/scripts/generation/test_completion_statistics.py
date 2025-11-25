@@ -8,7 +8,11 @@ import pytest
 from pathlib import Path
 import tempfile
 import shutil
-from LLM.scripts.generation.generate_prompt import extract_plan_statistics
+from LLM.scripts.generation.plan_parser import PlanParser
+
+# Create parser instance for tests
+parser = PlanParser()
+extract_plan_statistics = parser.extract_plan_statistics
 
 
 class TestStatisticsExtraction:

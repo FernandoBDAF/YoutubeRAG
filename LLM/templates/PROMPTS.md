@@ -247,11 +247,12 @@ Pre-Archiving Checklist (CRITICAL):
 
 Completion Checklist:
 
-1. Verify PLAN Completion
-   - [ ] All achievements met
+1. Verify PLAN Completion (Filesystem-First)
+   - [ ] All achievements met (verified by `APPROVED_XX.md` files in `execution/feedbacks/`)
    - [ ] All SUBPLANs complete
    - [ ] All EXECUTION_TASKs complete
    - [ ] Success criteria met
+   - **Note**: Achievement completion tracked via filesystem (`APPROVED_XX.md` files), not PLAN markdown checkmarks
 
 2. Quality Analysis
    - [ ] Tests passing
@@ -299,7 +300,8 @@ Before completion, these scripts will run:
 If issues found: BLOCKS with error + fix prompt
 
 DO NOT:
-❌ Mark complete without verifying all achievements done
+❌ Mark complete without verifying all achievements done (check for `APPROVED_XX.md` files in `execution/feedbacks/`)
+❌ Manually update PLAN markdown with "✅ Achievement complete" (use filesystem-first: APPROVED files)
 ❌ Skip archive creation
 ❌ Complete with incomplete statistics
 

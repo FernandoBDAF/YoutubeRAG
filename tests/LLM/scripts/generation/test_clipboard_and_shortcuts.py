@@ -9,7 +9,7 @@ from pathlib import Path
 import tempfile
 import shutil
 from unittest.mock import patch, MagicMock
-from LLM.scripts.generation.generate_prompt import (
+from LLM.scripts.generation.utils import (
     copy_to_clipboard_safe,
     resolve_folder_shortcut,
 )
@@ -20,27 +20,27 @@ class TestClipboardDefault:
 
     def test_clipboard_enabled_by_default(self):
         """Clipboard should copy when enabled=True (default)"""
-        with patch('pyperclip.copy') as mock_copy:
+        with patch("pyperclip.copy") as mock_copy:
             result = copy_to_clipboard_safe("test text", enabled=True)
             assert result is True
             mock_copy.assert_called_once_with("test text")
 
     def test_clipboard_disabled_with_flag(self):
         """Clipboard should not copy when enabled=False"""
-        with patch('pyperclip.copy') as mock_copy:
+        with patch("pyperclip.copy") as mock_copy:
             result = copy_to_clipboard_safe("test text", enabled=False)
             assert result is False
             mock_copy.assert_not_called()
 
     def test_clipboard_handles_import_error(self):
         """Should handle gracefully if pyperclip not available"""
-        with patch('pyperclip.copy', side_effect=ImportError("No module")):
+        with patch("pyperclip.copy", side_effect=ImportError("No module")):
             result = copy_to_clipboard_safe("test text", enabled=True)
             assert result is False
 
     def test_clipboard_handles_runtime_error(self):
         """Should handle runtime errors gracefully"""
-        with patch('pyperclip.copy', side_effect=RuntimeError("Clipboard error")):
+        with patch("pyperclip.copy", side_effect=RuntimeError("Clipboard error")):
             result = copy_to_clipboard_safe("test text", enabled=True)
             assert result is False
 
@@ -53,31 +53,32 @@ class TestFolderShortcut:
         """Create temporary workspace for testing"""
         temp_dir = tempfile.mkdtemp()
         workspace = Path(temp_dir)
-        
+
         # Create work-space/plans structure
         plans_dir = workspace / "work-space" / "plans"
         plans_dir.mkdir(parents=True)
-        
+
         # Create test plan folders
         restore_folder = plans_dir / "RESTORE-EXECUTION-WORKFLOW-AUTOMATION"
         restore_folder.mkdir()
         (restore_folder / "PLAN_RESTORE-EXECUTION-WORKFLOW-AUTOMATION.md").write_text("# PLAN")
-        
+
         graphrag_folder = plans_dir / "GRAPHRAG-OBSERVABILITY-EXCELLENCE"
         graphrag_folder.mkdir()
         (graphrag_folder / "PLAN_GRAPHRAG-OBSERVABILITY-EXCELLENCE.md").write_text("# PLAN")
-        
+
         prompt_folder = plans_dir / "PROMPT-GENERATOR-UX-AND-FOUNDATION"
         prompt_folder.mkdir()
         (prompt_folder / "PLAN_PROMPT-GENERATOR-UX-AND-FOUNDATION.md").write_text("# PLAN")
-        
+
         # Save original cwd and change to temp
         original_cwd = Path.cwd()
         import os
+
         os.chdir(workspace)
-        
+
         yield workspace
-        
+
         # Cleanup
         os.chdir(original_cwd)
         shutil.rmtree(temp_dir)
@@ -111,7 +112,7 @@ class TestFolderShortcut:
         prompt2_folder = plans_dir / "PROMPT-SYSTEM-DESIGN"
         prompt2_folder.mkdir()
         (prompt2_folder / "PLAN_PROMPT-SYSTEM-DESIGN.md").write_text("# PLAN")
-        
+
         with pytest.raises(SystemExit) as exc_info:
             resolve_folder_shortcut("PROMPT")
         assert exc_info.value.code == 1
@@ -121,7 +122,7 @@ class TestFolderShortcut:
         plans_dir = temp_workspace / "work-space" / "plans"
         empty_folder = plans_dir / "EMPTY-FOLDER"
         empty_folder.mkdir()
-        
+
         with pytest.raises(SystemExit) as exc_info:
             resolve_folder_shortcut("EMPTY")
         assert exc_info.value.code == 1
@@ -133,7 +134,7 @@ class TestFolderShortcut:
         multi_folder.mkdir()
         (multi_folder / "PLAN_MULTI-1.md").write_text("# PLAN 1")
         (multi_folder / "PLAN_MULTI-2.md").write_text("# PLAN 2")
-        
+
         with pytest.raises(SystemExit) as exc_info:
             resolve_folder_shortcut("MULTI")
         assert exc_info.value.code == 1
@@ -147,15 +148,16 @@ class TestIntegration:
         """Create temporary workspace for integration testing"""
         temp_dir = tempfile.mkdtemp()
         workspace = Path(temp_dir)
-        
+
         # Create complete structure
         plans_dir = workspace / "work-space" / "plans"
         test_folder = plans_dir / "TEST-FEATURE"
         test_folder.mkdir(parents=True)
-        
+
         # Create PLAN file
         plan_file = test_folder / "PLAN_TEST-FEATURE.md"
-        plan_file.write_text("""# PLAN: Test Feature
+        plan_file.write_text(
+            """# PLAN: Test Feature
 
 ## 📋 Desirable Achievements
 
@@ -168,19 +170,21 @@ class TestIntegration:
 ## 📋 Current Status & Handoff
 
 **Next**: Achievement 0.1
-""")
-        
+"""
+        )
+
         # Create subplans and execution folders
         (test_folder / "subplans").mkdir()
         (test_folder / "execution").mkdir()
-        
+
         # Save original cwd
         original_cwd = Path.cwd()
         import os
+
         os.chdir(workspace)
-        
+
         yield workspace
-        
+
         # Cleanup
         os.chdir(original_cwd)
         shutil.rmtree(temp_dir)
@@ -195,7 +199,7 @@ class TestIntegration:
     def test_clipboard_with_real_output(self):
         """Should copy real output to clipboard"""
         test_output = "This is a test prompt\nWith multiple lines"
-        with patch('pyperclip.copy') as mock_copy:
+        with patch("pyperclip.copy") as mock_copy:
             result = copy_to_clipboard_safe(test_output)
             assert result is True
             mock_copy.assert_called_once_with(test_output)
@@ -209,20 +213,21 @@ class TestBackwardCompatibility:
         """Create temporary workspace"""
         temp_dir = tempfile.mkdtemp()
         workspace = Path(temp_dir)
-        
+
         plans_dir = workspace / "work-space" / "plans"
         test_folder = plans_dir / "TEST-FEATURE"
         test_folder.mkdir(parents=True)
-        
+
         plan_file = test_folder / "PLAN_TEST-FEATURE.md"
         plan_file.write_text("# PLAN")
-        
+
         original_cwd = Path.cwd()
         import os
+
         os.chdir(workspace)
-        
+
         yield workspace
-        
+
         os.chdir(original_cwd)
         shutil.rmtree(temp_dir)
 
@@ -241,4 +246,3 @@ class TestBackwardCompatibility:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

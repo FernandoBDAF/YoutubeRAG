@@ -428,18 +428,21 @@ Step 3: Execute Work
 - Implement deliverables
 - Document journey in EXECUTION_TASK
 
-Step 4: Verify Deliverables (MANDATORY)
+Step 4: Run Tests (MANDATORY - if code changes)
+- Test folder structure mirrors project structure
+- Example: LLM/scripts/generation/file.py → tests/LLM/scripts/generation/test_file.py
+- Run relevant tests: pytest tests/path/to/test_file.py
+- Fix any test failures before proceeding
+- Update tests if function signatures or behavior changed
+
+Step 5: Verify Deliverables (MANDATORY)
 Run verification:
   ls -1 [each deliverable path]
 
-Step 5: Complete EXECUTION_TASK
+Step 6: Complete EXECUTION_TASK
 - Update: Iteration Log with "Complete"
 - Add: Learning Summary
 - Verify: <200 lines
-
-Step 6: Archive Immediately
-- Move: EXECUTION_TASK → documentation/archive/[FEATURE]/execution/
-- Update: SUBPLAN "Active EXECUTION_TASKs" section
 
 ═══════════════════════════════════════════════════════════════════════
 
@@ -520,17 +523,23 @@ Step 2: Continue Work
 - Follow iteration approach
 - Document progress
 
-Step 3: Update Iteration Log
+Step 3: Run Tests (MANDATORY - if code changes)
+- Test folder structure mirrors project structure
+- Example: LLM/scripts/generation/file.py → tests/LLM/scripts/generation/test_file.py
+- Run relevant tests: pytest tests/path/to/test_file.py
+- Fix any test failures before proceeding
+- Update tests if function signatures or behavior changed
+
+Step 4: Update Iteration Log
 - Add new iteration entry
 - Document what was done
 - Note learnings
 
-Step 4: Verify Progress
+Step 5: Verify Progress
 - Check if deliverables progressing
-- Verify tests (if code work)
 - Update completion status
 
-Step 5: Complete or Continue
+Step 6: Complete or Continue
 - If complete: Add Learning Summary, mark complete
 - If not: Continue to next iteration
 
@@ -639,15 +648,22 @@ Step 3: Execute Work
 - Follow SUBPLAN approach (improved based on learnings)
 - Document journey in EXECUTION_TASK
 
-Step 4: Verify Deliverables
+Step 4: Run Tests (MANDATORY - if code changes)
+- Test folder structure mirrors project structure
+- Example: LLM/scripts/generation/file.py → tests/LLM/scripts/generation/test_file.py
+- Run relevant tests: pytest tests/path/to/test_file.py
+- Fix any test failures before proceeding
+- Update tests if function signatures or behavior changed
+
+Step 5: Verify Deliverables
 - Run verification: ls -1 [each deliverable path]
 
-Step 5: Complete EXECUTION_TASK
+Step 6: Complete EXECUTION_TASK
 - Update: Iteration Log with "Complete"
 - Add: Learning Summary (note improvements from previous)
 - Verify: <200 lines
 
-Step 6: Archive Immediately
+Step 7: Archive Immediately
 - Move: EXECUTION_TASK → documentation/archive/[FEATURE]/execution/
 - Update: SUBPLAN "Active EXECUTION_TASKs" section
 
@@ -692,6 +708,48 @@ def copy_to_clipboard(text: str) -> bool:
 
 
 def main():
+    # Check if --batch flag is present (handle before argparse to avoid positional arg issues)
+    if '--batch' in sys.argv:
+        # Simple argument parsing for batch mode
+        dry_run = '--dry-run' in sys.argv
+        
+        # Find the file argument (anything starting with @ or containing PLAN_)
+        file_arg = None
+        for arg in sys.argv[1:]:
+            if arg.startswith('@') or 'PLAN_' in arg or arg.startswith('work-space'):
+                file_arg = arg
+                break
+        
+        if not file_arg:
+            print("Error: File path required for --batch mode", file=sys.stderr)
+            print("Usage: generate_execution_prompt.py --batch [--dry-run] @PLAN_FILE.md", file=sys.stderr)
+            sys.exit(1)
+        
+        # Handle batch creation
+        from LLM.scripts.generation.batch_execution import batch_create_executions
+        
+        # Resolve plan path
+        if file_arg.startswith("@"):
+            file_type = "PLAN" if "PLAN_" in file_arg else "FILE"
+        else:
+            file_type = "FILE"
+        
+        plan_path = resolve_plan_path(file_arg, file_type=file_type)
+        
+        # Run batch creation
+        result = batch_create_executions(
+            plan_path=plan_path,
+            dry_run=dry_run
+        )
+        
+        # Print result
+        print("\n" + "="*80)
+        print(result)
+        print("="*80)
+        
+        return 0
+    
+    # Normal mode: use argparse
     parser = argparse.ArgumentParser(
         description="Generate prompts for EXECUTION lifecycle",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -708,6 +766,10 @@ Examples:
   
   # Parallel execution
   python generate_execution_prompt.py create @SUBPLAN_FEATURE_11.md --execution 01 --parallel
+  
+  # Batch creation
+  python generate_execution_prompt.py --batch @PLAN_FEATURE.md
+  python generate_execution_prompt.py --batch --dry-run @PLAN_FEATURE.md
         """,
     )
 

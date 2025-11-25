@@ -252,13 +252,74 @@ All log entries share this base structure:
 
 ---
 
+## 🔍 Real-World Examples from Validation Run
+
+**Trace ID**: `6088e6bd-e305-42d8-9210-e2d3f1dda035`  
+**Date**: 2025-11-13  
+**Dataset**: Observability validation run with 373 raw entities extracted
+
+### Example 1: Entity Merge During Resolution
+
+This log entry shows when two entity mentions were merged:
+
+```javascript
+{
+  "trace_id": "6088e6bd-e305-42d8-9210-e2d3f1dda035",
+  "stage": "entity_resolution",
+  "operation": "ENTITY_MERGE",
+  "timestamp": 1731542400.123,
+  "datetime": "2025-11-13T10:00:00.123Z",
+  "subject_id": "entity_chunk_0_0",
+  "object_id": "entity_chunk_2_5",
+  "reason": "duplicate_mention",
+  "combined_entity": {
+    "canonical_name": "GraphRAG System",
+    "type": "TECHNOLOGY",
+    "confidence": 0.96
+  },
+  "merge_score": 0.94,
+  "confidence": 0.96
+}
+```
+
+**Interpretation**: Two mentions from different chunks identified as same entity, merged with 96% confidence
+
+### Example 2: Community Formation During Detection
+
+```javascript
+{
+  "trace_id": "6088e6bd-e305-42d8-9210-e2d3f1dda035",
+  "stage": "community_detection",
+  "operation": "COMMUNITY_FORM",
+  "timestamp": 1731542450.456,
+  "datetime": "2025-11-13T10:00:50.456Z",
+  "community_id": "community_0_42",
+  "entities": [
+    {"id": "entity_chunk_0_0", "name": "GraphRAG"},
+    {"id": "entity_chunk_1_3", "name": "Knowledge Graph"},
+    {"id": "entity_chunk_3_7", "name": "Community Detection"}
+  ],
+  "modularity": 0.87,
+  "coherence": 0.85,
+  "algorithm": "leiden",
+  "resolution_parameter": 1.0,
+  "size": 3
+}
+```
+
+**Interpretation**: Leiden algorithm formed cohesive community with 87% modularity score
+
+---
+
 ## 🔍 Query Examples
 
 ### Example 1: Find All Transformations for a Pipeline Run
 
+**Real Example Using Validation Trace ID**:
+
 ```javascript
 db.transformation_logs.find({
-  trace_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  trace_id: "6088e6bd-e305-42d8-9210-e2d3f1dda035"
 }).sort({ timestamp: 1 })
 ```
 

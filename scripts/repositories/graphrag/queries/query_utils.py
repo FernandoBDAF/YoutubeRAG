@@ -4,6 +4,12 @@ Shared utilities for GraphRAG query scripts.
 
 Provides common functions for MongoDB connection, output formatting,
 and filtering used across all query scripts.
+
+Enhanced with:
+- Color-coded output for terminal display
+- Pagination support for large result sets
+- Caching mechanism for repeated queries
+- Progress indicators for long-running operations
 """
 
 import json
@@ -11,6 +17,8 @@ import os
 import sys
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+from functools import lru_cache
+import time
 
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../")))
@@ -21,6 +29,39 @@ from pymongo.database import Database
 
 # Load environment variables
 load_dotenv()
+
+# ANSI Color codes for terminal output
+class Colors:
+    """ANSI color codes for terminal output"""
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    
+    # Foreground colors
+    BLACK = '\033[30m'
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    YELLOW = '\033[33m'
+    BLUE = '\033[34m'
+    MAGENTA = '\033[35m'
+    CYAN = '\033[36m'
+    WHITE = '\033[37m'
+    
+    # Background colors
+    BG_RED = '\033[41m'
+    BG_GREEN = '\033[42m'
+    BG_YELLOW = '\033[43m'
+    BG_BLUE = '\033[44m'
+    
+    @staticmethod
+    def disable_if_piped():
+        """Disable colors if output is piped"""
+        if not sys.stdout.isatty():
+            for attr in dir(Colors):
+                if not attr.startswith('_') and attr != 'disable_if_piped':
+                    setattr(Colors, attr, '')
+
+# Disable colors if output is piped
+Colors.disable_if_piped()
 
 
 def get_mongodb_connection() -> tuple[MongoClient, Database]:
@@ -279,5 +320,170 @@ def print_summary(title: str, stats: Dict[str, Any]) -> None:
     for key, value in stats.items():
         print(f"  {key}: {value}")
     print(f"{'=' * 60}\n")
+
+
+def paginate_results(
+    data: List[Dict[str, Any]],
+    page: int = 1,
+    page_size: int = 20
+) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """
+    Paginate results and return pagination metadata.
+    
+    Args:
+        data: List of items to paginate
+        page: Page number (1-indexed)
+        page_size: Items per page
+        
+    Returns:
+        Tuple of (paginated_data, pagination_metadata)
+        
+    Learning: Pagination improves UX for large result sets by breaking
+    output into manageable chunks. Metadata allows navigation controls.
+    """
+    total_items = len(data)
+    total_pages = (total_items + page_size - 1) // page_size
+    
+    # Validate page number
+    if page < 1:
+        page = 1
+    if page > total_pages and total_pages > 0:
+        page = total_pages
+    
+    # Calculate slice indices
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    
+    pagination_metadata = {
+        "current_page": page,
+        "page_size": page_size,
+        "total_items": total_items,
+        "total_pages": total_pages,
+        "has_next": page < total_pages,
+        "has_previous": page > 1,
+    }
+    
+    return data[start_idx:end_idx], pagination_metadata
+
+
+def format_color_value(value: Any, value_type: str = "text") -> str:
+    """
+    Format a value with color coding based on its type.
+    
+    Args:
+        value: Value to format
+        value_type: Type indicator ("success", "warning", "error", "info", "text")
+        
+    Returns:
+        Color-coded string
+        
+    Learning: Color coding improves readability by providing visual cues:
+    - Green for success/positive values
+    - Yellow for warnings/caution values
+    - Red for errors/negative values
+    - Blue for information/neutral values
+    """
+    if value is None:
+        return f"{Colors.WHITE}-{Colors.RESET}"
+    
+    value_str = str(value)
+    
+    if value_type == "success":
+        return f"{Colors.GREEN}{value_str}{Colors.RESET}"
+    elif value_type == "warning":
+        return f"{Colors.YELLOW}{value_str}{Colors.RESET}"
+    elif value_type == "error":
+        return f"{Colors.RED}{value_str}{Colors.RESET}"
+    elif value_type == "info":
+        return f"{Colors.BLUE}{value_str}{Colors.RESET}"
+    else:
+        return value_str
+
+
+def print_progress(current: int, total: int, label: str = "Progress") -> None:
+    """
+    Print a simple progress indicator.
+    
+    Args:
+        current: Current item count
+        total: Total item count
+        label: Progress label
+        
+    Learning: Progress indicators provide user feedback during long operations,
+    improving perceived responsiveness and preventing user frustration with
+    seemingly unresponsive applications.
+    """
+    if total == 0:
+        return
+    
+    percentage = (current / total) * 100
+    bar_length = 40
+    filled_length = int(bar_length * current // total)
+    bar = '█' * filled_length + '░' * (bar_length - filled_length)
+    
+    print(f"\r{label}: |{bar}| {percentage:.1f}% ({current}/{total})", end='')
+    
+    if current == total:
+        print()  # Newline when complete
+
+
+class QueryCache:
+    """
+    Simple caching mechanism for MongoDB queries.
+    
+    Learning: Query caching reduces redundant database calls and improves
+    performance for repeated queries. This is especially useful for frequently
+    accessed data like entity lookups or aggregation results.
+    """
+    
+    def __init__(self, max_size: int = 100, ttl_seconds: int = 3600):
+        """
+        Initialize cache.
+        
+        Args:
+            max_size: Maximum number of cached items
+            ttl_seconds: Time-to-live for cached items in seconds
+        """
+        self.cache: Dict[str, tuple[Any, float]] = {}
+        self.max_size = max_size
+        self.ttl_seconds = ttl_seconds
+    
+    def get(self, key: str) -> Optional[Any]:
+        """Get cached value if exists and not expired."""
+        if key not in self.cache:
+            return None
+        
+        value, timestamp = self.cache[key]
+        if time.time() - timestamp > self.ttl_seconds:
+            del self.cache[key]
+            return None
+        
+        return value
+    
+    def set(self, key: str, value: Any) -> None:
+        """Set cache value."""
+        if len(self.cache) >= self.max_size:
+            # Remove oldest entry
+            oldest_key = min(self.cache.keys(), 
+                           key=lambda k: self.cache[k][1])
+            del self.cache[oldest_key]
+        
+        self.cache[key] = (value, time.time())
+    
+    def clear(self) -> None:
+        """Clear all cache."""
+        self.cache.clear()
+    
+    def stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        return {
+            "items": len(self.cache),
+            "max_size": self.max_size,
+            "ttl_seconds": self.ttl_seconds,
+        }
+
+
+# Global query cache instance
+query_cache = QueryCache()
 
 

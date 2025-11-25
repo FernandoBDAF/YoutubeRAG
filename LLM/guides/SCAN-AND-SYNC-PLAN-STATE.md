@@ -12,18 +12,27 @@
 **Step-by-step process for**:
 
 1. **Scanning** file system to discover actual SUBPLANs and EXECUTION_TASKs
-2. **Comparing** with what's registered in PLAN
+2. **Comparing** with what's registered in PLAN "Subplan Tracking" section
 3. **Identifying** gaps (unregistered files, orphaned registrations)
-4. **Understanding** what needs to be updated in PLAN
+4. **Understanding** what needs to be updated in PLAN tracking
 
 **When to Use**:
 
-- After manual execution (PLAN is outdated)
-- Before resuming work (verify current state)
+- After manual execution (PLAN tracking is outdated)
+- Before resuming work (verify SUBPLAN tracking)
 - When workflow automation is broken (bootstrap scenarios)
-- To audit PLAN state vs. actual files
+- To audit PLAN tracking vs. actual files
 
-**Note**: This guide shows you **how to scan and identify issues**. You'll still need to manually update the PLAN based on the scan results.
+**Important Distinction** (Filesystem-First Architecture):
+
+- **This guide**: Validates PLAN "Subplan Tracking" section (SUBPLAN/EXECUTION registration)
+- **NOT for**: Achievement completion status (tracked by `execution/feedbacks/APPROVED_XX.md` files)
+- **State Tracking**: Achievement completion tracked via filesystem (`APPROVED_XX.md`), not PLAN markdown
+- **This is**: Validation tool for SUBPLAN registration, not state tracking for achievements
+
+**Note**: This guide shows you **how to scan and identify tracking issues**. You'll still need to manually update the PLAN "Subplan Tracking" section based on scan results.
+
+**Reference**: See `LLM/docs/FEEDBACK_SYSTEM_GUIDE.md` for achievement completion tracking
 
 ---
 
@@ -47,6 +56,7 @@ python LLM/scripts/validation/validate_registration.py @PLAN_WORKFLOW-AUTOMATION
 **What It Does**:
 
 1. **Finds Actual Files**:
+
    - Scans for `SUBPLAN_WORKFLOW-AUTOMATION-AND-WORKSPACE-RESTRUCTURING_*.md` in:
      - Current directory (root)
      - `work-space/subplans/` (workspace)
@@ -57,6 +67,7 @@ python LLM/scripts/validation/validate_registration.py @PLAN_WORKFLOW-AUTOMATION
      - Archive location (if exists)
 
 2. **Extracts Registered Components**:
+
    - Parses PLAN's "Active Components" section
    - Parses PLAN's "Subplan Tracking" section
    - Extracts SUBPLAN and EXECUTION_TASK references
@@ -298,10 +309,12 @@ Add unregistered components here:
 ## 🔄 Active Components (Updated When Created)
 
 **Active SUBPLANs**:
+
 - SUBPLAN_01: Achievement 0.1 - Status: In Progress
 - SUBPLAN_02: Achievement 0.2 - Status: In Progress
 
 **Active EXECUTION_TASKs**:
+
 - EXECUTION_TASK_01_01: Achievement 0.1 - Status: In Progress
 ```
 
@@ -324,15 +337,18 @@ Update to reflect current state:
 ## 📝 Current Status & Handoff
 
 **What's Done**:
+
 - ✅ SUBPLAN_01 created for Achievement 0.1
 - ✅ EXECUTION_TASK_01_01 complete
 
 **Active Work**:
+
 - SUBPLAN_01: Achievement 0.1 - 1/6 EXECUTIONs complete
   - ✅ EXECUTION_TASK_01_01: Complete
   - ⏳ EXECUTION_TASK_01_02: Next
 
 **What's Next**:
+
 - Continue Achievement 0.1 (EXECUTION_TASK_01_02)
 ```
 
@@ -385,6 +401,7 @@ python LLM/scripts/validation/validate_registration.py @PLAN_WORKFLOW-AUTOMATION
 ```
 
 **Output**:
+
 ```
 ❌ Unregistered SUBPLANs: SUBPLAN_WORKFLOW-AUTOMATION-AND-WORKSPACE-RESTRUCTURING_01.md, SUBPLAN_WORKFLOW-AUTOMATION-AND-WORKSPACE-RESTRUCTURING_02.md
 ❌ Unregistered EXECUTION_TASKs: EXECUTION_TASK_WORKFLOW-AUTOMATION-AND-WORKSPACE-RESTRUCTURING_01_01.md
@@ -403,6 +420,7 @@ grep -i "Status\|Complete\|Iteration" work-space/execution/EXECUTION_TASK_WORKFL
 **Step 3: Update PLAN**
 
 Manually add to PLAN:
+
 - "Active Components" section
 - "Subplan Tracking" section
 - "Current Status & Handoff" section
@@ -423,16 +441,19 @@ python LLM/scripts/validation/validate_registration.py @PLAN_WORKFLOW-AUTOMATION
 ### Discovery Functions
 
 **From `validate_registration.py`**:
+
 - `find_subplans_for_plan(plan_path)` - Find all SUBPLANs for PLAN
 - `find_execution_tasks_for_plan(plan_path)` - Find all EXECUTION_TASKs for PLAN
 - `find_execution_tasks_for_subplan(subplan_path)` - Find EXECUTION_TASKs for SUBPLAN
 
 **From `generate_prompt.py`**:
+
 - `find_subplan_for_achievement(feature_name, achievement_num)` - Find SUBPLAN for specific achievement
 - `check_subplan_status(subplan_path)` - Check SUBPLAN status
 - `detect_workflow_state(plan_path, feature_name, achievement_num)` - Detect workflow state
 
 **From `generate_subplan_prompt.py`**:
+
 - `get_subplan_status(subplan_content)` - Get SUBPLAN phase and status
 - `find_execution_files(subplan_path)` - Find EXECUTION_TASKs for SUBPLAN
 
@@ -449,6 +470,7 @@ python LLM/scripts/validation/validate_registration.py @PLAN_WORKFLOW-AUTOMATION
 ### File Locations
 
 The scripts check multiple locations:
+
 1. **Current directory** (root) - for legacy files
 2. **`work-space/subplans/`** - workspace SUBPLANs
 3. **`work-space/execution/`** - workspace EXECUTION_TASKs
@@ -457,6 +479,7 @@ The scripts check multiple locations:
 ### Structure Detection
 
 Scripts support both:
+
 - **Flat structure**: Files in `work-space/subplans/` and `work-space/execution/`
 - **Nested structure**: Files in `plan_folder/subplans/` and `plan_folder/execution/`
 
@@ -523,5 +546,3 @@ python LLM/scripts/validation/validate_registration.py @PLAN_FEATURE.md
 **Status**: Complete  
 **Last Updated**: 2025-01-28  
 **Maintained By**: Methodology documentation
-
-

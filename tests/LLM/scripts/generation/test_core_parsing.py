@@ -18,11 +18,15 @@ from unittest.mock import patch, mock_open
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
-from LLM.scripts.generation.generate_prompt import (
-    parse_plan_file,
-    find_next_achievement_from_plan,
-    extract_handoff_section,
-)
+from LLM.scripts.generation.workflow_detector import WorkflowDetector
+from LLM.scripts.generation.plan_parser import PlanParser
+
+# Create instances for tests
+detector = WorkflowDetector()
+parser = PlanParser()
+parse_plan_file = parser.parse_plan_file
+find_next_achievement_from_plan = detector.find_next_achievement_from_plan
+extract_handoff_section = parser.extract_handoff_section
 
 
 class TestParsePlanFile:

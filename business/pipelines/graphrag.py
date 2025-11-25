@@ -904,6 +904,12 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true", help="Dry run mode")
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
 
+    # Achievement 4.1: Testing infrastructure arguments
+    parser.add_argument("--experiment-id", help="Experiment ID for tracking test runs")
+    parser.add_argument("--db-name", help="Database name for pipeline operations")
+    parser.add_argument("--read-db-name", help="Database name to read input data from")
+    parser.add_argument("--write-db-name", help="Database name to write output data to")
+
     args = parser.parse_args()
 
     # Configure logging
@@ -920,8 +926,27 @@ if __name__ == "__main__":
         logging.getLogger(logger_name).setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.INFO)
 
+    # Create pipeline config with CLI arguments
+    # Achievement 4.1: Pass experiment_id and database arguments to config
+    import os
+
+    env = dict(os.environ)
+
+    # Add experiment_id to env if provided
+    if args.experiment_id:
+        env["EXPERIMENT_ID"] = args.experiment_id
+
+    # Get default database name
+    from core.config.paths import DB_NAME
+
+    default_db = args.db_name or env.get("DB_NAME") or DB_NAME
+
+    # Create config from args and env
+    # This will pass args to all stage configs via from_args_env()
+    config = GraphRAGPipelineConfig.from_args_env(args, env, default_db)
+
     # Create pipeline
-    pipeline = create_graphrag_pipeline()
+    pipeline = create_graphrag_pipeline(config)
 
     # Run pipeline
     if args.stage:

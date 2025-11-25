@@ -75,7 +75,7 @@ The Pre-Completion Review section was added to PLAN template in November 2025 as
 
 ## ✅ Completion Checklist
 
-### 1. Verify PLAN Completion
+### 1. Verify PLAN Completion (Filesystem-First)
 
 **⚠️ BLOCKING VALIDATION** (Must pass to continue):
 
@@ -84,30 +84,46 @@ python LLM/scripts/validation/validate_plan_completion.py @PLAN_YOUR-FEATURE.md
 ```
 
 **Expected Result**:
+
 - ✅ Exit code 0: PLAN complete, all achievements done → Proceed
 - ❌ Exit code 1: PLAN incomplete, achievements pending → **BLOCK**
 
+**How Completion is Tracked** (Filesystem-First Architecture):
+
+- **Achievement Completion**: Tracked by `APPROVED_XX.md` files in `execution/feedbacks/` folder
+- **NOT** tracked by PLAN markdown checkmarks or "Current Status & Handoff" section
+- **Achievement Index in PLAN**: Defines structure (list of all achievements), NOT state
+- **Filesystem = Source of Truth**: Scripts check for `APPROVED_XX.md` files to determine completion
+
 **If Validation Fails** (Exit Code 1):
-- Script will show: Pending achievements list
-- **Action Required**: Complete pending achievements before archiving
+
+- Script will show: Pending achievements list (achievements without `APPROVED_XX.md` files)
+- **Action Required**: Complete pending achievements OR request reviewer feedback to create `APPROVED_XX.md`
 - **DO NOT PROCEED** with archiving until validation passes
-- Return to PLAN and complete remaining work
+- **DO NOT** manually add "✅" to PLAN markdown - use feedback system instead
 
 **Alternative Status Check** (Human-Readable):
+
 ```bash
 python LLM/scripts/generation/generate_completion_status.py @PLAN_YOUR-FEATURE.md
 ```
+
 - Shows formatted status report with pending achievements
 - Helpful for understanding what's left to do
+- Checks filesystem for `APPROVED_XX.md` files
 
 **Manual Verification** (If scripts unavailable):
 
 - [ ] All priority achievements met (Critical and High minimum)
+- [ ] All achievements have `APPROVED_XX.md` files in `execution/feedbacks/` folder
 - [ ] All created subplans complete
 - [ ] All EXECUTION_TASKs complete or abandoned (with new execution)
 - [ ] Success criteria from PLAN met
+- [ ] No `FIX_XX.md` files without resolution
 
 **If Not Complete**: Return to work, don't proceed with completion
+
+**Reference**: See `LLM/docs/FEEDBACK_SYSTEM_GUIDE.md` for feedback system details
 
 ---
 
@@ -472,23 +488,27 @@ Format: List 3-5 concrete improvements with rationale.
 ### What to Include
 
 **Executive Summary**:
+
 - PLAN overview (goals, achievements, time spent)
 - Overall success assessment
 - Key outcomes
 
 **Findings by Category**:
+
 - **What Worked Well**: Successful patterns, effective approaches
 - **What Didn't Work**: Issues encountered, blockers
 - **Methodology Compliance**: Adherence to methodology principles
 - **Process Insights**: Workflow observations, efficiency notes
 
 **Recommendations**:
+
 - Methodology improvements identified
 - Template updates needed
 - Protocol enhancements suggested
 - Process optimizations
 
 **Action Items**:
+
 - Specific improvements to implement
 - Documentation updates needed
 - Future work items (also add to backlog)
@@ -498,6 +518,7 @@ Format: List 3-5 concrete improvements with rationale.
 **Template**: See `LLM/templates/EXECUTION_ANALYSIS-METHODOLOGY-REVIEW-TEMPLATE.md` for complete structure.
 
 **Methodology Reference**: See `LLM-METHODOLOGY.md` → "EXECUTION_ANALYSIS Documents" section for:
+
 - Category definitions
 - Structure requirements
 - Examples from archive
@@ -507,6 +528,7 @@ Format: List 3-5 concrete improvements with rationale.
 ### Integration with Completion Workflow
 
 This completion review:
+
 - Synthesizes findings from Process Improvement Analysis
 - Captures learnings from Learning Extraction
 - Documents methodology compliance

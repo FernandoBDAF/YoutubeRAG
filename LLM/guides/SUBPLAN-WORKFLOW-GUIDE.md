@@ -12,12 +12,14 @@
 ### What is the New Workflow?
 
 **Old Workflow** (Conflated):
+
 ```
 PLAN Achievement → SUBPLAN → Immediate EXECUTION
                     (Designer + Executor merged)
 ```
 
 **New Workflow** (Separated):
+
 ```
 PLAN Achievement → SUBPLAN (Designer) → EXECUTION_TASK(s) (Executor)
                     Design Phase          Execution Phase
@@ -25,6 +27,7 @@ PLAN Achievement → SUBPLAN (Designer) → EXECUTION_TASK(s) (Executor)
 ```
 
 **Key Change**: SUBPLAN and EXECUTION are now **independent phases**:
+
 - **Designer Agent** (SUBPLAN): Creates design, plans execution(s)
 - **Executor Agent** (EXECUTION_TASK): Executes according to plan
 - **Separation**: Designer completes design BEFORE execution starts
@@ -33,6 +36,7 @@ PLAN Achievement → SUBPLAN (Designer) → EXECUTION_TASK(s) (Executor)
 ### Why Separate Designer and Executor?
 
 **Benefits**:
+
 1. **True Multi-Agent Coordination**: Designer coordinates multiple Executors
 2. **Parallel Execution**: Independent EXECUTIONs can run simultaneously
 3. **Better Design**: Designer can iterate on design without execution pressure
@@ -40,6 +44,7 @@ PLAN Achievement → SUBPLAN (Designer) → EXECUTION_TASK(s) (Executor)
 5. **Foundation for Concurrency**: Enables concurrent multi-agent systems
 
 **Context Budget Impact**:
+
 - **Before**: SUBPLAN + EXECUTION in same context = 600+ lines
 - **After**: EXECUTION reads SUBPLAN objective only = 200 lines total!
 
@@ -54,34 +59,40 @@ PLAN Achievement → SUBPLAN (Designer) → EXECUTION_TASK(s) (Executor)
 **Steps**:
 
 1. **Read PLAN Achievement** (~100 lines):
+
    - Understand what needs to be achieved
    - Identify requirements and constraints
    - Note dependencies and context
 
 2. **Create SUBPLAN**:
+
    - Use `LLM/templates/SUBPLAN-TEMPLATE.md`
    - File: `work-space/subplans/SUBPLAN_[PLAN]_[ACHIEVEMENT].md`
    - Size: 200-600 lines
 
 3. **Analyze Requirements Deeply**:
+
    - Break down achievement into components
    - Identify technical challenges
    - Consider multiple approaches
    - Research existing solutions
 
 4. **Design Approach**:
+
    - Choose best approach (or multiple for comparison)
    - Define deliverables clearly
    - Plan implementation steps
    - Identify risks and mitigations
 
 5. **Identify Execution Strategies**:
+
    - Single approach? → Single EXECUTION
    - Multiple approaches? → Multiple EXECUTIONs (A/B test)
    - Iterative refinement? → Sequential EXECUTIONs
    - Independent components? → Parallel EXECUTIONs
 
 6. **Plan Multiple EXECUTIONs (if needed)**:
+
    - Decide execution count
    - Determine parallel vs. sequential
    - Define success criteria per execution
@@ -97,6 +108,7 @@ PLAN Achievement → SUBPLAN (Designer) → EXECUTION_TASK(s) (Executor)
 **Design Iteration**: Designer can iterate on SUBPLAN design, refine approach, update strategy - all before execution starts.
 
 **Example SUBPLAN Sections**:
+
 - Objective (what we're achieving)
 - Deliverables (what we're creating)
 - Approach (how we'll do it)
@@ -113,12 +125,14 @@ PLAN Achievement → SUBPLAN (Designer) → EXECUTION_TASK(s) (Executor)
 **Decision: Single or Multiple EXECUTIONs?**
 
 **Use Single EXECUTION when**:
+
 - Single clear approach
 - Straightforward implementation
 - No need for comparison
 - No iterative refinement needed
 
 **Use Multiple EXECUTIONs when**:
+
 - A/B testing approaches
 - Iterative refinement (each builds on previous)
 - Parallel independent work
@@ -127,12 +141,14 @@ PLAN Achievement → SUBPLAN (Designer) → EXECUTION_TASK(s) (Executor)
 **Decision: Parallel or Sequential?**
 
 **Use Parallel when**:
+
 - EXECUTIONs are independent
 - No dependencies between them
 - Can run simultaneously
 - Example: Test 3 different algorithms in parallel
 
 **Use Sequential when**:
+
 - Later EXECUTIONs depend on earlier results
 - Iterative refinement (each improves on previous)
 - Need results from one before starting next
@@ -141,17 +157,20 @@ PLAN Achievement → SUBPLAN (Designer) → EXECUTION_TASK(s) (Executor)
 **Execution Planning Steps**:
 
 1. **Decide Execution Count**:
+
    - Review design from Phase 1
    - Apply decision tree above
    - Document decision in SUBPLAN
 
 2. **Create EXECUTION_TASK File(s)**:
+
    - Single: `EXECUTION_TASK_[PLAN]_[ACHIEVEMENT]_01.md`
    - Multiple: `EXECUTION_TASK_[PLAN]_[ACHIEVEMENT]_01.md`, `_02.md`, `_03.md`
    - Location: `work-space/execution/`
    - Size: <200 lines each
 
 3. **Document Execution Strategy in SUBPLAN**:
+
    - Add "Execution Plan" section
    - Document: "Single EXECUTION" or "Multiple EXECUTIONs (parallel/sequential)"
    - Explain rationale
@@ -188,12 +207,14 @@ PLAN Achievement → SUBPLAN (Designer) → EXECUTION_TASK(s) (Executor)
 **How Executor Reads SUBPLAN**:
 
 **Executor Context** (minimal):
+
 - SUBPLAN objective (2 sentences)
 - SUBPLAN approach (relevant section)
 - Deliverables for this EXECUTION
 - Success criteria
 
 **Executor Does NOT Read**:
+
 - Full SUBPLAN (200-600 lines)
 - Other EXECUTION plans (if multiple)
 - Design iterations
@@ -202,23 +223,27 @@ PLAN Achievement → SUBPLAN (Designer) → EXECUTION_TASK(s) (Executor)
 **Execution Steps**:
 
 1. **Read SUBPLAN Objective**:
+
    - Understand what this EXECUTION achieves
    - Note approach and deliverables
    - Understand success criteria
 
 2. **Execute Work**:
+
    - Implement according to SUBPLAN approach
    - Create deliverables
    - Follow TDD workflow if code
    - Document journey in EXECUTION_TASK
 
 3. **For Parallel EXECUTIONs**:
+
    - Execute independently
    - No coordination needed during execution
    - Document results in own EXECUTION_TASK
    - Results synthesized in Phase 4
 
 4. **For Sequential EXECUTIONs**:
+
    - Wait for previous EXECUTION to complete
    - Read previous EXECUTION results
    - Build on previous results
@@ -231,6 +256,7 @@ PLAN Achievement → SUBPLAN (Designer) → EXECUTION_TASK(s) (Executor)
    - Document completion status
 
 **Executor Independence**:
+
 - Each Executor works independently
 - No need to coordinate during execution
 - Designer reviews results in Phase 4
@@ -245,39 +271,47 @@ PLAN Achievement → SUBPLAN (Designer) → EXECUTION_TASK(s) (Executor)
 **Synthesis Steps**:
 
 1. **Review All EXECUTION Results**:
+
    - Read all EXECUTION_TASK files
    - Understand what each achieved
    - Note learnings from each
    - Identify patterns
 
 2. **Synthesize Collective Learnings**:
+
    - What worked across all EXECUTIONs?
    - What didn't work?
    - What patterns emerged?
    - What should be adopted?
 
 3. **For Multiple EXECUTIONs**:
+
    - Compare results
    - Identify best approach
    - Document why one succeeded
    - Capture insights
 
 4. **Update SUBPLAN**:
+
    - Add "Synthesis" section
    - Document collective learnings
    - Note which approach worked best (if multiple)
    - Capture insights
 
-5. **Mark SUBPLAN Complete**:
-   - Update status to "Complete"
-   - Verify all deliverables exist
-   - Ensure quality standards met
+5. **Request Achievement Feedback** (Filesystem-First):
+
+   - Request reviewer to create `execution/feedbacks/APPROVED_XX.md` (if approved)
+   - Or create `execution/feedbacks/FIX_XX.md` (if fixes needed)
+   - Achievement completion tracked via filesystem, not PLAN markdown
+   - Do NOT manually update PLAN with "✅ Achievement complete"
 
 6. **Archive Together**:
    - Move SUBPLAN to archive
    - Move all EXECUTION_TASKs to archive
-   - Update PLAN tracking
+   - Keep APPROVED_XX.md in execution/feedbacks/ (not archived)
    - Create completion summary
+
+**Reference**: See `LLM/templates/SUBPLAN-TEMPLATE.md` "Completion Workflow" section for details
 
 **Synthesis Example**:
 
@@ -289,6 +323,7 @@ PLAN Achievement → SUBPLAN (Designer) → EXECUTION_TASK(s) (Executor)
 **EXECUTION 03 Results**: Algorithm C - Alternative: 45ms
 
 **Learnings**:
+
 - Algorithm B 40% faster than baseline
 - Optimization technique X was key
 - Algorithm C not worth pursuing
@@ -339,18 +374,21 @@ Question 3: Is this iterative refinement?
 ### Decision Criteria Summary
 
 **Single EXECUTION**:
+
 - ✅ Single clear approach
 - ✅ Straightforward implementation
 - ✅ No comparison needed
 - ✅ No iteration needed
 
 **Multiple EXECUTIONs - Parallel**:
+
 - ✅ A/B testing approaches
 - ✅ Independent components
 - ✅ No dependencies
 - ✅ Comparison needed
 
 **Multiple EXECUTIONs - Sequential**:
+
 - ✅ Iterative refinement
 - ✅ Later depends on earlier
 - ✅ Building on results
@@ -458,21 +496,25 @@ SUBPLAN
 **Scenario**: Testing two different API implementations
 
 **SUBPLAN Design**:
+
 - Objective: Implement API endpoint with best performance
 - Approach: Test two implementations (REST vs. GraphQL)
 - Execution Strategy: 2 parallel EXECUTIONs
 
 **Phase 2: Execution Planning**:
+
 - EXECUTION 01: Implement REST API
 - EXECUTION 02: Implement GraphQL API
 - Parallel: Both independent, can run simultaneously
 
 **Phase 3: Execution**:
+
 - Executor A: Implements REST API, documents performance
 - Executor B: Implements GraphQL API, documents performance
 - Both execute in parallel
 
 **Phase 4: Synthesis**:
+
 - Designer reviews both results
 - REST: 50ms average, simpler implementation
 - GraphQL: 30ms average, more complex
@@ -483,25 +525,29 @@ SUBPLAN
 **Scenario**: Refining entity resolution algorithm
 
 **SUBPLAN Design**:
+
 - Objective: Improve entity resolution accuracy
 - Approach: Iterative refinement (each version improves on previous)
 - Execution Strategy: 3 sequential EXECUTIONs
 
 **Phase 2: Execution Planning**:
+
 - EXECUTION 01: Baseline implementation
 - EXECUTION 02: Add fuzzy matching (uses baseline results)
 - EXECUTION 03: Add embedding similarity (uses EXECUTION 02 results)
 - Sequential: Each builds on previous
 
 **Phase 3: Execution**:
+
 - Executor A: Implements baseline, measures accuracy: 75%
 - Executor B: Adds fuzzy matching, measures: 82% (uses baseline for comparison)
 - Executor C: Adds embedding, measures: 90% (uses EXECUTION 02 for comparison)
 
 **Phase 4: Synthesis**:
+
 - Baseline: 75% accuracy
-- + Fuzzy matching: +7% (82%)
-- + Embedding: +8% (90%)
+- - Fuzzy matching: +7% (82%)
+- - Embedding: +8% (90%)
 - Learnings: Embedding similarity provides biggest improvement
 - Decision: Use all three techniques for production
 
@@ -510,17 +556,21 @@ SUBPLAN
 **Scenario**: Create validation script
 
 **SUBPLAN Design**:
+
 - Objective: Create script to validate PLAN size
 - Approach: Single clear implementation
 - Execution Strategy: Single EXECUTION
 
 **Phase 2: Execution Planning**:
+
 - Single EXECUTION: Implement validation script
 
 **Phase 3: Execution**:
+
 - Executor: Implements script, tests, documents
 
 **Phase 4: Synthesis**:
+
 - Script created and tested
 - Meets requirements
 - Complete
@@ -532,11 +582,13 @@ SUBPLAN
 ### With Templates
 
 **SUBPLAN Template** (`LLM/templates/SUBPLAN-TEMPLATE.md`):
+
 - Add "Execution Plan" section
 - Document execution strategy
 - Define success criteria per execution
 
 **EXECUTION_TASK Template** (`LLM/templates/EXECUTION_TASK-TEMPLATE.md`):
+
 - Reference parent SUBPLAN
 - Document which execution this is (if multiple)
 - Note dependencies (if sequential)
@@ -544,11 +596,13 @@ SUBPLAN
 ### With Protocols
 
 **IMPLEMENTATION_START_POINT.md**:
+
 - Updated to reflect new workflow
 - Designer creates SUBPLAN first
 - Execution starts after SUBPLAN complete
 
 **IMPLEMENTATION_RESUME.md**:
+
 - Resume SUBPLAN design (Phase 1)
 - Resume execution planning (Phase 2)
 - Resume execution (Phase 3)
@@ -557,6 +611,7 @@ SUBPLAN
 ### With Automation
 
 **Prompt Generators** (future):
+
 - `generate_subplan_prompt.py`: For Designer creating SUBPLAN
 - `generate_execution_prompt.py`: For Executor executing EXECUTION_TASK
 - Separate prompts for separate phases
@@ -568,16 +623,19 @@ SUBPLAN
 ### For Designers (SUBPLAN Creation)
 
 1. **Complete Design First**:
+
    - Don't rush to execution
    - Iterate on design if needed
    - Plan thoroughly
 
 2. **Consider Multiple Approaches**:
+
    - When uncertain, plan multiple EXECUTIONs
    - A/B testing is valuable
    - Comparison provides confidence
 
 3. **Document Execution Strategy**:
+
    - Clear rationale for single vs. multiple
    - Clear rationale for parallel vs. sequential
    - Success criteria per execution
@@ -590,16 +648,19 @@ SUBPLAN
 ### For Executors (EXECUTION_TASK Execution)
 
 1. **Read SUBPLAN Objective Only**:
+
    - Don't read full SUBPLAN
    - Focus on this EXECUTION's goal
    - Understand approach and deliverables
 
 2. **Execute Independently**:
+
    - Don't coordinate with other Executors (if parallel)
    - Focus on this EXECUTION's work
    - Document journey thoroughly
 
 3. **Document Learnings**:
+
    - What worked?
    - What didn't?
    - What would you do differently?
@@ -612,11 +673,13 @@ SUBPLAN
 ### For Synthesis
 
 1. **Review All Results**:
+
    - Read all EXECUTION_TASK files
    - Understand what each achieved
    - Identify patterns
 
 2. **Synthesize Thoughtfully**:
+
    - What worked across all?
    - What didn't?
    - What should be adopted?
@@ -659,19 +722,23 @@ A: Executor documents in EXECUTION_TASK. Designer reviews in Phase 4, can plan n
 ## 📚 Related Documentation
 
 **Templates**:
+
 - `LLM/templates/SUBPLAN-TEMPLATE.md` - Create SUBPLANs
 - `LLM/templates/EXECUTION_TASK-TEMPLATE.md` - Create EXECUTION_TASKs
 
 **Protocols**:
+
 - `LLM/protocols/IMPLEMENTATION_START_POINT.md` - Start workflow
 - `LLM/protocols/IMPLEMENTATION_RESUME.md` - Resume workflow
 - `LLM/protocols/IMPLEMENTATION_END_POINT.md` - Complete workflow
 
 **Guides**:
+
 - `LLM-METHODOLOGY.md` - Full methodology overview
 - `LLM/guides/FOCUS-RULES.md` - Context management
 
 **Analysis**:
+
 - `EXECUTION_ANALYSIS_METHODOLOGY-HIERARCHY-AND-WORKFLOW-EVOLUTION.md` - Rationale for workflow separation
 
 ---
@@ -679,4 +746,3 @@ A: Executor documents in EXECUTION_TASK. Designer reviews in Phase 4, can plan n
 **Ready to Use**: Follow this workflow for all new SUBPLANs!  
 **Status**: Complete  
 **Version**: 1.0
-

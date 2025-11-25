@@ -1,0 +1,44 @@
+
+═══════════════════════════════════════════════════════════════
+   GRAPH EVOLUTION VISUALIZATION
+═══════════════════════════════════════════════════════════════
+
+Trace ID: 6088e6bd-e305-42d8-9210-e2d3f1dda035
+Entity Count: 373
+Max Possible Edges: 138756
+
+Evolution Steps
+---------------------------------------------------------------
+
+
+Step 1: LLM Relationships
+  Edges Added: 0
+  Cumulative Edges: 0
+  Graph Density: 0.0000
+  Average Degree: 0.00
+
+Step 2: + Co-occurrence
+  Edges Added: 0
+  Cumulative Edges: 0
+  Graph Density: 0.0000
+  Average Degree: 0.00
+
+Step 3: + Semantic Similarity
+  Edges Added: 0
+  Cumulative Edges: 0
+  Graph Density: 0.0000
+  Average Degree: 0.00
+
+Step 4: + Cross-chunk
+  Edges Added: 0
+  Cumulative Edges: 0
+  Graph Density: 0.0000
+  Average Degree: 0.00
+
+Breakdown by Source
+---------------------------------------------------------------
+
+  • llm: 0 relationships
+  • co_occurrence: 0 relationships
+  • semantic_similarity: 0 relationships
+  • cross_chunk: 0 relationships

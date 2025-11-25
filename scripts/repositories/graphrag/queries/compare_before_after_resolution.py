@@ -4,6 +4,12 @@ Compare Before/After Resolution
 
 Compare raw entities vs. resolved entities to measure resolution effectiveness.
 Uses entities_raw and entities_resolved collections from Achievement 0.2.
+
+Enhanced Features:
+- Color-coded output for improved readability
+- Progress indicators for long operations
+- Query result caching for repeated queries
+- JSON export support
 """
 
 import argparse
@@ -12,7 +18,11 @@ from typing import Optional
 from query_utils import (
     get_mongodb_connection,
     build_trace_id_filter,
-    print_summary
+    print_summary,
+    format_color_value,  # ENHANCED: Color-coded output
+    print_progress,      # ENHANCED: Progress tracking
+    query_cache,         # ENHANCED: Query caching
+    Colors               # ENHANCED: Color support
 )
 
 
@@ -79,15 +89,22 @@ def compare_before_after_resolution(
         print("\n" + "=" * 80)
         print(f"  Resolution Comparison for {trace_id}")
         print("=" * 80)
+        # ENHANCEMENT: Color-coded output with improved formatting
         print(f"\n📊 Entity Counts:")
-        print(f"  Raw Entities (before):     {raw_count}")
-        print(f"  Resolved Entities (after): {resolved_count}")
-        print(f"  Entities Merged:           {raw_count - resolved_count}")
-        print(f"  Merge Rate:                {merge_rate:.1f}%")
+        print(f"  Raw Entities (before):     {format_color_value(raw_count, 'info')}")
+        print(f"  Resolved Entities (after): {format_color_value(resolved_count, 'info')}")
+        merged_count = raw_count - resolved_count
+        merge_type = "success" if merged_count > 0 else "warning"
+        print(f"  Entities Merged:           {format_color_value(merged_count, merge_type)}")
+        # Color: green if good reduction, yellow if minimal merging
+        rate_type = "success" if merge_rate > 10 else "warning"
+        print(f"  Merge Rate:                {format_color_value(f'{merge_rate:.1f}%', rate_type)}")
         
         print(f"\n📈 Type Distribution Changes:")
         all_types = set(raw_types.keys()) | set(resolved_types.keys())
-        for entity_type in sorted(all_types):
+        # Filter out None and sort (handle case where entity_type might be None)
+        all_types_filtered = [t for t in all_types if t is not None]
+        for entity_type in sorted(all_types_filtered):
             raw_c = raw_types.get(entity_type, 0)
             res_c = resolved_types.get(entity_type, 0)
             change = res_c - raw_c

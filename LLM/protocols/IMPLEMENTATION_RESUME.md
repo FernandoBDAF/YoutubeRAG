@@ -31,10 +31,11 @@ Use this when:
 
 - [ ] **Open ACTIVE_PLANS.md**: Verify which PLAN you're resuming
 - [ ] **Read the PLAN**: Open `PLAN_<FEATURE>.md`
-- [ ] **Find "Current Status & Handoff"**: Read this section completely
-- [ ] **Check "Subplan Tracking"**: See what's already done
+- [ ] **Find "Current Status & Handoff"**: Read this section (handoff info, not completion status)
+- [ ] **Check execution/feedbacks/ folder**: See which achievements have `APPROVED_XX.md` files (filesystem-first)
+- [ ] **Check "Subplan Tracking"**: See what SUBPLANs exist
 - [ ] **Review "Achievement Addition Log"**: Check for dynamic changes
-- [ ] **Identify next achievement**: What should you work on next?
+- [ ] **Identify next achievement**: What should you work on next? (First without APPROVED_XX.md file)
 
 ### 2. Review Naming Convention (5 minutes)
 
@@ -126,6 +127,7 @@ Creating SUBPLAN_<NUMBER>...
 See `LLM/templates/PROMPTS.md` → "Resume Paused PLAN" for copy-paste ready prompt that includes this entire checklist.
 
 **Example**:
+
 ```
 Resume @PLAN_ENTITY-RESOLUTION-REFACTOR.md following @LLM/protocols/IMPLEMENTATION_RESUME.md protocol
 [... full checklist auto-generated ...]
@@ -162,12 +164,14 @@ Before starting work, check for relevant analyses that might inform your approac
 4. **Search by Topic**: Look for analyses covering similar problems, blockers, or decisions
 
 **Why This Matters**:
+
 - Learn from past decisions and avoid repeating mistakes
 - Understand context from previous work on same feature
 - Find solutions to similar problems
 - Discover methodology improvements or patterns
 
 **Example**: If resuming `PLAN_ENTITY-RESOLUTION-REFACTOR.md`, check for:
+
 - `EXECUTION_ANALYSIS_ENTITY-RESOLUTION-*.md` files
 - Analyses in `bug-analysis/` category related to entity resolution
 - Methodology reviews that mention entity resolution work

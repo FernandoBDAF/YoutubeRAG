@@ -23,12 +23,24 @@ work-space/
 ├── observations/           # EXECUTION_OBSERVATION (real-time feedback)
 ├── debug-logs/             # EXECUTION_DEBUG (issue investigation)
 ├── reviews/                # EXECUTION_REVIEW (implementation assessment)
-├── plans/                  # PLAN files
-├── subplans/               # SUBPLAN files
+├── plans/                  # PLAN files (nested structure below)
+│   └── [FEATURE]/
+│       ├── PLAN_[FEATURE].md
+│       ├── subplans/
+│       ├── execution/
+│       │   ├── EXECUTION_TASK_*.md
+│       │   └── feedbacks/     # ← Filesystem-first state tracking
+│       │       ├── APPROVED_01.md
+│       │       ├── APPROVED_02.md
+│       │       └── FIX_03.md
+│       └── documentation/
+├── subplans/               # SUBPLAN files (legacy flat structure)
 ├── grammaplans/            # GRAMMAPLAN files
 ├── north-stars/            # NORTH_STAR files
 └── archive/                # Legacy archive
 ```
+
+**Note**: The `execution/feedbacks/` folder within each PLAN directory is critical for filesystem-first architecture. It contains `APPROVED_XX.md` and `FIX_XX.md` files that track achievement completion status.
 
 ---
 

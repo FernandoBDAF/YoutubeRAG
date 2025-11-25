@@ -1,0 +1,18 @@
+# Dashboard Configuration
+# This file controls the appearance and behavior of the LLM Dashboard
+
+# Color theme: default, dark, or light
+theme: default
+
+# Auto-refresh interval in seconds (1-60)
+refresh_interval: 1
+
+# Show statistics section in dashboard
+show_stats: true
+
+# Show parallel execution opportunities
+show_parallel: true
+
+# Automatically copy commands to clipboard
+auto_copy_commands: true
+

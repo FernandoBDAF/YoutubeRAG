@@ -1,0 +1,26 @@
+
+================================================================================
+  Resolution Comparison for 6088e6bd-e305-42d8-9210-e2d3f1dda035
+================================================================================
+
+📊 Entity Counts:
+  Raw Entities (before):     373
+  Resolved Entities (after): 373
+  Entities Merged:           0
+  Merge Rate:                0.0%
+
+📈 Type Distribution Changes:
+  CONCEPT             :  272 →    0 (-272)
+  EVENT               :   10 →    0 (-10)
+  LOCATION            :    1 →    0 (-1)
+  ORGANIZATION        :    1 →    0 (-1)
+  OTHER               :   17 →    0 (-17)
+  PERSON              :   25 →    0 (-25)
+  TECHNOLOGY          :   47 →    0 (-47)
+
+📊 Confidence Stats (Raw):
+  Average: 0.8357
+  Min:     0.6000
+  Max:     0.9500
+================================================================================
+

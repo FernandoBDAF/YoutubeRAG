@@ -13,6 +13,8 @@
 .pytest_cache/
 .DS_Store
 node_modules/
+.cursor/
+workspace/
 
 # Additional common patterns
 *.swp

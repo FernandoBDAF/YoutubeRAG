@@ -269,6 +269,7 @@ class GraphConstructionStage(BaseStage):
                     relationship={"source": chunk_id, "target": chunk_id},
                     reason="no_extraction_data",
                     confidence=0.0,
+                    threshold=0.0,  # FIX: No threshold applies when there's no data
                     trace_id=trace_id,
                 )
                 return self._mark_construction_failed(doc, "no_extraction_data")
@@ -289,6 +290,7 @@ class GraphConstructionStage(BaseStage):
                     relationship={"source": chunk_id, "target": chunk_id},
                     reason="no_relationships_resolved",
                     confidence=0.0,
+                    threshold=0.0,  # FIX: No threshold applies when resolution fails
                     trace_id=trace_id,
                 )
                 return self._mark_construction_failed(doc, "no_relationships_resolved")
@@ -573,11 +575,13 @@ class GraphConstructionStage(BaseStage):
 
         # Achievement 0.1: Log relationship creation
         self.transformation_logger.log_relationship_create(
-            subject_id=resolved_relationship.subject_id,
-            object_id=resolved_relationship.object_id,
-            predicate=resolved_relationship.predicate,
-            confidence=resolved_relationship.confidence,
+            relationship={
+                "subject": {"id": resolved_relationship.subject_id},
+                "predicate": resolved_relationship.predicate,
+                "object": {"id": resolved_relationship.object_id},
+            },
             relationship_type="extracted",
+            confidence=resolved_relationship.confidence,
             trace_id=self.config.trace_id if hasattr(self.config, "trace_id") else None,
         )
 

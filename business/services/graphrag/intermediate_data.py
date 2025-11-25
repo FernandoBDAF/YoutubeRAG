@@ -99,7 +99,7 @@ class IntermediateDataService:
         except Exception as e:
             logger.warning(f"Failed to create intermediate data indexes: {e}")
 
-    @handle_errors
+    @handle_errors()
     def save_entities_raw(
         self,
         entities: List[Dict[str, Any]],
@@ -153,7 +153,7 @@ class IntermediateDataService:
             logger.error(f"Failed to save raw entities: {e}")
             return 0
 
-    @handle_errors
+    @handle_errors()
     def save_entities_resolved(
         self,
         entities: List[Dict[str, Any]],
@@ -211,7 +211,7 @@ class IntermediateDataService:
             logger.error(f"Failed to save resolved entities: {e}")
             return 0
 
-    @handle_errors
+    @handle_errors()
     def save_relations_raw(
         self,
         relationships: List[Dict[str, Any]],
@@ -268,7 +268,7 @@ class IntermediateDataService:
             logger.error(f"Failed to save raw relationships: {e}")
             return 0
 
-    @handle_errors
+    @handle_errors()
     def save_relations_final(
         self,
         relationships: List[Dict[str, Any]],
@@ -326,7 +326,7 @@ class IntermediateDataService:
             logger.error(f"Failed to save final relationships: {e}")
             return 0
 
-    @handle_errors
+    @handle_errors()
     def save_graph_pre_detection(
         self,
         graph_data: Dict[str, Any],

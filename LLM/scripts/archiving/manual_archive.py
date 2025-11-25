@@ -38,14 +38,43 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+# Core library imports
+from core.libraries.logging import setup_logging, get_logger, log_operation_start, log_operation_complete
+from core.libraries.error_handling import handle_errors, error_context, ConfigurationError
+from core.libraries.metrics import Counter, Histogram, MetricRegistry
+from core.libraries.validation import validate_value, NotEmpty, Pattern, ValidationError
 
+# Initialize logging
+logger = get_logger(__name__)
+
+# Initialize metrics
+_archive_operations = Counter('archive_operations_total', labels=['operation', 'status'])
+_archive_duration = Histogram('archive_operation_duration_seconds', labels=['operation'])
+_archive_files_count = Counter('archive_files_total', labels=['type', 'status'])
+
+# Register metrics
+registry = MetricRegistry.get_instance()
+registry.register(_archive_operations)
+registry.register(_archive_duration)
+registry.register(_archive_files_count)
+
+
+@handle_errors(log_traceback=True)
 def find_plan_file(file_path: Path, workspace: Path) -> Optional[Path]:
     """Find the parent PLAN file for a SUBPLAN or EXECUTION_TASK.
     
     Uses nested structure: work-space/plans/PLAN_NAME/
     If file is in nested structure, uses parent directory.
     Otherwise checks nested structure based on feature name.
+    
+    Args:
+        file_path: Path to SUBPLAN or EXECUTION_TASK file
+        workspace: Workspace root directory
+        
+    Returns:
+        Path to PLAN file if found, None otherwise
     """
+    logger.debug(f"Finding PLAN file for {file_path.name} in workspace {workspace}")
     # If already a PLAN file, return it
     if file_path.name.startswith("PLAN_"):
         return file_path
@@ -76,11 +105,14 @@ def find_plan_file(file_path: Path, workspace: Path) -> Optional[Path]:
     plan_in_nested = workspace / "plans" / feature / plan_name
 
     if plan_in_nested.exists():
+        logger.debug(f"Found PLAN file: {plan_in_nested}")
         return plan_in_nested
 
+    logger.debug(f"No PLAN file found for {file_path.name}")
     return None
 
 
+@handle_errors(log_traceback=True)
 def get_archive_location(plan_path: Path) -> Optional[Path]:
     """Extract archive location from PLAN file."""
     try:

@@ -206,7 +206,7 @@ class TestGeneratePausePrompt(unittest.TestCase):
             # Should generate valid prompt
             self.assertIsNotNone(prompt)
             self.assertIn("PLAN_TEST_PAUSE.md", prompt)
-            self.assertIn("Test Feature", prompt)
+            self.assertIn("TEST_PAUSE", prompt)  # Feature name from filename, not title
             self.assertIn("Achievement 1.2", prompt)
             self.assertIn("PRE-PAUSE CHECKLIST", prompt)
         finally:
@@ -254,7 +254,7 @@ No achievement information.
             
             # Verify all placeholders filled
             self.assertIn("PLAN_MY_FEATURE.md", prompt)
-            self.assertIn("My Feature", prompt)
+            self.assertIn("MY_FEATURE", prompt)  # Feature name from filename
             self.assertIn("Achievement 2.5", prompt)
             self.assertNotIn("{plan_path}", prompt)  # Should be replaced
             self.assertNotIn("{feature_name}", prompt)  # Should be replaced
