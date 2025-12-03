@@ -29,7 +29,7 @@ class MongoDBClient:
         """
         if cls._instance is None:
             connection_uri = uri or os.getenv(
-                "MONGODB_URI", "mongodb://localhost:27017"
+                "MONGODB_URI", os.getenv("MONGODB_ATLAS_URI", "mongodb://localhost:27017")
             )
             cls._instance = MongoClient(connection_uri)
         return cls._instance

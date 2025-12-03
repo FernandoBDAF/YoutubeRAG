@@ -156,6 +156,7 @@ def run_stage(stage: str, **kwargs) -> None:
         args_obj.verbose = kwargs.get("verbose", False)
         args_obj.dry_run = kwargs.get("dry_run", False)
         args_obj.db_name = kwargs.get("db_name")
+        args_obj.upsert_existing = kwargs.get("upsert_existing", False)
 
         # If ingest_args is a list of strings (CLI args), parse them
         if ingest_args and isinstance(ingest_args, list):
@@ -315,7 +316,12 @@ def main() -> None:
         # LLM is always enabled - no need to pass flag
         # Pass verbose flag to pipeline stages (from pipeline subparser)
         pipeline_verbose = getattr(args, "verbose", False)
-        run_stage("pipeline", args=cli_args, verbose=pipeline_verbose)
+        run_stage(
+            "pipeline",
+            args=cli_args,
+            verbose=pipeline_verbose,
+            upsert_existing=getattr(args, "upsert_existing", False),
+        )
     elif args.cmd == "read":
         client = get_mongo_client()
         db = client[DB_NAME]

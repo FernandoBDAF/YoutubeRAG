@@ -305,7 +305,9 @@ class EnrichStage(BaseStage):
                     {
                         "source_pipeline_stage": "enrich_agent_v2",
                         "version": "2.0",
-                        "model_used": os.getenv("OPENAI_DEFAULT_MODEL") or "gpt-4o-mini",
+                        "model_used": os.getenv("BEDROCK_MODEL_ID")
+                        or os.getenv("OPENAI_DEFAULT_MODEL")
+                        or "gpt-4o-mini",
                     }
                 )
                 try:

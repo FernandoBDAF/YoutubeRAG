@@ -268,6 +268,9 @@ class CleanStage(BaseStage):
             qps=self.config.llm_qps,
             logger=self.logger,
         )
+        # Fallback: if cleaning produced nothing, persist the raw text so downstream stages can proceed.
+        if not payload or not (payload.get("cleaned_text") or "").strip():
+            payload = {"video_id": video_id, "cleaned_text": text, "paragraphs": [text]}
 
         elapsed = time.time() - start_time
 

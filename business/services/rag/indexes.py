@@ -27,7 +27,9 @@ _registry.register(_rag_index_duration)
 # Canonical Vector Index configuration (single source of truth)
 INDEX_NAME: Final[str] = os.getenv("VECTOR_INDEX_NAME", "vector_index_text") if "os" in globals() else "vector_index_text"  # type: ignore
 VECTOR_PATH: Final[str] = "embedding"
-VECTOR_DIM: Final[int] = 1024
+# Default to env override if provided, fallback to original 1024
+import os
+VECTOR_DIM: Final[int] = int(os.getenv("ATLAS_EMBEDDING_DIM", 1024))
 VECTOR_SIMILARITY: Final[str] = "cosine"
 SEARCH_INDEX_NAME: Final[str] = os.getenv("SEARCH_INDEX_NAME", "search_index_text") if "os" in globals() else "search_index_text"  # type: ignore
 

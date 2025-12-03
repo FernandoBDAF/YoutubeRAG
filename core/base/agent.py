@@ -9,6 +9,11 @@ from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 import openai
 
+try:
+    import boto3
+except Exception:  # pragma: no cover - bedrock is optional
+    boto3 = None  # type: ignore[assignment]
+
 from core.libraries.error_handling.decorators import handle_errors
 from core.libraries.error_handling.context import agent_context
 from core.libraries.error_handling.exceptions import format_exception_message
@@ -77,19 +82,47 @@ class BaseAgent(ABC):
         if config is None:
             self.config = BaseAgentConfig()
 
-        # Load model: explicit > env var > safe default
-        self.config.model_name = (
-            self.config.model_name or os.getenv("OPENAI_DEFAULT_MODEL") or "gpt-5-nano"
-        )
-
-        # Initialize client (require key only when LLM path is used)
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise RuntimeError(
-                "OPENAI_API_KEY is required for LLM agents. Set it or run without --llm."
+        # Select backend: Bedrock if configured, otherwise OpenAI
+        bedrock_model = os.getenv("BEDROCK_MODEL_ID")
+        if bedrock_model:
+            if boto3 is None:
+                raise RuntimeError(
+                    "boto3 is required for Bedrock. Install boto3 or unset BEDROCK_MODEL_ID."
+                )
+            # Guard against empty AWS_PROFILE values that break boto3 profile resolution.
+            if os.getenv("AWS_PROFILE") is not None and os.getenv("AWS_PROFILE").strip() == "":
+                os.environ.pop("AWS_PROFILE", None)
+            region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+            if not region:
+                raise RuntimeError("AWS_REGION is required for Bedrock.")
+            session_kwargs = {}
+            if os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"):
+                session_kwargs.update(
+                    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+                    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+                )
+                if os.getenv("AWS_SESSION_TOKEN"):
+                    session_kwargs["aws_session_token"] = os.getenv("AWS_SESSION_TOKEN")
+            bedrock_client = boto3.client("bedrock-runtime", region_name=region, **session_kwargs)
+            self.config.model_name = bedrock_model
+            self._llm_backend = "bedrock"
+            self._bedrock_client = bedrock_client
+        else:
+            # Load model: explicit > env var > safe default
+            self.config.model_name = (
+                self.config.model_name
+                or os.getenv("OPENAI_DEFAULT_MODEL")
+                or "gpt-5-nano"
             )
-        # Use a sane default timeout to avoid hanging calls
-        self.model = openai.OpenAI(api_key=api_key, timeout=60)
+
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise RuntimeError(
+                    "OPENAI_API_KEY is required for LLM agents. Set it or run without --llm."
+                )
+            self._llm_backend = "openai"
+            # Use a sane default timeout to avoid hanging calls
+            self.model = openai.OpenAI(api_key=api_key, timeout=60)
 
         self.timestamp = datetime.utcnow().isoformat()
 
@@ -122,7 +155,62 @@ class BaseAgent(ABC):
         max_completion_tokens = kwargs.get("max_tokens", self.config.max_tokens)
         timeout = kwargs.get("timeout", 60)
 
-        if hasattr(self.model, "chat"):
+        # Bedrock path
+        if getattr(self, "_llm_backend", "") == "bedrock":
+            body = {
+                # Anthropic Bedrock format: system is a plain string, messages use typed content.
+                "system": system_prompt,
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": prompt}]}
+                ],
+                "max_tokens": max_completion_tokens,
+                "temperature": temperature,
+                "anthropic_version": "bedrock-2023-05-31",
+            }
+            from time import monotonic
+
+            with Timer() as timer:
+                try:
+                    response = self._bedrock_client.invoke_model(
+                        modelId=self.config.model_name,
+                        contentType="application/json",
+                        accept="application/json",
+                        body=json.dumps(body),
+                    )
+                    payload = json.loads(response["body"].read())
+                    content = payload.get("content") or []
+                    text = "".join(
+                        item.get("text", "") for item in content if isinstance(item, dict)
+                    )
+                    out = text.strip()
+
+                    _agent_llm_duration.observe(timer.elapsed(), labels=agent_labels)
+
+                    self._log_event(
+                        {
+                            "type": "model_call:done",
+                            "model": self.config.model_name,
+                            "ok": True,
+                            "output_preview": out[:120],
+                            "usage": None,
+                        }
+                    )
+                    return out
+                except Exception as e:
+                    _agent_llm_errors.inc(labels=agent_labels)
+                    _agent_llm_duration.observe(timer.elapsed(), labels=agent_labels)
+                    self._log_event(
+                        {
+                            "type": "model_call:done",
+                            "model": self.config.model_name,
+                            "ok": False,
+                            "error": format_exception_message(e),
+                        }
+                    )
+                    raise
+
+        # OpenAI path
+        if hasattr(getattr(self, "model", None), "chat"):
             with Timer() as timer:
                 try:
                     response = self.model.chat.completions.create(

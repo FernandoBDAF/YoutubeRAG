@@ -7,7 +7,7 @@ import os
 from typing import Final
 
 # Database and collection names
-DB_NAME: Final[str] = os.getenv("MONGODB_DB", "mongo_hack")
+DB_NAME: Final[str] = os.getenv("MONGODB_DB", "AWSAgentCoreDemoDB")
 
 # Raw document collections - source-specific (one per document type)
 # Each document type (YouTube, PDF, HTML, etc.) should have its own raw collection

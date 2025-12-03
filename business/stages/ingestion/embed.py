@@ -21,7 +21,8 @@ except ModuleNotFoundError:
     from core.models.config import BaseStageConfig
 
 from dependencies.llm.rate_limit import RateLimiter
-from core.config.paths import COLL_CHUNKS, VECTOR_DIM
+from core.config.paths import COLL_CHUNKS
+VECTOR_DIM = int(os.getenv("ATLAS_EMBEDDING_DIM", os.getenv("EMBEDDING_DIMENSIONS", 1024)))
 from business.stages.ingestion.clean import build_embedding_text
 from core.libraries.error_handling.decorators import handle_errors
 

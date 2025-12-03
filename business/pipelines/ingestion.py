@@ -54,7 +54,11 @@ class IngestionPipelineConfig:
         db_name = (
             getattr(args, "db_name", None)
             or env.get("DB_NAME")
+            or env.get("MONGODB_DB")
+            or env.get("ATLAS_DB_NAME")
             or default_db
+            or os.getenv("MONGODB_DB")
+            or os.getenv("ATLAS_DB_NAME")
             or os.getenv("DB_NAME", "mongo_hack")
         )
 
@@ -77,7 +81,11 @@ class IngestionPipelineConfig:
         clean_config.concurrency = getattr(args, "concurrency", None) or 15
         clean_config.llm_retries = 4
         clean_config.llm_backoff_s = 10.0
-        clean_config.model_name = "gpt-4o-mini"
+        clean_config.model_name = (
+            os.getenv("BEDROCK_MODEL_ID")
+            or os.getenv("OPENAI_DEFAULT_MODEL")
+            or "gpt-4o-mini"
+        )
 
         # Chunk: Recursive strategy with larger tokens and overlap (matching yt_clean_enrich.py)
         chunk_config.chunk_strategy = "recursive"
@@ -92,7 +100,11 @@ class IngestionPipelineConfig:
         enrich_config.concurrency = getattr(args, "concurrency", None) or 15
         enrich_config.llm_retries = 4
         enrich_config.llm_backoff_s = 10.0
-        enrich_config.model_name = "gpt-4o-mini"
+        enrich_config.model_name = (
+            os.getenv("BEDROCK_MODEL_ID")
+            or os.getenv("OPENAI_DEFAULT_MODEL")
+            or "gpt-4o-mini"
+        )
 
         # Embed: Match yt_clean_enrich.py settings
         embed_config.embed_source = "chunk"
@@ -297,7 +309,12 @@ class IngestionPipeline:
         import os
 
         env = dict(os.environ)
-        default_db = os.getenv("DB_NAME", "mongo_hack")
+        default_db = (
+            os.getenv("DB_NAME")
+            or os.getenv("MONGODB_DB")
+            or os.getenv("ATLAS_DB_NAME")
+            or "mongo_hack"
+        )
 
         # Merge kwargs into args namespace for from_args_env
         for key, value in kwargs.items():
