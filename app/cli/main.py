@@ -5,6 +5,12 @@ import json
 import logging
 import sys
 from pathlib import Path
+
+# Add project root to Python path for module resolution
+_project_root = Path(__file__).resolve().parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
 from dotenv import load_dotenv
 
 from core.libraries.error_handling.decorators import handle_errors
@@ -80,7 +86,7 @@ def run_stage(stage: str, **kwargs) -> None:
         if "INGEST_UPSERT_EXISTING" not in env:
             env["INGEST_UPSERT_EXISTING"] = "false"
         subprocess.run(
-            [py, "app/stages/ingest.py", *args],
+            [py, "business/stages/ingestion/ingest.py", *args],
             check=True,
             env=env,
         )
@@ -92,32 +98,32 @@ def run_stage(stage: str, **kwargs) -> None:
         if not vid:
             print("Backfilling all transcripts")
             subprocess.run(
-                [py, "app/stages/backfill_transcript.py"],
+                [py, "business/stages/ingestion/backfill_transcript.py"],
                 check=True,
                 env=env,
             )
             return
         subprocess.run(
-            [py, "app/stages/backfill_transcript.py", "--video_id", vid],
+            [py, "business/stages/ingestion/backfill_transcript.py", "--video_id", vid],
             check=True,
             env=env,
         )
     elif stage == "clean":
         use_llm = kwargs.get("llm", False)
-        cmd = [py, "app/stages/clean.py"]
+        cmd = [py, "business/stages/ingestion/clean.py"]
         if use_llm:
             cmd.append("--llm")
         subprocess.run(cmd, check=True, env={**os.environ, "PYTHONPATH": os.getcwd()})
     elif stage == "enrich":
         use_llm = kwargs.get("llm", False)
-        cmd = [py, "app/stages/enrich.py"]
+        cmd = [py, "business/stages/ingestion/enrich.py"]
         if use_llm:
             cmd.append("--llm")
         subprocess.run(cmd, check=True, env={**os.environ, "PYTHONPATH": os.getcwd()})
     elif stage == "chunk":
         use_llm = kwargs.get("llm", False)
         chunk = kwargs.get("chunk", True)
-        cmd = [py, "app/stages/chunk_embed.py"]
+        cmd = [py, "business/stages/ingestion/chunk.py"]
         if use_llm:
             cmd.append("--llm")
         if not chunk:
@@ -125,13 +131,13 @@ def run_stage(stage: str, **kwargs) -> None:
         subprocess.run(cmd, check=True, env={**os.environ, "PYTHONPATH": os.getcwd()})
     elif stage == "redundancy":
         use_llm = kwargs.get("llm", False)
-        cmd = [py, "app/stages/redundancy.py"]
+        cmd = [py, "business/stages/ingestion/redundancy.py"]
         if use_llm:
             cmd.append("--llm")
         subprocess.run(cmd, check=True, env={**os.environ, "PYTHONPATH": os.getcwd()})
     elif stage == "trust":
         use_llm = kwargs.get("llm", False)
-        cmd = [py, "app/stages/trust.py"]
+        cmd = [py, "business/stages/ingestion/trust.py"]
         if use_llm:
             cmd.append("--llm")
         subprocess.run(cmd, check=True, env={**os.environ, "PYTHONPATH": os.getcwd()})

@@ -16,7 +16,7 @@ class BaseStageConfig:
     write_coll: Optional[str] = None
     upsert_existing: bool = False
     video_id: Optional[str] = None
-    concurrency: Optional[int] = None
+    concurrency: Optional[int] = 15    # Production default for LLM stages
     # Trace ID for linking transformations across pipeline run
     trace_id: Optional[str] = None
 

@@ -181,22 +181,27 @@ def build_embedding_text(chunk: Dict[str, Any]) -> str:
 
 @dataclass
 class CleanConfig(BaseStageConfig):
-    use_llm: bool = False
-    # LLM tuning with explicit defaults
-    llm_retries: int = 1
-    llm_backoff_s: float = 0.5
+    # Production-tuned defaults (from yt_clean_enrich.py)
+    use_llm: bool = True              # Always use LLM for quality
+    llm_retries: int = 4               # Higher retries for reliability
+    llm_backoff_s: float = 10.0        # Longer backoff for stability
     llm_qps: Optional[float] = None
     model_name: Optional[str] = None
 
     @classmethod
     def from_args_env(cls, args: Any, env: Dict[str, str], default_db: Optional[str]):
         base = BaseStageConfig.from_args_env(args, env, default_db)
-        use_llm = bool(getattr(args, "llm", False) or (env.get("CLEAN_WITH_LLM") == "1"))
+        use_llm = bool(getattr(args, "llm", True) or (env.get("CLEAN_WITH_LLM") == "1"))
+        
+        # Set production default for concurrency if not provided
+        if base.concurrency is None:
+            base.concurrency = 15
+        
         return cls(
             **vars(base),
             use_llm=use_llm,
-            llm_retries=int(env.get("LLM_RETRIES", "1") or "1"),
-            llm_backoff_s=float(env.get("LLM_BACKOFF_S", "0.5") or "0.5"),
+            llm_retries=int(env.get("LLM_RETRIES", "4") or "4"),
+            llm_backoff_s=float(env.get("LLM_BACKOFF_S", "10.0") or "10.0"),
             llm_qps=None,
             model_name=env.get("OPENAI_DEFAULT_MODEL"),
         )

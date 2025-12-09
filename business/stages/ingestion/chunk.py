@@ -31,10 +31,11 @@ from datetime import datetime, timezone
 
 @dataclass
 class ChunkConfig(BaseStageConfig):
-    chunk_strategy: str = "fixed"  # fixed | recursive | semantic
-    token_size: int = 500
-    overlap_pct: float = 0.15
-    split_chars: List[str] = field(default_factory=lambda: ["."])
+    # Production-tuned defaults (from yt_clean_enrich.py)
+    chunk_strategy: str = "recursive"  # Recursive for better coherence
+    token_size: int = 1200             # Larger tokens for coherent passages
+    overlap_pct: float = 0.20          # More overlap for context preservation
+    split_chars: List[str] = field(default_factory=lambda: [".", "?", "!"])
     semantic_model: Optional[str] = None
 
     @classmethod

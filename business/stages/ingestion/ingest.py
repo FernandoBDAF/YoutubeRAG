@@ -1,6 +1,5 @@
 import os
 import re
-import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -11,18 +10,15 @@ from googleapiclient.errors import HttpError
 # Transcript now handled via LangChain YoutubeLoader in services/transcripts
 
 try:
-    from dependencies.database.mongodb import get_mongo_client
     from core.base.stage import BaseStage
     from core.models.config import BaseStageConfig
 except ModuleNotFoundError:
     import sys as _sys, os as _os
 
     _sys.path.append(_os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "..")))
-    from dependencies.database.mongodb import get_mongo_client
     from core.base.stage import BaseStage
     from core.models.config import BaseStageConfig
 from core.config.paths import (
-    DB_NAME,
     COLL_RAW_VIDEOS,
 )
 from core.libraries.error_handling.decorators import handle_errors

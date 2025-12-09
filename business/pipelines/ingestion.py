@@ -19,7 +19,6 @@ from business.stages.ingestion.chunk import ChunkConfig
 from business.stages.ingestion.embed import EmbedConfig
 from business.stages.ingestion.redundancy import RedundancyConfig
 from business.stages.ingestion.trust import TrustConfig
-from core.models.config import BaseStageConfig
 
 logger = logging.getLogger(__name__)
 

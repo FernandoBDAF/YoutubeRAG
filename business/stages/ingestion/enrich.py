@@ -56,11 +56,10 @@ Future Enhancements for Video-Level Tagging:
 
 @dataclass
 class EnrichConfig(BaseStageConfig):
-    # LLM is enforced; flag kept for CLI parity but ignored.
-    use_llm: bool = True
-    # Explicit LLM/concurrency tuning with defaults
-    llm_retries: int = 1
-    llm_backoff_s: float = 0.5
+    # Production-tuned defaults (from yt_clean_enrich.py)
+    use_llm: bool = True               # Always use LLM for quality
+    llm_retries: int = 4               # Higher retries for reliability
+    llm_backoff_s: float = 10.0        # Longer backoff for stability
     llm_qps: Optional[float] = None
     model_name: Optional[str] = None
 
@@ -78,16 +77,21 @@ class EnrichConfig(BaseStageConfig):
         qps_cli = getattr(args, "llm_qps", None)
         model_cli = getattr(args, "model_name", None)
         llm_retries = int(
-            retries_cli if retries_cli is not None else (env.get("LLM_RETRIES", "3") or 3)
+            retries_cli if retries_cli is not None else (env.get("LLM_RETRIES", "4") or 4)
         )
         llm_backoff_s = float(
-            backoff_cli if backoff_cli is not None else (env.get("LLM_BACKOFF_S", "5.0") or 5.0)
+            backoff_cli if backoff_cli is not None else (env.get("LLM_BACKOFF_S", "10.0") or 10.0)
         )
         llm_qps_env = env.get("LLM_QPS")
         llm_qps = (
             float(qps_cli) if qps_cli is not None else (float(llm_qps_env) if llm_qps_env else None)
         )
         model_name = model_cli or env.get("OPENAI_MODEL")
+        
+        # Set production default for concurrency if not provided
+        if base.concurrency is None:
+            base.concurrency = 15
+        
         return cls(
             **vars(base),
             use_llm=True,
