@@ -126,13 +126,13 @@ Provide a comprehensive answer that directly addresses the user's question using
 
             # Prepare the prompt
             prompt = f"""
-Context Information:
-{context}
+            Context Information:
+            {context}
 
-Question: {query}
+            Question: {query}
 
-Please provide a comprehensive answer using the context information above.
-"""
+            Please provide a comprehensive answer using the context information above.
+            """
 
             response = self.llm_client.chat.completions.create(
                 model=self.model_name,
@@ -160,7 +160,7 @@ Please provide a comprehensive answer using the context information above.
     @handle_errors(fallback=None, log_traceback=True, reraise=False)
     def process_query_with_generation(
         self, query_text: str, db, use_traditional_rag: bool = False
-    ) -> GraphRAGResponse:
+    ) -> Optional[GraphRAGResponse]:
         """
         Process a query and generate an answer using GraphRAG.
 
@@ -239,7 +239,7 @@ Please provide a comprehensive answer using the context information above.
                 communities=[],
                 context_sources=[],
                 confidence=0.0,
-                processing_time=processing_time,
+                processing_time=duration,  # Use duration, not processing_time (which may be undefined)
             )
 
     def _calculate_answer_confidence(

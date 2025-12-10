@@ -1,0 +1,223 @@
+{
+  "dashboard": {
+    "title": "Stages API Overview",
+    "tags": ["stages-api", "pipelines"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+        "type": "stat",
+        "title": "Active Pipelines",
+        "targets": [
+          {
+            "expr": "stages_api_active_pipelines",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 3, "color": "yellow"},
+                {"value": 5, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+        "type": "stat",
+        "title": "Total Executions (24h)",
+        "targets": [
+          {
+            "expr": "sum(increase(stages_api_pipeline_executions[24h]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "id": 3,
+        "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+        "type": "gauge",
+        "title": "Success Rate (1h)",
+        "targets": [
+          {
+            "expr": "sum(rate(stages_api_pipeline_executions{status=\"completed\"}[1h])) / sum(rate(stages_api_pipeline_executions[1h])) * 100",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 80, "color": "yellow"},
+                {"value": 95, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+        "type": "stat",
+        "title": "Avg Duration (5m)",
+        "targets": [
+          {
+            "expr": "rate(stages_api_pipeline_duration_seconds_sum[5m]) / rate(stages_api_pipeline_duration_seconds_count[5m])",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "decimals": 1
+          }
+        }
+      },
+      {
+        "id": 5,
+        "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+        "type": "timeseries",
+        "title": "Pipeline Execution Rate",
+        "targets": [
+          {
+            "expr": "sum by (pipeline, status) (rate(stages_api_pipeline_executions[5m]))",
+            "legendFormat": "{{pipeline}} - {{status}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10,
+              "showPoints": "never"
+            },
+            "unit": "reqps"
+          }
+        }
+      },
+      {
+        "id": 6,
+        "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+        "type": "timeseries",
+        "title": "Pipeline Duration by Type",
+        "targets": [
+          {
+            "expr": "rate(stages_api_pipeline_duration_seconds_sum[5m]) / rate(stages_api_pipeline_duration_seconds_count[5m])",
+            "legendFormat": "{{pipeline}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10
+            },
+            "unit": "s"
+          }
+        }
+      },
+      {
+        "id": 7,
+        "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+        "type": "timeseries",
+        "title": "Stage Executions by Status",
+        "targets": [
+          {
+            "expr": "sum by (stage, status) (rate(stages_api_stage_executions[5m]))",
+            "legendFormat": "{{stage}} - {{status}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "stacking": {"mode": "normal"}
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+        "type": "barchart",
+        "title": "Pipeline Executions by Status (24h)",
+        "targets": [
+          {
+            "expr": "sum by (status) (increase(stages_api_pipeline_executions[24h]))",
+            "legendFormat": "{{status}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "showValue": "always"
+        }
+      },
+      {
+        "id": 9,
+        "gridPos": {"x": 0, "y": 20, "w": 24, "h": 10},
+        "type": "logs",
+        "title": "Recent Pipeline Logs",
+        "targets": [
+          {
+            "datasource": "Loki",
+            "expr": "{component=\"stages\"}",
+            "refId": "A"
+          }
+        ]
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "pipeline",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(stages_api_pipeline_executions, pipeline)",
+          "multi": false,
+          "includeAll": true
+        }
+      ]
+    }
+  }
+}
+

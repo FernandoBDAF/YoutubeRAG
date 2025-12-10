@@ -11,7 +11,8 @@ Version: 1.0.0
 5. [Export Endpoints](#export-endpoints)
 6. [Statistics Endpoints](#statistics-endpoints)
 7. [Metrics Endpoints](#metrics-endpoints)
-8. [Response Schemas](#response-schemas)
+8. [Query Endpoints](#query-endpoints)
+9. [Response Schemas](#response-schemas)
 
 ---
 
@@ -430,6 +431,144 @@ GET /api/metrics/performance
     "graph_extraction": {...},
     "entity_resolution": {...}
   }
+}
+```
+
+---
+
+## Query Endpoints
+
+### Execute Query
+
+Execute a natural language query using GraphRAG to generate answers based on the knowledge graph.
+
+**Request:**
+```
+POST /api/query/execute
+```
+
+**Request Body:**
+```json
+{
+  "query": "What is machine learning and how does it relate to deep learning?",
+  "mode": "global",
+  "options": {
+    "top_k": 10,
+    "include_sources": true,
+    "include_communities": true,
+    "model": "gpt-4o-mini",
+    "temperature": 0.3
+  }
+}
+```
+
+**Body Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | Yes | Natural language question |
+| `mode` | string | No | Query mode: "local", "global", or "hybrid" (default: "global") |
+| `options.top_k` | int | No | Maximum number of results (default: 10) |
+| `options.include_sources` | bool | No | Include source chunks (default: true) |
+| `options.include_communities` | bool | No | Include community context (default: true) |
+| `options.model` | string | No | LLM model to use (default: "gpt-4o-mini") |
+| `options.temperature` | float | No | LLM temperature (default: 0.3) |
+
+**Query Modes:**
+- **local**: Focus on specific entity neighborhoods. Best for questions about specific entities.
+- **global**: Use community summaries for broad context. Best for general/thematic questions.
+- **hybrid**: Combine local and global approaches. Best for complex questions.
+
+**Response (200 OK):**
+```json
+{
+  "answer": "Machine learning is a branch of artificial intelligence that enables systems to learn from data...",
+  "confidence": 0.85,
+  "entities": [
+    {
+      "id": "ent_abc123",
+      "name": "Machine Learning",
+      "type": "CONCEPT",
+      "description": "A branch of artificial intelligence...",
+      "confidence": 0.95,
+      "trust_score": 0.88,
+      "source_count": 42
+    }
+  ],
+  "communities": [
+    {
+      "id": "comm_xyz789",
+      "title": "AI and Machine Learning Concepts",
+      "summary": "Core concepts related to AI and ML...",
+      "level": 1,
+      "entity_count": 24,
+      "coherence_score": 0.82
+    }
+  ],
+  "sources": [],
+  "meta": {
+    "query_id": "query_a1b2c3d4e5f6",
+    "processing_time_ms": 2340,
+    "mode_used": "global",
+    "model": "gpt-4o-mini",
+    "entity_count": 5,
+    "community_count": 2
+  }
+}
+```
+
+**Error Response (400 Bad Request):**
+```json
+{
+  "error": "Query text is required",
+  "field": "query"
+}
+```
+
+**Error Response (400 Invalid Mode):**
+```json
+{
+  "error": "Invalid mode: invalid_mode",
+  "valid_modes": ["local", "global", "hybrid"],
+  "query_id": "query_a1b2c3d4e5f6"
+}
+```
+
+**Error Response (500 Configuration Error):**
+```json
+{
+  "error": "Configuration error",
+  "message": "OPENAI_API_KEY environment variable not set",
+  "query_id": "query_a1b2c3d4e5f6"
+}
+```
+
+### Get Query Modes
+
+Get available query modes and their descriptions.
+
+**Request:**
+```
+GET /api/query/modes
+```
+
+**Response:**
+```json
+{
+  "modes": [
+    {
+      "name": "local",
+      "description": "Focus on specific entity neighborhoods. Best for questions about specific entities."
+    },
+    {
+      "name": "global",
+      "description": "Use community summaries for broad context. Best for general/thematic questions."
+    },
+    {
+      "name": "hybrid",
+      "description": "Combine local and global approaches. Best for complex questions."
+    }
+  ],
+  "default": "global"
 }
 ```
 

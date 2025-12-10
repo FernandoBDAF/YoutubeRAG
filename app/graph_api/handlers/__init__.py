@@ -14,6 +14,7 @@ from . import statistics
 from . import quality_metrics
 from . import performance_metrics
 from . import metrics
+from . import query
 
 __all__ = [
     "entities",
@@ -25,5 +26,6 @@ __all__ = [
     "quality_metrics",
     "performance_metrics",
     "metrics",
+    "query",
 ]
 

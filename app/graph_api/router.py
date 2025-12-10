@@ -34,6 +34,7 @@ from .handlers import (
     quality_metrics,
     performance_metrics,
     metrics,
+    query,
 )
 
 logger = logging.getLogger(__name__)
@@ -227,6 +228,44 @@ def handle_request(
                     return performance_metrics.get(db_name, pipeline_id), 200
 
         # ========================================
+        # Query Endpoints
+        # ========================================
+        if path.startswith("query"):
+            if method == "GET" and path == "query/modes":
+                # GET /query/modes - List available query modes
+                return query.get_query_modes(), 200
+            
+            if method == "POST" and (path == "query/execute" or path == "query"):
+                # POST /query/execute - Execute natural language query
+                if not body:
+                    return {"error": "Request body is required"}, 400
+                
+                query_text = body.get("query")
+                if not query_text:
+                    return {"error": "Query text is required", "field": "query"}, 400
+                
+                mode = body.get("mode", "global")
+                options = body.get("options", {})
+                
+                result = query.execute(
+                    db_name=db_name,
+                    query_text=query_text,
+                    mode=mode,
+                    options=options,
+                )
+                
+                # Return appropriate status code based on result
+                if "error" in result:
+                    if "Configuration error" in result.get("error", ""):
+                        return result, 500
+                    elif "Invalid mode" in result.get("error", ""):
+                        return result, 400
+                    else:
+                        return result, 500
+                
+                return result, 200
+
+        # ========================================
         # Not Found
         # ========================================
         return {
@@ -278,6 +317,8 @@ def _get_available_endpoints() -> list:
         "GET /metrics/quality?stage=",
         "GET /metrics/performance",
         "GET /metrics/performance/trends",
+        "POST /query/execute",
+        "GET /query/modes",
     ]
 
 

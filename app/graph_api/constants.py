@@ -46,3 +46,10 @@ ENTITY_TYPES = [
 DEFAULT_MAX_HOPS = 2
 DEFAULT_MAX_NODES = 100
 
+# Query execution defaults
+QUERY_MODES = ["local", "global", "hybrid"]
+DEFAULT_QUERY_MODE = "global"
+DEFAULT_QUERY_MODEL = "gpt-4o-mini"
+DEFAULT_QUERY_TEMPERATURE = 0.3
+DEFAULT_QUERY_TOP_K = 10
+
