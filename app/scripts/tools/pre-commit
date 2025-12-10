@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# Pre-commit hook to run fast tests before commit
+# This hook runs unit tests (fast tests) to catch issues early
+# To skip: git commit --no-verify
+
+# Get the directory of the script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Navigate up from app/scripts/tools to project root
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+# Change to project root
+cd "$PROJECT_ROOT" || exit 1
+
+# Run fast tests (unit tests)
+echo "================================================================================"
+echo "🧪 Running pre-commit tests (fast tests only)..."
+echo "================================================================================"
+echo ""
+
+python tests/run_tests.py --category fast
+
+EXIT_CODE=$?
+
+echo ""
+if [ $EXIT_CODE -eq 0 ]; then
+    echo "✅ Pre-commit tests passed! Proceeding with commit..."
+    exit 0
+else
+    echo "❌ Pre-commit tests failed! Please fix issues before committing."
+    echo ""
+    echo "To skip this hook, use: git commit --no-verify"
+    exit 1
+fi
+

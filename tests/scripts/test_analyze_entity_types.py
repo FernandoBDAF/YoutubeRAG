@@ -17,7 +17,7 @@ sys.path.insert(
 )
 
 # Import after path setup
-from scripts.analyze_entity_types import EntityTypeDistributionAnalyzer
+from app.scripts.analysis.quality.analyze_entity_types import EntityTypeDistributionAnalyzer
 
 
 class TestEntityTypeDistributionAnalyzer:
@@ -47,7 +47,7 @@ class TestEntityTypeDistributionAnalyzer:
         mock_collection.find.return_value = []
 
         with patch(
-            "scripts.analyze_entity_types.MongoDBClient"
+            "app.scripts.analysis.quality.analyze_entity_types.MongoDBClient"
         ) as mock_client:
             mock_client.get_instance.return_value.__getitem__.return_value.__getitem__.return_value = (
                 mock_collection
@@ -103,7 +103,7 @@ class TestEntityTypeDistributionAnalyzer:
         mock_collection.find.return_value = mock_chunks
 
         with patch(
-            "scripts.analyze_entity_types.MongoDBClient"
+            "app.scripts.analysis.quality.analyze_entity_types.MongoDBClient"
         ) as mock_client:
             mock_client.get_instance.return_value.__getitem__.return_value.__getitem__.return_value = (
                 mock_collection
@@ -372,7 +372,7 @@ class TestEntityTypeDistributionAnalyzer:
         mock_collection.find.return_value = mock_data
 
         with patch(
-            "scripts.analyze_entity_types.MongoDBClient"
+            "app.scripts.analysis.quality.analyze_entity_types.MongoDBClient"
         ) as mock_client:
             mock_client.get_instance.return_value.__getitem__.return_value.__getitem__.return_value = (
                 mock_collection

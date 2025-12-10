@@ -28,6 +28,20 @@ from .execution import (
     list_active_pipelines,
     get_pipeline_history,
 )
+from .progress import (
+    get_progress,
+    update_progress,
+    get_all_active_progress,
+)
+from .stats import (
+    get_all_stage_stats,
+    get_stage_stats,
+)
+from .control import (
+    pause_pipeline,
+    resume_pipeline,
+    get_pause_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +166,17 @@ __all__ = [
     "cancel_pipeline",
     "list_active_pipelines",
     "get_pipeline_history",
+    # Progress
+    "get_progress",
+    "update_progress",
+    "get_all_active_progress",
+    # Stats
+    "get_all_stage_stats",
+    "get_stage_stats",
+    # Control
+    "pause_pipeline",
+    "resume_pipeline",
+    "get_pause_status",
     # HTTP handlers
     "handle_request",
 ]
@@ -317,6 +342,81 @@ def handle_request(method: str, path: str, body: Optional[Dict] = None) -> tuple
         if method == "GET" and path == "pipelines/history":
             limit = 10  # Could be parsed from query string
             return get_pipeline_history(limit), 200
+
+        # ========================================
+        # Pipeline Progress Routes (merged from app/api/pipeline_progress.py)
+        # ========================================
+
+        # Route: GET /pipelines/{pipeline_id}/progress
+        if (
+            method == "GET"
+            and len(parts) == 3
+            and parts[0] == "pipelines"
+            and parts[2] == "progress"
+        ):
+            pipeline_id = parts[1]
+            progress = get_progress(pipeline_id)
+            if progress:
+                return {"pipeline_id": pipeline_id, **progress}, 200
+            return {"pipeline_id": pipeline_id, "message": "No progress data"}, 200
+
+        # Route: GET /pipelines/progress/active
+        if method == "GET" and path == "pipelines/progress/active":
+            return {"pipelines": get_all_active_progress()}, 200
+
+        # ========================================
+        # Pipeline Stats Routes (merged from app/api/pipeline_stats.py)
+        # ========================================
+
+        # Route: GET /pipelines/stats
+        if method == "GET" and path == "pipelines/stats":
+            db_name = body.get("db_name") if body else None
+            return get_all_stage_stats(db_name=db_name), 200
+
+        # Route: GET /pipelines/stats/{stage_name}
+        if (
+            method == "GET"
+            and len(parts) == 3
+            and parts[0] == "pipelines"
+            and parts[1] == "stats"
+        ):
+            stage_name = parts[2]
+            db_name = body.get("db_name") if body else None
+            return get_stage_stats(stage_name, db_name=db_name), 200
+
+        # ========================================
+        # Pipeline Control Routes (merged from app/api/pipeline_control.py)
+        # ========================================
+
+        # Route: POST /pipelines/{pipeline_id}/pause
+        if (
+            method == "POST"
+            and len(parts) == 3
+            and parts[0] == "pipelines"
+            and parts[2] == "pause"
+        ):
+            pipeline_id = parts[1]
+            return pause_pipeline(pipeline_id), 200
+
+        # Route: POST /pipelines/{pipeline_id}/resume
+        if (
+            method == "POST"
+            and len(parts) == 3
+            and parts[0] == "pipelines"
+            and parts[2] == "resume"
+        ):
+            pipeline_id = parts[1]
+            return resume_pipeline(pipeline_id), 200
+
+        # Route: GET /pipelines/{pipeline_id}/pause-status
+        if (
+            method == "GET"
+            and len(parts) == 3
+            and parts[0] == "pipelines"
+            and parts[2] == "pause-status"
+        ):
+            pipeline_id = parts[1]
+            return get_pause_status(pipeline_id), 200
 
         # Not found
         return {"error": f"Unknown endpoint: {method} /{path}"}, 404

@@ -16,7 +16,7 @@ sys.path.insert(
 )
 
 # Import after path setup
-from scripts.compare_extraction_quality import ExtractionQualityComparator
+from app.scripts.analysis.quality.compare_extraction_quality import ExtractionQualityComparator
 
 
 class TestExtractionQualityComparator:
@@ -47,7 +47,7 @@ class TestExtractionQualityComparator:
 
         # Mock MongoDB collections
         with patch(
-            "scripts.compare_extraction_quality.get_mongo_client"
+            "app.scripts.analysis.quality.compare_extraction_quality.get_mongo_client"
         ) as mock_client:
             mock_db_old = MagicMock()
             mock_db_new = MagicMock()
@@ -126,7 +126,7 @@ class TestExtractionQualityComparator:
         ]
 
         with patch(
-            "scripts.compare_extraction_quality.get_mongo_client"
+            "app.scripts.analysis.quality.compare_extraction_quality.get_mongo_client"
         ) as mock_client:
             mock_db_old = MagicMock()
             mock_db_new = MagicMock()
